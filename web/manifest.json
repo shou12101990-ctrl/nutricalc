@@ -1,11 +1,11 @@
 {
-    "name": "nutrition_flutter_app",
-    "short_name": "nutrition_flutter_app",
+    "name": "やさしい栄養処方 NutriCalc",
+    "short_name": "NutriCalc",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#1565C0",
+    "description": "ICU栄養処方計算アプリ",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
