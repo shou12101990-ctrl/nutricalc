@@ -3618,9 +3618,10 @@ class DesignItem {
 
 /// 自動設計の1案（複数製剤の組み合わせ）
 class DesignPlan {
-  DesignPlan({required this.label, required this.items});
+  DesignPlan({required this.label, required this.items, this.enKcal = 0});
   final String label; // 'EN案' / 'TPN案' / 'ゼロmenu案'
   final List<DesignItem> items;
+  final double enKcal; // EN由来kcal（designDayが設定、単調増加管理用）
   double get totalKcal => items.fold(0.0, (s, i) => s + i.kcal);
   double get totalProteinG => items.fold(0.0, (s, i) => s + i.proteinG);
   double get totalVolumeMl => items.fold(0.0, (s, i) => s + i.volumeMl);
@@ -3883,6 +3884,7 @@ class NutritionCalculator {
     Product? glucoseProduct,
     Product? aminoProduct,
     Product? lipidProduct,
+    double minEnKcal = 0, // 単調増加制約: 前日のEN kcal以上を要求
   }) {
     // ゼロmenu(静注ブレンド)のitem群を構築
     List<DesignItem> buildZeroItems(double tKcal) {
@@ -3965,9 +3967,10 @@ class NutritionCalculator {
         final bagVol = pnBase.volumeMl!; // 1袋の容量ml
         final bagKcal = pnBase.kcal ?? 0; // 1袋のkcal
         final pnDensity = bagVol > 0 ? bagKcal / bagVol : 0.0; // kcal/ml
-        // 現実的な本数調整: under feeding許容なので袋数を増やしすぎない。
-        //   残りkcal≤1袋 → 速度調整で部分使用OK(目標ちょうど)。
-        //   残りkcal>1袋 → 端数の追加袋は開けず袋単位で切り捨て(本数を減らす)。
+        // 袋数調整: under feeding許容 + INの段差を緩和するため、端数が≥50%なら開封OK
+        //   ≤1袋分 → 速度調整で部分使用(目標ちょうど)
+        //   >1袋分 → 整数袋 + 端数が袋容量の50%以上なら+1袋(部分使用)、未満は切り捨て
+        const fracThreshold = 0.50; // 端数50%以上なら開封
         double pnMl = 0;
         int? pnUnits;
         if (pnDensity > 0) {
@@ -3978,9 +3981,17 @@ class NutritionCalculator {
               pnUnits = 1;
             }
           } else {
-            final bags = (restKcal / bagKcal).floor();
-            pnMl = bags * bagVol;
-            pnUnits = bags;
+            final wholeBags = (restKcal / bagKcal).floor();
+            final fracKcal = restKcal - wholeBags * bagKcal;
+            if (fracKcal / bagKcal >= fracThreshold) {
+              // 端数袋を開封(部分使用)
+              pnMl = wholeBags * bagVol + fracKcal / pnDensity;
+              pnUnits = wholeBags + 1;
+            } else {
+              // 端数は切り捨て
+              pnMl = wholeBags * bagVol;
+              pnUnits = wholeBags;
+            }
           }
         }
         final pnKcal = pnDensity * pnMl;
@@ -4018,7 +4029,8 @@ class NutritionCalculator {
 
     // 評価(under feeding基準): kcalは当日目標の80-100%、タンパク90-100%、
     //   over nutritionは厳禁、INは~1000ml/dayを確保したい。スコア小が良。
-    double scoreOf(DesignPlan plan) {
+    //   planEnKcal: ENアイテム由来kcal（候補ループ側で計算して渡す）
+    double scoreOf(DesignPlan plan, double planEnKcal) {
       final tK = dayTargetKcal, tP = dayTargetProt;
       final k = plan.totalKcal, pr = plan.totalProteinG, vol = plan.totalVolumeMl;
       double s = 0;
@@ -4049,6 +4061,10 @@ class NutritionCalculator {
         s += (vol - 1000) / 1000 * 1;
       } else {
         s += 1.5 + (vol - 2500) / 1000 * 50;
+      }
+      // 単調増加制約: ENカロリーが前日より少ない場合は重くペナルティ
+      if (minEnKcal > 0 && planEnKcal < minEnKcal * 0.98) {
+        s += (minEnKcal - planEnKcal) / (tK + 1) * 80;
       }
       return s;
     }
@@ -4101,31 +4117,38 @@ class NutritionCalculator {
 
     DesignPlan? best;
     double bestScore = double.infinity;
-    void consider(DesignPlan plan) {
-      final sc = scoreOf(plan);
+    double bestEnKcal = 0; // 勝者のEN由来kcal
+    void consider(DesignPlan plan, double planEnKcal) {
+      final sc = scoreOf(plan, planEnKcal);
       if (sc < bestScore) {
         bestScore = sc;
         best = plan;
+        bestEnKcal = planEnKcal;
       }
     }
 
     for (final enItems in enCandidates()) {
+      // EN由来kcalをitemから集計（単調増加スコアリング用）
+      final enKcal =
+          enItems.fold<double>(0, (s, it) => s + it.kcal);
       if (mode == 'EN') {
-        consider(completePlan(enItems, null));
+        consider(completePlan(enItems, null), enKcal);
       } else if (pnBases.isEmpty) {
-        consider(completePlan(enItems, null));
+        consider(completePlan(enItems, null), enKcal);
       } else {
         // PN主剤を1号/2号等で振り、IN・kcalが最適なものを採用
         for (final pb in pnBases) {
-          consider(completePlan(enItems, pb));
+          consider(completePlan(enItems, pb), enKcal);
         }
       }
     }
     // PNのみ(TPN)でINが過大になる時の代替: ゼロmenu(高濃度静注ブレンド)
     if (mode == 'TPN') {
-      consider(DesignPlan(label: 'ZERO', items: buildZeroItems(dayTargetKcal)));
+      consider(DesignPlan(label: 'ZERO', items: buildZeroItems(dayTargetKcal)), 0);
     }
-    return best ?? DesignPlan(label: 'Day', items: const []);
+    // 勝者のEN kcalをDesignPlanに記録して返す（逐次生成時の単調増加追跡に使用）
+    if (best == null) return DesignPlan(label: 'Day', items: const []);
+    return DesignPlan(label: best!.label, items: best!.items, enKcal: bestEnKcal);
   }
 }
 
@@ -4674,6 +4697,32 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       .where((p) => widget.state.isAdopted(p.id))
       .toList();
 
+  /// EN製剤を全日程で1製剤に固定するための選択。
+  /// 40ml/h連続投与(=ピーク)でtargetKcalを超えず、できるだけ目標に近い製剤を選ぶ。
+  /// → 同じ製剤を全日に使うのでENカロリーが単調増加し、INのガタつきも抑制。
+  Product? _pickEnProduct(List<Product> ens, double targetKcal) {
+    if (ens.isEmpty) return null;
+    const peakMl = 40.0 * 24; // 40ml/h × 24h = 960ml
+    Product? best;
+    double bestScore = double.infinity;
+    for (final p in ens) {
+      if ((p.kcal ?? 0) <= 0 || (p.volumeMl ?? 0) <= 0) continue;
+      final kcalAt40 = (p.kcal ?? 0) * peakMl / p.volumeMl!;
+      final ratio = targetKcal > 0 ? kcalAt40 / targetKcal : 1.0;
+      double s;
+      if (ratio > 1.0) {
+        s = (ratio - 1.0) * 100; // over厳禁
+      } else {
+        s = (1.0 - ratio); // 不足はなるべく少なく(高密度優先)
+      }
+      if (s < bestScore) {
+        bestScore = s;
+        best = p;
+      }
+    }
+    return best ?? ens.first;
+  }
+
   // EN投与dose文字列の解釈: 'r20'=20ml/h, 'p3'=3pac, '0'=なし
   double _rateOf(String dose) =>
       dose.startsWith('r') ? (double.tryParse(dose.substring(1)) ?? 0) : 0;
@@ -4787,6 +4836,30 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     if (_pnProduct == null || !tpnAll.any((p) => p.id == _pnProduct!.id)) {
       _pnProduct = tpnAll.isNotEmpty ? tpnAll.first : null;
     }
+    // プランを逐次生成して minEnKcal(単調増加制約)を引き継ぐ
+    double prevEnKcal = 0;
+    final dayPlans = <DesignPlan>[];
+    for (int i = 0; i < pcts.length; i++) {
+      final pct = pcts[i];
+      final plan = NutritionCalculator.designDay(
+        mode: _dayModes[i],
+        dayTargetKcal: targetKcal * pct / 100,
+        dayTargetProt: targetProt * pct / 100,
+        weightKg: widget.current.weightKg,
+        enProducts: enList,
+        enRateMlH: _rateOf(_dayEnDose[i]),
+        enPac: _pacOf(_dayEnDose[i]),
+        pnProduct: _pnProduct,
+        tpnProducts: tpnList,
+        ppnProducts: ppnList,
+        glucoseProduct: widget.state.catalog.byName('70% グルコース'),
+        aminoProduct: widget.state.catalog.byName('アミパレン'),
+        lipidProduct: widget.state.catalog.byName('イントラリポス20%'),
+        minEnKcal: prevEnKcal,
+      );
+      dayPlans.add(plan);
+      if (plan.enKcal > 0) prevEnKcal = plan.enKcal;
+    }
 
     final screenH = MediaQuery.of(context).size.height;
     // Visibility(maintainState)内でExpandedは使えないため高さを固定する
@@ -4879,21 +4952,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             final mode = _dayModes[i];
             final showEn = mode == 'EN' || mode == 'TPN+EN';
             final showPn = mode == 'TPN' || mode == 'TPN+EN';
-            final plan = NutritionCalculator.designDay(
-              mode: mode,
-              dayTargetKcal: dayKcal,
-              dayTargetProt: dayProt,
-              weightKg: widget.current.weightKg,
-              enProducts: enList,
-              enRateMlH: _rateOf(_dayEnDose[i]),
-              enPac: _pacOf(_dayEnDose[i]),
-              pnProduct: _pnProduct,
-              tpnProducts: tpnList,
-              ppnProducts: ppnList,
-              glucoseProduct: widget.state.catalog.byName('70% グルコース'),
-              aminoProduct: widget.state.catalog.byName('アミパレン'),
-              lipidProduct: widget.state.catalog.byName('イントラリポス20%'),
-            );
+            // 逐次生成済みのプランを使用（minEnKcal単調増加制約適用済み）
+            final plan = dayPlans[i];
             return Card(
               margin: const EdgeInsets.only(bottom: 10),
               child: InkWell(
@@ -4981,9 +5041,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   Widget _buildBarCharts(double targetKcal, List<double> pcts,
       List<Product> en, List<Product> tpn, List<Product> ppn) {
     final targetProt = NutritionCalculator.targetProtein(widget.current);
-    final designPlans = List.generate(
-        pcts.length,
-        (i) => NutritionCalculator.designDay(
+    // 逐次生成して minEnKcal 単調増加制約を適用
+    double prevEnKcalChart = 0;
+    final designPlans = <DesignPlan>[];
+    for (int i = 0; i < pcts.length; i++) {
+      final p = NutritionCalculator.designDay(
               mode: _dayModes[i],
               dayTargetKcal: targetKcal * pcts[i] / 100,
               dayTargetProt: targetProt * pcts[i] / 100,
@@ -4997,7 +5059,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               glucoseProduct: widget.state.catalog.byName('70% グルコース'),
               aminoProduct: widget.state.catalog.byName('アミパレン'),
               lipidProduct: widget.state.catalog.byName('イントラリポス20%'),
-            ));
+              minEnKcal: prevEnKcalChart,
+            );
+      if (p.enKcal > 0) prevEnKcalChart = p.enKcal;
+      designPlans.add(p);
+    }
 
     // 栄養開始日が未来の場合、今日から開始日前日まで空白(0)を先頭に追加
     final today = DateTime.now();
@@ -5094,13 +5160,62 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             const SizedBox(height: 10),
             SizedBox(
               height: 240,
-              child: Stack(
+              child: GestureDetector(
+                onTapUp: (details) {
+                  // タップ位置からバーインデックスを計算してポップアップ表示
+                  final box = context.findRenderObject() as RenderBox?;
+                  if (box == null || n == 0) return;
+                  // Stack全体の幅を使って等分割
+                  // barWidth ≒ 描画幅 / n (spaceAroundアライメント近似)
+                  final chartWidth = box.size.width - 24; // Paddingの余白を差し引く
+                  final barWidth = chartWidth / n;
+                  final idx =
+                      (details.localPosition.dx / barWidth).floor().clamp(0, n - 1);
+                  final plan = plans[idx];
+                  final dateStr = mmdd(idx);
+                  final w = widget.current.weightKg;
+                  showDialog<void>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      title: Text(dateStr,
+                          style: const TextStyle(fontSize: 16)),
+                      content: plan.items.isEmpty
+                          ? const Text('栄養開始前',
+                              style: TextStyle(color: Colors.grey))
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _popRow('IN',
+                                    '${plan.totalVolumeMl.round()} ml'),
+                                const SizedBox(height: 6),
+                                _popRow('熱量',
+                                    '${plan.totalKcal.round()} kcal'),
+                                const SizedBox(height: 6),
+                                _popRow(
+                                    'タンパク',
+                                    '${plan.totalProteinG.toStringAsFixed(1)} g'
+                                    '${w > 0 ? '  (${(plan.totalProteinG / w).toStringAsFixed(1)} g/kg)' : ''}'),
+                              ],
+                            ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('閉じる'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                child: Stack(
                 children: [
                   // ① 積み上げ棒: カロリー内訳 (PN+EN)、独立スケール
                   BarChart(BarChartData(
                     alignment: BarChartAlignment.spaceAround,
                     minY: 0,
                     maxY: maxKcal,
+                    barTouchData: BarTouchData(enabled: false),
                     barGroups: List.generate(n, (i) {
                       final enK = enKcals[i];
                       final total = plans[i].totalKcal;
@@ -5133,13 +5248,26 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   // ③ AA(タンパク)投与量: マーカー付き線、独立スケール
                   lineLayer(prots, maxAA, Colors.blue),
                 ],
-              ),
+                ), // Stack
+              ), // GestureDetector
             ),
           ],
         ),
       ),
     );
   }
+
+  // ポップアップ行ウィジェット（ラベル + 値を縦並び）
+  Widget _popRow(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.bold)),
+        ],
+      );
 
   // Dayカードのタップで処方詳細(何を何pac)をダイアログ表示
   void _showDayDetail(int i, DesignPlan plan, double dayKcal, double dayProt) {
