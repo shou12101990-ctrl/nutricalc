@@ -5174,37 +5174,82 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   final plan = plans[idx];
                   final dateStr = mmdd(idx);
                   final w = widget.current.weightKg;
+                  // タップ位置を画面座標に変換してポップアップを近くに配置
+                  final tapGlobal = (context.findRenderObject() as RenderBox?)
+                          ?.localToGlobal(details.localPosition) ??
+                      details.globalPosition;
+                  final screen = MediaQuery.of(context).size;
+                  const tipW = 130.0, tipH = 68.0;
+                  final posX =
+                      (tapGlobal.dx - tipW / 2).clamp(8.0, screen.width - tipW - 8);
+                  final posY =
+                      (tapGlobal.dy - tipH - 12).clamp(8.0, screen.height - tipH - 8);
                   showDialog<void>(
                     context: context,
-                    builder: (ctx) => AlertDialog(
-                      contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      title: Text(dateStr,
-                          style: const TextStyle(fontSize: 16)),
-                      content: plan.items.isEmpty
-                          ? const Text('栄養開始前',
-                              style: TextStyle(color: Colors.grey))
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _popRow('IN',
-                                    '${plan.totalVolumeMl.round()} ml'),
-                                const SizedBox(height: 6),
-                                _popRow('熱量',
-                                    '${plan.totalKcal.round()} kcal'),
-                                const SizedBox(height: 6),
-                                _popRow(
-                                    'タンパク',
-                                    '${plan.totalProteinG.toStringAsFixed(1)} g'
-                                    '${w > 0 ? '  (${(plan.totalProteinG / w).toStringAsFixed(1)} g/kg)' : ''}'),
-                              ],
+                    barrierColor: Colors.transparent,
+                    barrierDismissible: true,
+                    builder: (ctx) => GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.pop(ctx),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: posX,
+                              top: posY,
+                              child: Container(
+                                width: tipW,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 9, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: Colors.grey.shade400,
+                                      width: 0.5),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 4,
+                                        offset: Offset(1, 2)),
+                                  ],
+                                ),
+                                child: plan.items.isEmpty
+                                    ? const Text('栄養開始前',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey))
+                                    : Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(dateStr,
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight:
+                                                      FontWeight.bold)),
+                                          Text(
+                                              'IN ${plan.totalVolumeMl.round()}ml',
+                                              style: const TextStyle(
+                                                  fontSize: 11)),
+                                          Text(
+                                              '${plan.totalKcal.round()}kcal',
+                                              style: const TextStyle(
+                                                  fontSize: 11)),
+                                          Text(
+                                              'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
+                                              '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(1)}g/kg)' : ''}',
+                                              style: const TextStyle(
+                                                  fontSize: 11)),
+                                        ],
+                                      ),
+                              ),
                             ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('閉じる'),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   );
                 },
@@ -5256,18 +5301,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       ),
     );
   }
-
-  // ポップアップ行ウィジェット（ラベル + 値を縦並び）
-  Widget _popRow(String label, String value) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.bold)),
-        ],
-      );
 
   // Dayカードのタップで処方詳細(何を何pac)をダイアログ表示
   void _showDayDetail(int i, DesignPlan plan, double dayKcal, double dayProt) {
