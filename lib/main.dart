@@ -791,8 +791,9 @@ class BuilderPage extends StatefulWidget {
 }
 
 class _BuilderPageState extends State<BuilderPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   String category = 'EN';
+  // サマリーパネル（個別選択/ゼロmenu）
   double _summaryHeight = 80.0;
   double _snapFrom = 80.0;
   double _snapToTarget = 80.0;
@@ -800,6 +801,13 @@ class _BuilderPageState extends State<BuilderPage>
   double _scrollToTarget = 0.0;
   late AnimationController _snapCtrl;
   final ScrollController _listScroll = ScrollController();
+  // 栄養の推移パネル（自動計算タブ）
+  static const double _chartPanelMin = 72.0;
+  double _chartPanelHeight = 230.0;
+  double _chartSnapFrom = 230.0;
+  double _chartSnapToTarget = 230.0;
+  late AnimationController _chartSnapCtrl;
+  final ScrollController _chartScroll = ScrollController();
   // Phase 4-③: 処方ビルダーの2タブ状態 (0: EN/TPN/PPN 選択, 1: ゼロからブレンド)
   int _builderTabIndex = 0;
   final targetKcalController = TextEditingController(text: '1500');
@@ -827,12 +835,22 @@ class _BuilderPageState extends State<BuilderPage>
         _listScroll.jumpTo(target);
       }
     });
+    _chartSnapCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 260));
+    _chartSnapCtrl.addListener(() {
+      if (!mounted) return;
+      final t = Curves.easeOut.transform(_chartSnapCtrl.value);
+      setState(() => _chartPanelHeight =
+          _chartSnapFrom + (_chartSnapToTarget - _chartSnapFrom) * t);
+    });
   }
 
   @override
   void dispose() {
     _snapCtrl.dispose();
+    _chartSnapCtrl.dispose();
     _listScroll.dispose();
+    _chartScroll.dispose();
     super.dispose();
   }
 
@@ -843,6 +861,12 @@ class _BuilderPageState extends State<BuilderPage>
     final delta = target - _summaryHeight;
     _scrollToTarget = _scrollFrom + delta.clamp(0.0, double.infinity);
     _snapCtrl.forward(from: 0);
+  }
+
+  void _chartSnapTo(double target) {
+    _chartSnapFrom = _chartPanelHeight;
+    _chartSnapToTarget = target;
+    _chartSnapCtrl.forward(from: 0);
   }
 
   static const _infusionRateOptions = [0.0, 10.0, 20.0, 30.0, 40.0];
@@ -1194,6 +1218,10 @@ class _BuilderPageState extends State<BuilderPage>
                             Text(
                               '活動係数 ${current.activityFactor.toStringAsFixed(1)}, '
                               '侵害係数 ${current.stressFactor.toStringAsFixed(1)}, '
+                              'タンパク目標 ${current.proteinGoalPerKg.toStringAsFixed(1)}g/kg',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            Text(
                               'カロリー ${targetKcal.round()} kcal, '
                               'タンパク ${targetProtein.round()} g/day',
                               style: Theme.of(context).textTheme.bodyMedium,
@@ -1226,18 +1254,7 @@ class _BuilderPageState extends State<BuilderPage>
                         ],
                         selected: {_builderTabIndex},
                         onSelectionChanged: (Set<int> newSelection) {
-                          final v = newSelection.first;
-                          if (v == 2) {
-                            // 自動計算は別画面(Day別投与設計)を開く。タブ選択は変えない
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (c) => AutoDesignPage(
-                                    state: widget.state, current: current),
-                              ),
-                            );
-                            return;
-                          }
-                          setState(() => _builderTabIndex = v);
+                          setState(() => _builderTabIndex = newSelection.first);
                         },
                       ),
                     ),
@@ -1708,11 +1725,20 @@ class _BuilderPageState extends State<BuilderPage>
                         ),
                       ),
                     ),
+                    // タブ内容: 自動計算 (インデックス 2)
+                    Visibility(
+                      visible: _builderTabIndex == 2,
+                      maintainState: true,
+                      child: AutoDesignInline(
+                          key: _autoDesignKey,
+                          state: widget.state,
+                          current: current),
+                    ),
                   ],
                 ),
               ),
-        // サマリーパネル（Columnの下部に常時隣接）
-        SafeArea(
+        // サマリーパネル（個別選択/ゼロmenuのみ。自動計算タブでは非表示）
+        if (_builderTabIndex != 2) SafeArea(
             top: false,
             child: Padding(
               padding:
@@ -2007,10 +2033,89 @@ class _BuilderPageState extends State<BuilderPage>
             ),
           ),
         ),
-            ],
-          ),
+            // 栄養の推移パネル（自動計算タブのみ。サマリーと同じドラッグ仕様）
+            if (_builderTabIndex == 2)
+              _buildAutoChartPanel(screenH),
+          ],
+        ),
     );
   }
+
+  Widget _buildAutoChartPanel(double screenH) {
+    final maxPanel = screenH * 0.85;
+    final snapPoints = [_chartPanelMin, screenH * 0.5, maxPanel];
+    if (_chartPanelHeight > maxPanel) _chartPanelHeight = maxPanel;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        child: SizedBox(
+          height: _chartPanelHeight,
+          child: Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outline
+                      .withOpacity(0.4),
+                  width: 0.8),
+            ),
+            child: Column(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onVerticalDragUpdate: (d) {
+                    setState(() {
+                      _chartPanelHeight =
+                          (_chartPanelHeight - d.delta.dy)
+                              .clamp(_chartPanelMin, maxPanel);
+                    });
+                  },
+                  onVerticalDragEnd: (_) {
+                    final target = snapPoints.reduce((a, b) =>
+                        (a - _chartPanelHeight).abs() <
+                                (b - _chartPanelHeight).abs()
+                            ? a
+                            : b);
+                    _chartSnapTo(target);
+                  },
+                  child: Container(
+                    color: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Center(
+                      child: Container(
+                        height: 4,
+                        width: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ClipRect(
+                    child: SingleChildScrollView(
+                      controller: _chartScroll,
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: _autoDesignKey.currentState
+                              ?._buildBarChartsForBuilder() ??
+                          const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  final _autoDesignKey = GlobalKey<_AutoDesignPageState>();
 
   /// 患者パラメータをまとめて編集するダイアログ
   Future<void> _editPatientParams(
@@ -4475,17 +4580,33 @@ class _MealPicker extends StatelessWidget {
 }
 
 /// Day別 投与設計画面
-class AutoDesignPage extends StatefulWidget {
+// インライン版(BuilderPageタブ内)とページ版で共用するウィジェット
+class AutoDesignInline extends StatefulWidget {
+  const AutoDesignInline({super.key, required this.state, required this.current});
+  final AppState state;
+  final PatientCase current;
+
+  @override
+  State<AutoDesignInline> createState() => _AutoDesignPageState();
+}
+
+// 後方互換: 独立ページとして開く場合はScaffoldでラップ
+class AutoDesignPage extends StatelessWidget {
   const AutoDesignPage({super.key, required this.state, required this.current});
   final AppState state;
   final PatientCase current;
 
   @override
-  State<AutoDesignPage> createState() => _AutoDesignPageState();
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Day別 投与設計'),
+        ),
+        body: AutoDesignInline(state: state, current: current),
+      );
 }
 
-class _AutoDesignPageState extends State<AutoDesignPage>
-    with SingleTickerProviderStateMixin {
+class _AutoDesignPageState extends State<AutoDesignInline> {
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
   int _totalDays = 5; // シミュレーション全体の日数 (= _enStartDay + EN食上げ7日 -1)
@@ -4494,14 +4615,6 @@ class _AutoDesignPageState extends State<AutoDesignPage>
   late List<double> _dayPercents; // 各Dayの達成目標%
   late List<String> _dayModes; // 各Dayのクラス
   late List<String> _dayEnDose; // 各DayのEN投与 ('0'/'r20'(速度)/'p3'(pac))
-
-  // 栄養の推移パネル(ドラッグで上に展開。処方ビルダーのサマリと同仕様)
-  static const double _chartPanelMin = 72.0;
-  double _chartPanelHeight = 230.0;
-  double _snapFrom = 230.0;
-  double _snapToTarget = 230.0;
-  late AnimationController _snapCtrl;
-  final ScrollController _chartScroll = ScrollController();
 
   // EN食上げ固定シーケンス(7日): 10→20→30→40ml/h → 1pac朝昼夕(3) → 2pac朝昼夕(6) → EN単独full
   static const _enRampSequence = ['r10', 'r20', 'r30', 'r40', 'p3', 'p6', 'p6'];
@@ -4538,28 +4651,12 @@ class _AutoDesignPageState extends State<AutoDesignPage>
       }();
     }
     _rebuildDays();
-    _snapCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 260));
-    _snapCtrl.addListener(() {
-      if (!mounted) return;
-      final t = Curves.easeOut.transform(_snapCtrl.value);
-      setState(() =>
-          _chartPanelHeight = _snapFrom + (_snapToTarget - _snapFrom) * t);
-    });
   }
 
   @override
   void dispose() {
     _saveConfig();
-    _snapCtrl.dispose();
-    _chartScroll.dispose();
     super.dispose();
-  }
-
-  void _snapTo(double target) {
-    _snapFrom = _chartPanelHeight;
-    _snapToTarget = target;
-    _snapCtrl.forward(from: 0);
   }
 
   void _saveConfig() {
@@ -4612,12 +4709,21 @@ class _AutoDesignPageState extends State<AutoDesignPage>
   }
 
   // クラスのバッジ表示
-  Widget _modeBadge(String mode) {
-    final (label, color) = switch (mode) {
-      'TPN' => ('PN', Colors.blue),
-      'TPN+EN' => ('PN+EN', Colors.teal),
-      'EN' => ('EN', Colors.green),
-      _ => (mode, Colors.grey),
+  Widget _modeBadge(String mode, {bool planIsZero = false}) {
+    final baseLabel = switch (mode) {
+      'TPN' => 'PN',
+      'TPN+EN' => 'EN+PN',
+      'EN' => 'EN',
+      'ZERO' => 'ゼロmenu',
+      _ => mode,
+    };
+    // PN部分がゼロmenuにフォールバックした場合の表記
+    final label = (mode == 'TPN+EN' && planIsZero) ? 'EN+ゼロmenu' : baseLabel;
+    final color = switch (mode) {
+      'TPN' => Colors.blue,
+      'TPN+EN' => Colors.teal,
+      'EN' => Colors.green,
+      _ => Colors.grey,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -4667,110 +4773,100 @@ class _AutoDesignPageState extends State<AutoDesignPage>
     final targetKcal = NutritionCalculator.targetEnergy(widget.current);
     final targetProt = NutritionCalculator.targetProtein(widget.current);
     final pcts = _dayPercents;
-    final enList = _adopted('EN');
-    final tpnAll = _adopted('TPN');
+    // お気に入り製剤を先頭に並べて優先選択させる
+    List<Product> sortFav(List<Product> list) {
+      final fav = list.where((p) => widget.state.isFavorite(p.id)).toList();
+      final rest = list.where((p) => !widget.state.isFavorite(p.id)).toList();
+      return [...fav, ...rest];
+    }
+    final enList = sortFav(_adopted('EN'));
+    final tpnAll = sortFav(_adopted('TPN'));
     final tpnList = tpnAll;
-    final ppnList = _adopted('PPN');
+    final ppnList = sortFav(_adopted('PPN'));
     // _pnProduct が採用TPNに無ければ先頭にフォールバック
     if (_pnProduct == null || !tpnAll.any((p) => p.id == _pnProduct!.id)) {
       _pnProduct = tpnAll.isNotEmpty ? tpnAll.first : null;
     }
 
     final screenH = MediaQuery.of(context).size.height;
-    final maxPanel = screenH * 0.85;
-    final snapPoints = [_chartPanelMin, screenH * 0.5, maxPanel];
-    if (_chartPanelHeight > maxPanel) _chartPanelHeight = maxPanel;
+    // Visibility(maintainState)内でExpandedは使えないため高さを固定する
+    final listH = (screenH * 0.55).clamp(300.0, 600.0);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const BackButton(),
-        title: const Text('Day別 投与設計'),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              children: [
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: listH,
+          child: ListView(
+            padding: EdgeInsets.zero, // 外側ListView(all:16)が既にパディングを持つ
+            children: [
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('最終目標: ${targetKcal.round()} kcal / タンパク ${targetProt.round()} g/day',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 2),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 0,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  // 設定を縦並び
+                  Row(
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('栄養開始日: '),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                minimumSize: const Size(0, 0),
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap),
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: _startDate,
-                                firstDate: DateTime(2000),
-                                lastDate: DateTime(2100),
-                              );
-                              if (picked != null) {
-                                setState(() => _startDate = picked);
-                              }
-                            },
-                            child: Text(
-                                '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}'),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('full nutritionまで(PN漸増): '),
-                          DropdownButton<int>(
-                            value: _rampDays,
-                            isDense: true,
-                            items: List.generate(14, (i) => i + 1)
-                                .map((d) => DropdownMenuItem(
-                                    value: d, child: Text('$d日')))
-                                .toList(),
-                            onChanged: (v) => setState(() {
-                              _rampDays = v ?? _rampDays;
-                              _enStartDay = _rampDays + 1; // ramp変更時はEN導入を全量到達翌日に
-                              _rebuildDays();
-                            }),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('EN導入: Day'),
-                          DropdownButton<int>(
-                            value: _enStartDay.clamp(1, 21),
-                            isDense: true,
-                            items: List.generate(21, (i) => i + 1)
-                                .map((d) => DropdownMenuItem(
-                                    value: d, child: Text('$d')))
-                                .toList(),
-                            onChanged: (v) => setState(() {
-                              _enStartDay = v ?? _enStartDay;
-                              _rebuildDays();
-                            }),
-                          ),
-                        ],
+                      const Text('栄養開始日: '),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            minimumSize: const Size(0, 0),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _startDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (picked != null) setState(() => _startDate = picked);
+                        },
+                        child: Text(
+                            '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}'),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('full nutritionまで(PN漸増): '),
+                      DropdownButton<int>(
+                        value: _rampDays,
+                        isDense: true,
+                        items: List.generate(14, (i) => i + 1)
+                            .map((d) => DropdownMenuItem(value: d, child: Text('$d日')))
+                            .toList(),
+                        onChanged: (v) => setState(() {
+                          _rampDays = v ?? _rampDays;
+                          _enStartDay = _rampDays + 1;
+                          _rebuildDays();
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('EN導入: Day'),
+                      DropdownButton<int>(
+                        value: _enStartDay.clamp(1, 21),
+                        isDense: true,
+                        items: List.generate(21, (i) => i + 1)
+                            .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
+                            .toList(),
+                        onChanged: (v) => setState(() {
+                          _enStartDay = v ?? _enStartDay;
+                          _rebuildDays();
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('★ お気に入り製剤を優先して設計します',
+                      style: TextStyle(fontSize: 11, color: Colors.grey)),
                 ],
               ),
             ),
@@ -4823,14 +4919,17 @@ class _AutoDesignPageState extends State<AutoDesignPage>
                           const Icon(Icons.touch_app,
                               size: 14, color: Colors.grey),
                           const SizedBox(width: 4),
-                          _modeBadge(mode),
+                          _modeBadge(mode, planIsZero: plan.label == 'ZERO'),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
                         [
                           if (showEn) 'EN ${_doseLabel(_dayEnDose[i])}',
-                          if (showPn) 'PN 残りを自動補充',
+                          if (showPn)
+                            plan.label == 'ZERO'
+                                ? 'ゼロmenu 残りを自動補充'
+                                : 'PN 残りを自動補充',
                         ].join(' ・ '),
                         style:
                             const TextStyle(fontSize: 12, color: Colors.grey),
@@ -4843,80 +4942,28 @@ class _AutoDesignPageState extends State<AutoDesignPage>
               ),
             );
           }),
-              ],
-            ),
+            ],
           ),
-          // 栄養の推移パネル(ドラッグで上に展開。処方ビルダーのサマリと同仕様)
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: SizedBox(
-                height: _chartPanelHeight,
-                child: Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .outline
-                            .withOpacity(0.4),
-                        width: 0.8),
-                  ),
-                  child: Column(
-                    children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onVerticalDragUpdate: (d) {
-                          setState(() {
-                            _chartPanelHeight = (_chartPanelHeight - d.delta.dy)
-                                .clamp(_chartPanelMin, maxPanel);
-                          });
-                        },
-                        onVerticalDragEnd: (_) {
-                          final target = snapPoints.reduce((a, b) =>
-                              (a - _chartPanelHeight).abs() <
-                                      (b - _chartPanelHeight).abs()
-                                  ? a
-                                  : b);
-                          _snapTo(target);
-                        },
-                        child: Container(
-                          color: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Center(
-                            child: Container(
-                              height: 4,
-                              width: 48,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade400,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: ClipRect(
-                          child: SingleChildScrollView(
-                            controller: _chartScroll,
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            child: _buildBarCharts(
-                                targetKcal, pcts, enList, tpnList, ppnList),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),   // SizedBox(listH)
+      ],
     );
+  }
+
+  // BuilderPage の _buildAutoChartPanel から呼ばれる
+  Widget _buildBarChartsForBuilder() {
+    final targetKcal = NutritionCalculator.targetEnergy(widget.current);
+    final pcts = _dayPercents;
+    List<Product> sortFav(String cat) {
+      final list = widget.state.catalog
+          .byCategory(cat)
+          .where((p) => widget.state.isAdopted(p.id))
+          .toList();
+      final fav = list.where((p) => widget.state.isFavorite(p.id)).toList();
+      final rest = list.where((p) => !widget.state.isFavorite(p.id)).toList();
+      return [...fav, ...rest];
+    }
+    return _buildBarCharts(
+        targetKcal, pcts, sortFav('EN'), sortFav('TPN'), sortFav('PPN'));
   }
 
   /// プラン内のEN/EN補助製剤由来のカロリーを集計
@@ -4934,7 +4981,7 @@ class _AutoDesignPageState extends State<AutoDesignPage>
   Widget _buildBarCharts(double targetKcal, List<double> pcts,
       List<Product> en, List<Product> tpn, List<Product> ppn) {
     final targetProt = NutritionCalculator.targetProtein(widget.current);
-    final plans = List.generate(
+    final designPlans = List.generate(
         pcts.length,
         (i) => NutritionCalculator.designDay(
               mode: _dayModes[i],
@@ -4951,9 +4998,22 @@ class _AutoDesignPageState extends State<AutoDesignPage>
               aminoProduct: widget.state.catalog.byName('アミパレン'),
               lipidProduct: widget.state.catalog.byName('イントラリポス20%'),
             ));
-    // 栄養開始日を起点に mm/dd
+
+    // 栄養開始日が未来の場合、今日から開始日前日まで空白(0)を先頭に追加
+    final today = DateTime.now();
+    final startNorm =
+        DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final todayNorm = DateTime(today.year, today.month, today.day);
+    final preDays = startNorm.difference(todayNorm).inDays.clamp(0, 60);
+    final emptyPlan = DesignPlan(label: 'Day', items: const []);
+    final plans = [
+      ...List.filled(preDays, emptyPlan),
+      ...designPlans,
+    ];
+
+    // グラフの日付ラベル: 先頭は今日から、開始日以降は_startDateから
     String mmdd(int i) {
-      final d = _startDate.add(Duration(days: i));
+      final d = todayNorm.add(Duration(days: i));
       return '${d.month}/${d.day}';
     }
 
@@ -5024,9 +5084,9 @@ class _AutoDesignPageState extends State<AutoDesignPage>
               runSpacing: 4,
               children: [
                 _LegendChip(
-                    color: Colors.green.shade300, label: 'PN(kcal)', line: false),
-                _LegendChip(
                     color: Colors.yellow.shade700, label: 'EN(kcal)', line: false),
+                _LegendChip(
+                    color: Colors.green.shade300, label: 'PN(kcal)', line: false),
                 const _LegendChip(color: Colors.teal, label: 'IN(ml)', line: true),
                 const _LegendChip(color: Colors.blue, label: 'AA(g)', line: true),
               ],
@@ -5052,9 +5112,9 @@ class _AutoDesignPageState extends State<AutoDesignPage>
                           borderRadius: BorderRadius.circular(2),
                           rodStackItems: [
                             BarChartRodStackItem(
-                                0, otherK, Colors.green.shade300), // PN
+                                0, enK, Colors.yellow.shade700), // EN 下
                             BarChartRodStackItem(
-                                otherK, total, Colors.yellow.shade700), // EN
+                                enK, total, Colors.green.shade300), // PN 上
                           ],
                         ),
                       ]);
@@ -5104,22 +5164,23 @@ class _AutoDesignPageState extends State<AutoDesignPage>
                     style: TextStyle(color: Colors.red)),
               ...plan.items.map((it) {
                 final cat = widget.state.catalog.byName(it.name)?.category;
-                final isEnPac = it.units != null &&
-                    (cat == 'EN' || cat == 'EN_AUX') &&
-                    mealPac > 0;
+                final isEnCat = cat == 'EN' || cat == 'EN_AUX';
+                final isEnPacItem = it.units != null && isEnCat;
+                final isEnRateItem = it.units == null && isEnCat;
                 String line;
                 if (isZero) {
                   line = '${it.name}：${it.volumeMl.round()}ml';
-                } else if (isEnPac) {
-                  final meals = (it.units! / mealPac).round();
-                  line =
-                      '${it.name}：${mealPac}pac × $meals食 (計${it.units}本/日, ${it.volumeMl.round()}ml)';
+                } else if (isEnPacItem) {
+                  final mp = (it.units! / 3).round().clamp(1, it.units!);
+                  line = '${it.name}：朝昼夕${mp}pac (${it.volumeMl.round()}ml/day)';
+                } else if (isEnRateItem) {
+                  final rml = it.volumeMl / 24;
+                  final pex = (rml * 8 / (widget.state.catalog.byName(it.name)?.volumeMl ?? 200)).ceil();
+                  line = '${it.name}：${rml.toStringAsFixed(0)}ml/h  朝昼夕${pex}pac, 交換時残破棄';
                 } else if (it.units != null) {
-                  line =
-                      '${it.name}：${it.units}本/包 (${it.volumeMl.round()}ml, ${it.ratePerHour.toStringAsFixed(1)}ml/h)';
+                  line = '${it.name}：${it.units}pac (${it.volumeMl.round()}ml, ${it.ratePerHour.toStringAsFixed(1)}ml/h)';
                 } else {
-                  line =
-                      '${it.name}：${it.volumeMl.round()}ml (${it.ratePerHour.toStringAsFixed(1)}ml/h)';
+                  line = '${it.name}：${it.volumeMl.round()}ml (${it.ratePerHour.toStringAsFixed(1)}ml/h)';
                 }
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
@@ -5171,16 +5232,28 @@ class _AutoDesignPageState extends State<AutoDesignPage>
                   style: const TextStyle(fontSize: 12.5)),
             );
           }
-          // pacは「N本/包」、静注は「_ml」。括弧内は連続換算のml/hのみ(表記重複を解消)
-          final unitStr = it.units != null
-              ? '${it.units}本/包 (${it.volumeMl.round()}ml)'
-              : '${it.volumeMl.round()}ml';
+          // EN製剤(pac指定): 間欠的→"朝昼夕Npac"  持続→"Nml/h 朝昼夕Npac, 交換時残破棄"
+          // PN静注: "_ml (_ml/h)"
+          final cat = widget.state.catalog.byName(it.name)?.category;
+          final isEnPac = it.units != null && (cat == 'EN' || cat == 'EN_AUX');
+          final isEnRate = it.units == null && (cat == 'EN' || cat == 'EN_AUX');
+          String dispStr;
+          if (isEnPac) {
+            final mealPac = (it.units! / 3).round().clamp(1, it.units!);
+            dispStr = '${it.name}  朝昼夕${mealPac}pac (${it.volumeMl.round()}ml/day)';
+          } else if (isEnRate) {
+            final rateMlH = it.volumeMl / 24;
+            final pacPerExchange = (rateMlH * 8 / (widget.state.catalog.byName(it.name)?.volumeMl ?? 200)).ceil();
+            dispStr = '${it.name}  ${rateMlH.toStringAsFixed(0)}ml/h  朝昼夕${pacPerExchange}pac, 交換時残破棄';
+          } else {
+            final unitStr = it.units != null
+                ? '${it.units}pac (${it.volumeMl.round()}ml)'
+                : '${it.volumeMl.round()}ml';
+            dispStr = '${it.name}  $unitStr  (${it.ratePerHour.toStringAsFixed(1)}ml/h)';
+          }
           return Padding(
             padding: const EdgeInsets.only(bottom: 2),
-            child: Text(
-              '${it.name}  $unitStr  (${it.ratePerHour.toStringAsFixed(1)}ml/h)',
-              style: const TextStyle(fontSize: 12.5),
-            ),
+            child: Text(dispStr, style: const TextStyle(fontSize: 12.5)),
           );
         }),
         const SizedBox(height: 4),
