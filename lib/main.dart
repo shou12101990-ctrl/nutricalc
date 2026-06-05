@@ -1207,8 +1207,19 @@ class _BuilderPageState extends State<BuilderPage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(current.displayLabel,
-                                style: Theme.of(context).textTheme.titleLarge),
+                            Row(
+                              children: [
+                                const Icon(Icons.person, size: 18),
+                                const SizedBox(width: 2),
+                                Text(current.caseCode,
+                                    style: Theme.of(context).textTheme.titleLarge),
+                                const SizedBox(width: 12),
+                                const Icon(Icons.bed, size: 18),
+                                const SizedBox(width: 2),
+                                Text(current.currentBed,
+                                    style: Theme.of(context).textTheme.titleLarge),
+                              ],
+                            ),
                             const SizedBox(height: 4),
                             Text(
                               current.patientInfoLine,
@@ -1256,74 +1267,6 @@ class _BuilderPageState extends State<BuilderPage>
                         onSelectionChanged: (Set<int> newSelection) {
                           setState(() => _builderTabIndex = newSelection.first);
                         },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Visibility(
-                      visible: _builderTabIndex == 0,
-                      maintainState: true,
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('投与速度',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: DropdownButtonFormField<double>(
-                                      isExpanded: true,
-                                      value: _enRateMlPerHour,
-                                      decoration: const InputDecoration(labelText: 'EN'),
-                                      items: _infusionRateOptions
-                                          .map((value) => DropdownMenuItem(value: value, child: Text(_rateLabel(value))))
-                                          .toList(),
-                                      onChanged: (value) async {
-                                        setState(() { _enRateMlPerHour = value ?? 0; });
-                                        // EN投与速度を指定したら、8h交換の必要本数に自動調整
-                                        if (_enRateMlPerHour > 0) {
-                                          await _adjustEnUnitsForRate(current);
-                                          if (mounted) setState(() {});
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: DropdownButtonFormField<double>(
-                                      isExpanded: true,
-                                      value: _tpnRateMlPerHour,
-                                      decoration: const InputDecoration(labelText: 'TPN'),
-                                      items: _infusionRateOptions
-                                          .map((value) => DropdownMenuItem(value: value, child: Text(_rateLabel(value))))
-                                          .toList(),
-                                      onChanged: (value) => setState(() { _tpnRateMlPerHour = value ?? 0; }),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: DropdownButtonFormField<double>(
-                                      isExpanded: true,
-                                      value: _ppnRateMlPerHour,
-                                      decoration: const InputDecoration(labelText: 'PPN'),
-                                      items: _infusionRateOptions
-                                          .map((value) => DropdownMenuItem(value: value, child: Text(_rateLabel(value))))
-                                          .toList(),
-                                      onChanged: (value) => setState(() { _ppnRateMlPerHour = value ?? 0; }),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text('ENは8h毎, TPN/PPNは24h毎に交換',
-                                  style: Theme.of(context).textTheme.bodySmall),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1496,17 +1439,56 @@ class _BuilderPageState extends State<BuilderPage>
                                       (_) => setState(
                                           () => category = effectiveCategory));
                                 }
-                                return SegmentedButton<String>(
-                                  segments: activeCategories
-                                      .map((cat) => ButtonSegment(
-                                          value: cat, label: Text(cat)))
-                                      .toList(),
-                                  selected: {effectiveCategory},
-                                  onSelectionChanged: (newSel) =>
-                                      setState(() => category = newSel.first),
+                                // EN/TPN/PPN タブ + 流量ドロップダウン（選択中カテゴリに対応）
+                                final currentRate = effectiveCategory == 'EN'
+                                    ? _enRateMlPerHour
+                                    : effectiveCategory == 'TPN'
+                                        ? _tpnRateMlPerHour
+                                        : _ppnRateMlPerHour;
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      child: SegmentedButton<String>(
+                                        segments: activeCategories
+                                            .map((cat) => ButtonSegment(
+                                                value: cat, label: Text(cat)))
+                                            .toList(),
+                                        selected: {effectiveCategory},
+                                        onSelectionChanged: (newSel) =>
+                                            setState(() => category = newSel.first),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    DropdownButton<double>(
+                                      value: currentRate,
+                                      isDense: true,
+                                      items: _infusionRateOptions
+                                          .map((v) => DropdownMenuItem(
+                                              value: v,
+                                              child: Text(_rateLabel(v),
+                                                  style: const TextStyle(fontSize: 13))))
+                                          .toList(),
+                                      onChanged: (v) async {
+                                        if (effectiveCategory == 'EN') {
+                                          setState(() => _enRateMlPerHour = v ?? 0);
+                                          if ((v ?? 0) > 0) {
+                                            await _adjustEnUnitsForRate(current);
+                                            if (mounted) setState(() {});
+                                          }
+                                        } else if (effectiveCategory == 'TPN') {
+                                          setState(() => _tpnRateMlPerHour = v ?? 0);
+                                        } else {
+                                          setState(() => _ppnRateMlPerHour = v ?? 0);
+                                        }
+                                      },
+                                    ),
+                                  ],
                                 );
                               }),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 4),
+                              Text('ENは8h毎, TPN/PPNは24h毎に交換',
+                                  style: Theme.of(context).textTheme.bodySmall),
+                              const SizedBox(height: 8),
                               AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 380),
                                 transitionBuilder: (child, anim) {
@@ -4137,8 +4119,26 @@ class NutritionCalculator {
         consider(completePlan(enItems, null), enKcal);
       } else {
         // PN主剤を1号/2号等で振り、IN・kcalが最適なものを採用
+        // PN使用量が袋の50%未満の場合は別製剤を優先(スコアペナルティ付き)
         for (final pb in pnBases) {
-          consider(completePlan(enItems, pb), enKcal);
+          final plan = completePlan(enItems, pb);
+          // プラン内のPNアイテムを特定して使用量比を確認
+          double planScore = scoreOf(plan, enKcal);
+          final bagVol = pb.volumeMl ?? 1;
+          for (final it in plan.items) {
+            if (it.units == null && it.name == pb.name) {
+              final usageRatio = it.volumeMl / bagVol;
+              if (usageRatio < 0.5) {
+                // 50%未満の端数使用 → 別製剤があれば乗り換えを促す
+                planScore += (0.5 - usageRatio) * 20;
+              }
+            }
+          }
+          if (planScore < bestScore) {
+            bestScore = planScore;
+            best = plan;
+            bestEnKcal = enKcal;
+          }
         }
       }
     }
@@ -4905,7 +4905,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text('full nutritionまで(PN漸増): '),
+                      const Text('full nutritionまで: '),
                       DropdownButton<int>(
                         value: _rampDays,
                         isDense: true,
@@ -4968,31 +4968,48 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(_dateOf(i),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold)),
                           const SizedBox(width: 6),
                           Text(
-                              '(Day${i + 1}), 目標 ${pct.toStringAsFixed(0)}%',
+                              '(Day${i + 1})',
                               style: const TextStyle(
                                   fontSize: 12, color: Colors.grey)),
+                          const SizedBox(width: 4),
+                          // 目標% or "full nutrition"
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: pct >= 100
+                                  ? Colors.green.shade100
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              pct >= 100
+                                  ? 'full nutrition'
+                                  : '目標 ${pct.toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: pct >= 100
+                                      ? Colors.green.shade800
+                                      : Colors.grey.shade700),
+                            ),
+                          ),
+                          if (showEn) ...[
+                            const SizedBox(width: 4),
+                            Text(_doseLabel(_dayEnDose[i]),
+                                style: const TextStyle(
+                                    fontSize: 11, color: Colors.grey)),
+                          ],
                           const Spacer(),
                           const Icon(Icons.touch_app,
                               size: 14, color: Colors.grey),
                           const SizedBox(width: 4),
-                          _modeBadge(mode, planIsZero: plan.label == 'ZERO'),
+                          _modeBadge(mode,
+                              planIsZero: plan.label == 'ZERO'),
                         ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        [
-                          if (showEn) 'EN ${_doseLabel(_dayEnDose[i])}',
-                          if (showPn)
-                            plan.label == 'ZERO'
-                                ? 'ゼロmenu 残りを自動補充'
-                                : 'PN 残りを自動補充',
-                        ].join(' ・ '),
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const Divider(height: 16),
                       _planBody(plan, dayKcal, dayProt, mode),
@@ -5337,11 +5354,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 } else if (isEnRateItem) {
                   final rml = it.volumeMl / 24;
                   final pex = (rml * 8 / (widget.state.catalog.byName(it.name)?.volumeMl ?? 200)).ceil();
-                  line = '${it.name}：${rml.toStringAsFixed(0)}ml/h  朝昼夕${pex}pac, 交換時残破棄';
+                  line = '${it.name}：${rml.toStringAsFixed(0)}ml/h  朝昼夕${pex}pac';
                 } else if (it.units != null) {
-                  line = '${it.name}：${it.units}pac (${it.volumeMl.round()}ml, ${it.ratePerHour.toStringAsFixed(1)}ml/h)';
+                  line = '${it.name}：${it.units}pac (${it.volumeMl.round()}ml, ${it.ratePerHour.round()}ml/h)';
                 } else {
-                  line = '${it.name}：${it.volumeMl.round()}ml (${it.ratePerHour.toStringAsFixed(1)}ml/h)';
+                  line = '${it.name}：${it.volumeMl.round()}ml (${it.ratePerHour.round()}ml/h)';
                 }
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
@@ -5405,12 +5422,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           } else if (isEnRate) {
             final rateMlH = it.volumeMl / 24;
             final pacPerExchange = (rateMlH * 8 / (widget.state.catalog.byName(it.name)?.volumeMl ?? 200)).ceil();
-            dispStr = '${it.name}  ${rateMlH.toStringAsFixed(0)}ml/h  朝昼夕${pacPerExchange}pac, 交換時残破棄';
+            dispStr = '${it.name}  ${rateMlH.toStringAsFixed(0)}ml/h  朝昼夕${pacPerExchange}pac';
           } else {
+            // PN静注: 流速は整数表記
             final unitStr = it.units != null
                 ? '${it.units}pac (${it.volumeMl.round()}ml)'
                 : '${it.volumeMl.round()}ml';
-            dispStr = '${it.name}  $unitStr  (${it.ratePerHour.toStringAsFixed(1)}ml/h)';
+            dispStr = '${it.name}  $unitStr  (${it.ratePerHour.round()}ml/h)';
           }
           return Padding(
             padding: const EdgeInsets.only(bottom: 2),
