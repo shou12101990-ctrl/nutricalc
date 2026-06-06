@@ -1219,7 +1219,6 @@ class _BuilderPageState extends State<BuilderPage>
     // パネルの最大高さ = 画面高さ - ステータスバー - AppBar - ホームインジケータ - パディング16
     final maxSummaryH = (screenH - _mqPad.top - kToolbarHeight - _mqPad.bottom - 16.0)
         .clamp(200.0, screenH);
-    final snapPoints = [80.0, maxSummaryH * 0.5, maxSummaryH];
 
     return Scaffold(
           appBar: AppBar(
@@ -1843,13 +1842,8 @@ class _BuilderPageState extends State<BuilderPage>
                           }
                         },
                         onVerticalDragEnd: (_) {
-                          final nearest = snapPoints.reduce((a, b) =>
-                              (a - _summaryHeight).abs() <
-                                      (b - _summaryHeight).abs()
-                                  ? a
-                                  : b);
-                          // 上端(最大)まで引っ張ったら下端(最小)に戻す
-                          _snapTo(nearest >= maxSummaryH ? 80.0 : nearest);
+                          // 上端まで引っ張ったら下端に戻す。それ以外は離した位置で止まる。
+                          if (_summaryHeight >= maxSummaryH) _snapTo(80.0);
                         },
                       child: Container(
                         color: Colors.transparent,
@@ -2113,7 +2107,6 @@ class _BuilderPageState extends State<BuilderPage>
     final _cqPad = MediaQuery.of(context).padding;
     final maxPanel = (screenH - _cqPad.top - kToolbarHeight - _cqPad.bottom - 16.0)
         .clamp(200.0, screenH);
-    final snapPoints = [_chartPanelMin, maxPanel * 0.5, maxPanel];
     if (_chartPanelHeight > maxPanel) _chartPanelHeight = maxPanel;
     return SafeArea(
       top: false,
@@ -2143,13 +2136,8 @@ class _BuilderPageState extends State<BuilderPage>
                     });
                   },
                   onVerticalDragEnd: (_) {
-                    final nearest = snapPoints.reduce((a, b) =>
-                        (a - _chartPanelHeight).abs() <
-                                (b - _chartPanelHeight).abs()
-                            ? a
-                            : b);
-                    // 上端(最大)まで引っ張ったら下端(最小)に戻す
-                    _chartSnapTo(nearest >= maxPanel ? _chartPanelMin : nearest);
+                    // 上端まで引っ張ったら下端に戻す。それ以外は離した位置で止まる。
+                    if (_chartPanelHeight >= maxPanel) _chartSnapTo(_chartPanelMin);
                   },
                   child: Container(
                     color: Colors.transparent,
@@ -2727,7 +2715,6 @@ class _NotePageState extends State<NotePage>
     const _navBarH = 80.0;
     final maxPanel = (screenH - _nqPad.top - kToolbarHeight - _navBarH - _nqPad.bottom)
         .clamp(200.0, screenH);
-    final snapPoints = [_panelMin, maxPanel * 0.5, maxPanel];
     if (_panelHeight > maxPanel) _panelHeight = maxPanel;
 
     return Column(
@@ -2818,13 +2805,8 @@ class _NotePageState extends State<NotePage>
                         });
                       },
                       onVerticalDragEnd: (_) {
-                        final nearest = snapPoints.reduce((a, b) =>
-                            (a - _panelHeight).abs() <
-                                    (b - _panelHeight).abs()
-                                ? a
-                                : b);
-                        // 上端(最大)まで引っ張ったら下端(最小)に戻す
-                        _snapTo(nearest >= maxPanel ? _panelMin : nearest);
+                        // 上端まで引っ張ったら下端に戻す。それ以外は離した位置で止まる。
+                        if (_panelHeight >= maxPanel) _snapTo(_panelMin);
                       },
                       child: Container(
                         color: Colors.transparent,
