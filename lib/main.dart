@@ -4782,7 +4782,8 @@ class AutoDesignPage extends StatelessWidget {
 }
 
 class _AutoDesignPageState extends State<AutoDesignInline> {
-  int _hoveredBarIdx = -1; // グラフホバー中のバーインデックス (-1=なし)
+  int _hoveredBarIdx = -1;  // グラフホバー中のバーインデックス (-1=なし)
+  int _selectedBarIdx = -1; // タップ固定のバーインデックス (-1=なし)
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
   int _totalDays = 5; // シミュレーション全体の日数 (= _enStartDay + EN食上げ7日 -1)
@@ -5383,7 +5384,23 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             const SizedBox(height: 10),
             SizedBox(
               height: 240,
-              child: MouseRegion(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  if (n == 0) return;
+                  final chartWidth = (context.findRenderObject() as RenderBox?)
+                          ?.size.width ??
+                      300;
+                  final barWidth = (chartWidth - 24) / n;
+                  final idx = (details.localPosition.dx / barWidth)
+                      .floor()
+                      .clamp(0, n - 1);
+                  setState(() {
+                    // 同じバーをもう一度タップで解除
+                    _selectedBarIdx = (_selectedBarIdx == idx) ? -1 : idx;
+                  });
+                },
+                child: MouseRegion(
                 onHover: (e) {
                   if (n == 0) return;
                   final chartWidth = (context.findRenderObject() as RenderBox?)
@@ -5437,85 +5454,108 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   lineLayer(ins, maxIn, Colors.purple.shade200),
                   // ③ AA(タンパク)投与量: マーカー付き線、独立スケール
                   lineLayer(prots, maxAA, Colors.pink.shade300),
-                  // ホバーツールチップ（棒上端の少し上に、ベージュ背景）
-                  if (_hoveredBarIdx >= 0 && _hoveredBarIdx < n)
-                    Builder(builder: (ctx) {
-                      final idx = _hoveredBarIdx;
-                      final plan = plans[idx];
-                      final w = widget.current.weightKg;
-                      // 棒の高さ比率からY位置を推定
-                      const chartH = 240.0;
-                      const topReserved = 22.0; // topTitles の reservedSize
-                      final drawH = chartH - topReserved;
-                      final barRatio = maxKcal > 0
-                          ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
-                          : 0.0;
-                      final barTopY =
-                          topReserved + drawH * (1.0 - barRatio) - 8;
-                      // X位置: 等分割近似
-                      final chartW = (context.findRenderObject() as RenderBox?)
-                              ?.size.width ??
-                          300;
-                      final barW = (chartW - 24) / n;
-                      final barCenterX = barW * idx + barW / 2;
-                      const tipW = 130.0;
-                      final tipX =
-                          (barCenterX - tipW / 2).clamp(0.0, chartW - tipW);
-                      return Positioned(
-                        left: tipX,
-                        top: barTopY.clamp(0.0, chartH - 70),
-                        child: IgnorePointer(
-                          child: Container(
-                            width: tipW,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 9, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF8E7), // ベージュ
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                  color: Colors.brown.shade200, width: 0.6),
-                              boxShadow: const [
-                                BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 4,
-                                    offset: Offset(1, 2)),
+                  // フローター: タップ固定優先、次いでホバー
+                  Builder(builder: (ctx) {
+                    final displayIdx = _selectedBarIdx >= 0
+                        ? _selectedBarIdx
+                        : _hoveredBarIdx;
+                    if (displayIdx < 0 || displayIdx >= n) {
+                      return const SizedBox.shrink();
+                    }
+                    final idx = displayIdx;
+                    final plan = plans[idx];
+                    final w = widget.current.weightKg;
+                    final isPinned = _selectedBarIdx >= 0;
+                    // 棒の高さ比率からY位置を推定
+                    const chartH = 240.0;
+                    const topReserved = 22.0;
+                    final drawH = chartH - topReserved;
+                    final barRatio = maxKcal > 0
+                        ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
+                        : 0.0;
+                    final barTopY =
+                        topReserved + drawH * (1.0 - barRatio) - 8;
+                    final chartW = (context.findRenderObject() as RenderBox?)
+                            ?.size.width ??
+                        300;
+                    final barW = (chartW - 24) / n;
+                    final barCenterX = barW * idx + barW / 2;
+                    const tipW = 136.0;
+                    final tipX =
+                        (barCenterX - tipW / 2).clamp(0.0, chartW - tipW);
+                    return Positioned(
+                      left: tipX,
+                      top: barTopY.clamp(0.0, chartH - 80),
+                      child: Container(
+                        width: tipW,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isPinned
+                              ? const Color(0xFFF0F4FF)  // タップ固定: 薄青
+                              : const Color(0xFFFFF8E7), // ホバー: ベージュ
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: isPinned
+                                  ? Colors.blue.shade200
+                                  : Colors.brown.shade200,
+                              width: 0.6),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 4,
+                                offset: Offset(1, 2)),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(dateLabel(idx),
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold)),
+                                if (isPinned)
+                                  GestureDetector(
+                                    onTap: () => setState(
+                                        () => _selectedBarIdx = -1),
+                                    child: Icon(Icons.close,
+                                        size: 13,
+                                        color: Colors.grey.shade500),
+                                  ),
                               ],
                             ),
-                            child: plan.items.isEmpty
-                                ? const Text('栄養開始前',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Colors.grey))
-                                : Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(dateLabel(idx),
-                                          style: const TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold)),
-                                      Text(
-                                          'IN ${plan.totalVolumeMl.round()}ml',
-                                          style: const TextStyle(
-                                              fontSize: 11)),
-                                      Text(
-                                          '${plan.totalKcal.round()}kcal',
-                                          style: const TextStyle(
-                                              fontSize: 11)),
-                                      Text(
-                                          'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
-                                          '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(1)}g/kg)' : ''}',
-                                          style: const TextStyle(
-                                              fontSize: 11)),
-                                    ],
-                                  ),
-                          ),
+                            if (plan.items.isEmpty)
+                              const Text('栄養開始前',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Colors.grey))
+                            else ...[
+                              Text(
+                                  'IN ${plan.totalVolumeMl.round()}ml',
+                                  style:
+                                      const TextStyle(fontSize: 11)),
+                              Text(
+                                  '${plan.totalKcal.round()}kcal',
+                                  style:
+                                      const TextStyle(fontSize: 11)),
+                              Text(
+                                  'タンパク ${plan.totalProteinG.toStringAsFixed(1)}g'
+                                  '${w > 0 ? '\n(${(plan.totalProteinG / w).toStringAsFixed(1)}g/kg)' : ''}',
+                                  style:
+                                      const TextStyle(fontSize: 11)),
+                            ],
+                          ],
                         ),
-                      );
-                    }),
+                      ),
+                    );
+                  }),
                 ],
                 ), // Stack
               ), // MouseRegion
+              ), // GestureDetector
             ),
           ],
         ),
