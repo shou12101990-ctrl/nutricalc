@@ -5559,6 +5559,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final bool hasEvent = flags.any((f) => f);
       final int evCount = flags.where((f) => f).length;
       final double ic = evCount >= 2 ? 12.0 : 16.0; // アイコンサイズ
+      // no_meals(絶食)は禁止スラッシュが箱の対角いっぱいに伸びるため、
+      // 同じsizeでもrestaurantより一回り大きく見える。視覚サイズを揃える補正。
+      final double icFast = ic - 2;
       final double fs = evCount >= 2 ? 10.0 : 12.5; // boxLabel文字サイズ
 
       // 横幅が詰まっているとき(セル幅が狭い)は、日付ラベルを
@@ -5594,7 +5597,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           ));
 
       final evWidgets = [
-        if (flags[0]) Icon(Icons.no_meals,   size: ic, color: Colors.red.shade400),
+        if (flags[0]) Icon(Icons.no_meals,   size: icFast, color: Colors.red.shade400),
         if (flags[1]) Icon(Icons.bed,         size: ic, color: Colors.blueGrey.shade400),
         if (flags[2]) Icon(Icons.restaurant,  size: ic, color: Colors.blue.shade600),
         if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
