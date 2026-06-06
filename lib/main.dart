@@ -5540,42 +5540,52 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
 
-          // 枠線付きテキストボックス
-          Widget boxLabel(String text, Color color) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          // 同日イベントを収集して縦並べ
+          // 表示順(上→下): 絶食 > 入室 > 栄養開始 > EN > full (EN/full同日はEN上)
+          final List<bool> flags = [
+            i == fastingIdx,
+            i == admissionIdxClamped,
+            i == nutritionIdx,
+            i == enIdx && i >= preDays,
+            i == fullIdx && i >= preDays,
+          ];
+          final int evCount = flags.where((f) => f).length;
+          final double ic = evCount >= 2 ? 12.0 : 16.0; // アイコンサイズ
+          final double fs = evCount >= 2 ? 10.0 : 12.5; // boxLabel文字サイズ
+
+          Widget mkBox(String t, Color c) => Container(
+                padding: EdgeInsets.symmetric(
+                    horizontal: evCount >= 2 ? 2 : 3,
+                    vertical: evCount >= 2 ? 0.5 : 1),
                 decoration: BoxDecoration(
-                  border: Border.all(color: color, width: 0.9),
+                  border: Border.all(color: c, width: 0.9),
                   borderRadius: BorderRadius.circular(2),
                 ),
-                child: Text(text,
+                child: Text(t,
                     style: TextStyle(
-                        fontSize: 12.5,
-                        color: color,
+                        fontSize: fs,
+                        color: c,
                         fontWeight: FontWeight.bold,
                         height: 1.2)),
               );
 
-          // アイコン: 絶食 > (入室＋栄養開始同日→縦並べ) > 入室 > 栄養開始 > Full > EN
+          final evWidgets = [
+            if (flags[0]) Icon(Icons.no_meals,   size: ic, color: Colors.red.shade400),
+            if (flags[1]) Icon(Icons.bed,         size: ic, color: Colors.blueGrey.shade400),
+            if (flags[2]) Icon(Icons.restaurant,  size: ic, color: Colors.blue.shade600),
+            if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
+            if (flags[4]) mkBox('full', Colors.green.shade700),
+          ];
+
           Widget? icon;
-          if (i == fastingIdx) {
-            icon = Icon(Icons.no_meals, size: 16, color: Colors.red.shade400);
-          } else if (i == admissionIdxClamped && i == nutritionIdx) {
-            // 入室と栄養開始が同日 → 縦に併記
+          if (evWidgets.length == 1) {
+            icon = evWidgets.first;
+          } else if (evWidgets.length >= 2) {
             icon = Column(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.bed, size: 13, color: Colors.blueGrey.shade400),
-                Icon(Icons.restaurant, size: 13, color: Colors.blue.shade600),
-              ],
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: evWidgets,
             );
-          } else if (i == admissionIdxClamped) {
-            icon = Icon(Icons.bed, size: 16, color: Colors.blueGrey.shade400);
-          } else if (i == nutritionIdx) {
-            icon = Icon(Icons.restaurant, size: 16, color: Colors.blue.shade600);
-          } else if (i == fullIdx && i >= preDays) {
-            icon = boxLabel('full', Colors.green.shade700);
-          } else if (i == enIdx && i >= preDays && i != nutritionIdx && i != fullIdx) {
-            icon = boxLabel('EN', Colors.yellow.shade700);
           }
 
           return Column(
@@ -5593,10 +5603,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       ),
     );
 
-    // 共通の透明な線グラフビルダー
-    // bottomTitles に BarChart と同じ reservedSize を指定して描画エリアを合わせる
-    const lineBottom = AxisTitles(
-        sideTitles: SideTitles(showTitles: false, reservedSize: 56));
+    // 共通の透明な線グラフビルダー（タイトルなし・全4辺hidden）
     LineChart lineLayer(List<double> ys, double maxY, Color color) =>
         LineChart(LineChartData(
           minX: -0.5,
@@ -5616,7 +5623,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             ),
           ],
           titlesData: const FlTitlesData(
-            bottomTitles: lineBottom, // BarChartと描画エリアを揃える
+            bottomTitles: hidden,
             leftTitles: hidden,
             topTitles: hidden,
             rightTitles: hidden,
@@ -5703,10 +5710,18 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     gridData: const FlGridData(show: false),
                     borderData: FlBorderData(show: false),
                   )),
-                  // ② 合計IN: マーカー付き線、独立スケール
-                  lineLayer(ins, maxIn, Colors.purple.shade200),
-                  // ③ AA(タンパク)投与量: マーカー付き線、独立スケール
-                  lineLayer(prots, maxAA, Colors.pink.shade300),
+                  // ② 合計IN — Positioned+ClipRectで日付軸エリアに入らないよう制限
+                  Positioned(
+                    top: 0, left: 0, right: 0, bottom: 56,
+                    child: ClipRect(
+                        child: lineLayer(ins, maxIn, Colors.purple.shade200)),
+                  ),
+                  // ③ AA(タンパク) — 同上
+                  Positioned(
+                    top: 0, left: 0, right: 0, bottom: 56,
+                    child: ClipRect(
+                        child: lineLayer(prots, maxAA, Colors.pink.shade300)),
+                  ),
                   // フローター: タップ固定優先、次いでホバー
                   Builder(builder: (ctx) {
                     final displayIdx = _selectedBarIdx >= 0
