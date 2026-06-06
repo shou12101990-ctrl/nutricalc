@@ -1114,6 +1114,22 @@ class _BuilderPageState extends State<BuilderPage>
     processCategory('TPN', _tpnRateMlPerHour);
     processCategory('PPN', _ppnRateMlPerHour);
 
+    // 加注製剤(電解質/微量元素/ビタミン)を合算
+    for (final name in _zeroAdditives) {
+      final p = widget.state.catalog.byName(name);
+      if (p == null) continue;
+      final prot = p.aminoAcidG ?? 0;
+      final fat = p.fatBase ?? 0;
+      final carb = p.carbBase ?? 0;
+      totalVolumeMl += p.volumeMl ?? 0;
+      totalKcal += p.kcal ?? 0;
+      totalProteinG += prot;
+      totalFatG += fat;
+      fatKcal += fat * 9;
+      carbKcal += carb * 4;
+      proteinKcal += prot * 4;
+    }
+
     return AggregateResult(
       totalVolumeMl: totalVolumeMl,
       totalKcal: totalKcal,
@@ -1162,6 +1178,69 @@ class _BuilderPageState extends State<BuilderPage>
       fatKcal: fatKcal,
       carbKcal: carbKcal,
       proteinKcal: proteinKcal,
+    );
+  }
+
+  // 加注製剤(電解質/微量元素/ビタミン)を複数追加するピッカー。
+  // ゼロmenu・個別選択 双方で共有 (_zeroAdditives)。
+  Widget _additivePicker() {
+    final addProds = [
+      for (final c in ['電解質', '微量元素', 'ビタミン'])
+        ...widget.state.catalog.byCategory(c)
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          isExpanded: true,
+          value: null,
+          decoration: const InputDecoration(
+              labelText: '＋ 加注製剤を追加',
+              isDense: true,
+              contentPadding:
+                  EdgeInsets.symmetric(vertical: 6, horizontal: 4)),
+          items: addProds
+              .map((p) => DropdownMenuItem<String>(
+                  value: p.name,
+                  child: Text('${p.name}  (${p.category})',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: const TextStyle(fontSize: 13))))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) setState(() => _zeroAdditives.add(v));
+          },
+        ),
+        const SizedBox(height: 4),
+        if (_zeroAdditives.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('加注なし',
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+          )
+        else
+          ..._zeroAdditives.asMap().entries.map((e) {
+            final v = widget.state.catalog.byName(e.value)?.volumeMl;
+            return SizedBox(
+              height: 36,
+              child: Row(children: [
+                Expanded(
+                    child: Text(e.value,
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis)),
+                Text(v != null ? '${v.round()} ml' : '1管',
+                    style: const TextStyle(fontSize: 13)),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () =>
+                      setState(() => _zeroAdditives.removeAt(e.key)),
+                ),
+              ]),
+            );
+          }),
+      ],
     );
   }
 
@@ -1764,8 +1843,10 @@ class _BuilderPageState extends State<BuilderPage>
                                 if (activeCategories.isEmpty) {
                                   return const Text('採用製剤を製剤マスタで選択してください');
                                 }
+                                // 加注タブは常時選択可。EN/TPN/PPNは採用製剤がある時のみ
+                                final tabCats = [...activeCategories, '加注'];
                                 final effectiveCategory =
-                                    activeCategories.contains(category)
+                                    tabCats.contains(category)
                                         ? category
                                         : activeCategories.first;
                                 if (effectiveCategory != category) {
@@ -1787,14 +1868,14 @@ class _BuilderPageState extends State<BuilderPage>
                                   children: [
                                     const Expanded(child: SizedBox()), // 左スペーサー
                                     SizedBox(
-                                      width: 160,
+                                      width: 60.0 * tabCats.length,
                                       child: SegmentedButton<String>(
                                         showSelectedIcon: false,
                                         style: ButtonStyle(
                                           visualDensity: VisualDensity.compact,
                                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                         ),
-                                        segments: activeCategories
+                                        segments: tabCats
                                             .map((cat) => ButtonSegment(
                                                 value: cat, label: Text(cat)))
                                             .toList(),
@@ -1809,7 +1890,9 @@ class _BuilderPageState extends State<BuilderPage>
                                         alignment: Alignment.centerLeft,
                                         child: Padding(
                                           padding: const EdgeInsets.only(left: 12),
-                                          child: effectiveCategory == 'EN'
+                                          child: effectiveCategory == '加注'
+                                            ? const SizedBox.shrink()
+                                            : effectiveCategory == 'EN'
                                             ? DropdownButton<double>(
                                               value: _enRateMlPerHour,
                                               isDense: true,
@@ -1853,9 +1936,15 @@ class _BuilderPageState extends State<BuilderPage>
                                   ],
                                 );
                               }),
-                              const SizedBox(height: 4),
-                              Text('ENは8h毎, TPN/PPNは24h毎に交換',
-                                  style: Theme.of(context).textTheme.bodySmall),
+                              if (category == '加注') ...[
+                                const SizedBox(height: 8),
+                                _additivePicker(),
+                              ],
+                              if (category != '加注') ...[
+                                const SizedBox(height: 4),
+                                Text('ENは8h毎, TPN/PPNは24h毎に交換',
+                                    style: Theme.of(context).textTheme.bodySmall),
+                              ],
                               const SizedBox(height: 8),
                               AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 380),
