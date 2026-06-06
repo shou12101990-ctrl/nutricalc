@@ -924,6 +924,10 @@ class _BuilderPageState extends State<BuilderPage>
   double _lipidGPerKg = 0.4;
   String glucoseSource = '70% グルコース';
   String lipidSource = 'イントラリポス20%';
+  // ゼロmenu: 加注する電解質/微量元素/ビタミン製剤 (null = なし)
+  String? electrolyteSource;
+  String? traceSource;
+  String? vitaminSource;
   final Set<String> expandedProducts = {};
   double _enRateMlPerHour = 0;
   double _tpnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
@@ -935,6 +939,9 @@ class _BuilderPageState extends State<BuilderPage>
   @override
   void initState() {
     super.initState();
+    // ゼロmenu 加注の既定: 微量元素・ビタミンは標準で含める、電解質はなし
+    traceSource = widget.state.catalog.byCategory('微量元素').firstOrNull?.name;
+    vitaminSource = widget.state.catalog.byCategory('ビタミン').firstOrNull?.name;
     _snapCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 260));
     _snapCtrl.addListener(() {
@@ -1425,10 +1432,46 @@ class _BuilderPageState extends State<BuilderPage>
                       visible: _builderTabIndex == 1,
                       maintainState: true,
                       child: Builder(builder: (context) {
-                        const kVit = 2.0; // ビタミン製剤固定量 ml
-                        const kTrace = 2.0; // 微量元素製剤固定量 ml
-                        const kElec = 2.0; // 電解質製剤固定量 ml
-                        final totalIn = zeroMenu.aminoVolumeMl + zeroMenu.glucoseVolumeMl + zeroMenu.lipidVolumeMl + kVit + kTrace + kElec;
+                        // 加注製剤の容量(ml) / 表示量
+                        double volOf(String? name) {
+                          if (name == null) return 0;
+                          return widget.state.catalog.byName(name)?.volumeMl ?? 0;
+                        }
+                        String amtOf(String? name) {
+                          if (name == null) return '';
+                          final v = widget.state.catalog.byName(name)?.volumeMl;
+                          return v != null ? '${v.round()} ml' : '1管/キット';
+                        }
+                        // カテゴリ別の加注ドロップダウン
+                        Widget catDropdown(String label, String cat, String? value,
+                            ValueChanged<String?> onCh) {
+                          final prods = widget.state.catalog.byCategory(cat);
+                          return DropdownButtonFormField<String?>(
+                            isExpanded: true,
+                            value: value,
+                            decoration: InputDecoration(
+                                labelText: label,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 6, horizontal: 4)),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                  value: null, child: Text('なし')),
+                              ...prods.map((p) => DropdownMenuItem<String?>(
+                                  value: p.name,
+                                  child: Text(p.name,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1))),
+                            ],
+                            onChanged: onCh,
+                          );
+                        }
+                        final totalIn = zeroMenu.aminoVolumeMl +
+                            zeroMenu.glucoseVolumeMl +
+                            zeroMenu.lipidVolumeMl +
+                            volOf(electrolyteSource) +
+                            volOf(traceSource) +
+                            volOf(vitaminSource);
                         final lipidGPerKg = (zeroMenu.lipidGram / current.weightKg);
                         const rowH = 36.0;
                         Widget dataRow(String label, String val, {bool bold = false}) => SizedBox(
@@ -1515,6 +1558,21 @@ class _BuilderPageState extends State<BuilderPage>
                                         ],
                                         onChanged: (v) => setState(() { lipidSource = v ?? lipidSource; }),
                                       ),
+                                      const SizedBox(height: 8),
+                                      const Divider(height: 12),
+                                      Text('加注 (電解質・微量元素・ビタミン)',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600)),
+                                      const SizedBox(height: 6),
+                                      catDropdown('電解質', '電解質', electrolyteSource,
+                                          (v) => setState(() => electrolyteSource = v)),
+                                      const SizedBox(height: 8),
+                                      catDropdown('微量元素', '微量元素', traceSource,
+                                          (v) => setState(() => traceSource = v)),
+                                      const SizedBox(height: 8),
+                                      catDropdown('ビタミン', 'ビタミン', vitaminSource,
+                                          (v) => setState(() => vitaminSource = v)),
                                       const SizedBox(height: 10),
                                       SizedBox(
                                         width: double.infinity,
@@ -1552,9 +1610,16 @@ class _BuilderPageState extends State<BuilderPage>
                                       dataRow('アミパレン', '${zeroMenu.aminoVolumeMl.round()} ml'),
                                       dataRow(glucoseSource, '${zeroMenu.glucoseVolumeMl.round()} ml'),
                                       dataRow(lipidSource, '${zeroMenu.lipidVolumeMl.round()} ml'),
-                                      dataRow('ビタミン製剤', '${kVit.toStringAsFixed(0)} ml'),
-                                      dataRow('微量元素製剤', '${kTrace.toStringAsFixed(0)} ml'),
-                                      dataRow('電解質製剤', '${kElec.toStringAsFixed(0)} ml'),
+                                      // 加注 (選択時のみ表示)
+                                      if (electrolyteSource != null)
+                                        dataRow(electrolyteSource!, amtOf(electrolyteSource)),
+                                      if (traceSource != null)
+                                        dataRow(traceSource!, amtOf(traceSource)),
+                                      if (vitaminSource != null)
+                                        dataRow(vitaminSource!, amtOf(vitaminSource)),
+                                      const Divider(height: 12),
+                                      dataRow('総水分 (IN)', '${totalIn.round()} ml',
+                                          bold: true),
                                     ],
                                   ),
                                 ),
