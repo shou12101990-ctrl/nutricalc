@@ -1185,16 +1185,21 @@ class _BuilderPageState extends State<BuilderPage>
       aminoProduct: widget.state.catalog.byName('アミパレン'),
       lipidProduct: widget.state.catalog.byName(lipidSource),
     );
+    // 製剤構成と一致させる: 本体は10ml単位に丸め、加注製剤も合算してサマリーへ反映
+    double _round10(double v) => (v / 10).round() * 10.0;
     final scratchAggregate = _aggregateFromVolumes(
       [
         widget.state.catalog.byName('アミパレン'),
-        widget.state.catalog.byName(glucoseSource),
         widget.state.catalog.byName(lipidSource),
+        widget.state.catalog.byName(glucoseSource),
+        ..._zeroAdditives.map((n) => widget.state.catalog.byName(n)),
       ],
       [
-        zeroMenu.aminoVolumeMl,
-        zeroMenu.glucoseVolumeMl,
-        zeroMenu.lipidVolumeMl
+        _round10(zeroMenu.aminoVolumeMl),
+        _round10(zeroMenu.lipidVolumeMl),
+        _round10(zeroMenu.glucoseVolumeMl),
+        ..._zeroAdditives
+            .map((n) => widget.state.catalog.byName(n)?.volumeMl ?? 0),
       ],
     );
     final actualAggregate = _aggregateWithRates(current);
@@ -1251,9 +1256,7 @@ class _BuilderPageState extends State<BuilderPage>
     final aminoProduct = widget.state.catalog.byName('アミパレン');
     final glucoseProduct = widget.state.catalog.byName(glucoseSource);
     final lipidProduct = widget.state.catalog.byName(lipidSource);
-    final scratchTotalVolumeMl = zeroMenu.aminoVolumeMl +
-        zeroMenu.glucoseVolumeMl +
-        zeroMenu.lipidVolumeMl;
+    final scratchTotalVolumeMl = scratchAggregate.totalVolumeMl;
     final scratchInfusionRateMlPerHour = scratchTotalVolumeMl / 24;
     String formatRequiredUnits(Product? product, double requiredMl) {
       if (product == null ||
@@ -1264,12 +1267,13 @@ class _BuilderPageState extends State<BuilderPage>
       return '${(requiredMl / product.volumeMl!).ceil()} 本';
     }
 
+    // 製剤構成と一致(10ml丸め)
     final scratchAminoUnits =
-        formatRequiredUnits(aminoProduct, zeroMenu.aminoVolumeMl);
+        formatRequiredUnits(aminoProduct, _round10(zeroMenu.aminoVolumeMl));
     final scratchGlucoseUnits =
-        formatRequiredUnits(glucoseProduct, zeroMenu.glucoseVolumeMl);
+        formatRequiredUnits(glucoseProduct, _round10(zeroMenu.glucoseVolumeMl));
     final scratchLipidUnits =
-        formatRequiredUnits(lipidProduct, zeroMenu.lipidVolumeMl);
+        formatRequiredUnits(lipidProduct, _round10(zeroMenu.lipidVolumeMl));
 
     int _actualCategoryUnits(String categoryKey) {
       return current.regimenItems.fold<int>(0, (sum, item) {
@@ -1436,35 +1440,11 @@ class _BuilderPageState extends State<BuilderPage>
                         Product? prod(String? n) =>
                             n == null ? null : widget.state.catalog.byName(n);
                         double round10(double v) => (v / 10).round() * 10.0;
-                        double ratio(Product? p, double ml) =>
-                            (p?.volumeMl ?? 0) > 0 ? ml / p!.volumeMl! : 0;
 
-                        // 本体(ベース)の使用量を10ml単位に丸め
+                        // 本体(ベース)の使用量を10ml単位に丸め (IN/kcal/PFCはサマリーカードで集計)
                         final aminoMl = round10(zeroMenu.aminoVolumeMl);
                         final gluMl = round10(zeroMenu.glucoseVolumeMl);
                         final lipMl = round10(zeroMenu.lipidVolumeMl);
-                        final aminoP = prod('アミパレン');
-                        final gluP = prod(glucoseSource);
-                        final lipP = prod(lipidSource);
-
-                        // 加注の合計容量
-                        double addVol = 0;
-                        for (final n in _zeroAdditives) {
-                          addVol += prod(n)?.volumeMl ?? 0;
-                        }
-
-                        // 製剤構成 → IN / kcal / PFC
-                        final proteinG =
-                            (aminoP?.aminoAcidG ?? 0) * ratio(aminoP, aminoMl);
-                        final carbG =
-                            (gluP?.carbBase ?? 0) * ratio(gluP, gluMl);
-                        final fatG =
-                            (lipP?.fatBase ?? 0) * ratio(lipP, lipMl);
-                        final kcal = (aminoP?.kcal ?? 0) * ratio(aminoP, aminoMl) +
-                            (gluP?.kcal ?? 0) * ratio(gluP, gluMl) +
-                            (lipP?.kcal ?? 0) * ratio(lipP, lipMl);
-                        final inMl = aminoMl + gluMl + lipMl + addVol;
-                        final lipidGPerKg = (zeroMenu.lipidGram / current.weightKg);
 
                         const rowH = 32.0;
                         Widget dataRow(String label, String val,
@@ -1696,7 +1676,7 @@ class _BuilderPageState extends State<BuilderPage>
                           ),
                         );
 
-                        // ── 製剤構成 + サマリー(IN/kcal/PFC) ──
+                        // ── 製剤構成 (タンパク→脂肪→糖質の順) ──
                         final compCard = Card(
                           margin: EdgeInsets.zero,
                           child: Padding(
@@ -1708,13 +1688,13 @@ class _BuilderPageState extends State<BuilderPage>
                                     style:
                                         Theme.of(context).textTheme.titleSmall),
                                 const Divider(),
-                                Text('本体 (10ml単位)',
+                                Text('本体',
                                     style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey.shade600)),
                                 dataRow('アミパレン', '${aminoMl.round()} ml'),
-                                dataRow(glucoseSource, '${gluMl.round()} ml'),
                                 dataRow(lipidSource, '${lipMl.round()} ml'),
+                                dataRow(glucoseSource, '${gluMl.round()} ml'),
                                 if (_zeroAdditives.isNotEmpty) ...[
                                   const SizedBox(height: 4),
                                   Text('加注',
@@ -1726,16 +1706,6 @@ class _BuilderPageState extends State<BuilderPage>
                                           ? '${prod(n)!.volumeMl!.round()} ml'
                                           : '1管')),
                                 ],
-                                const Divider(height: 14),
-                                dataRow('IN (総水分)', '${inMl.round()} ml',
-                                    bold: true),
-                                dataRow('カロリー', '${kcal.round()} kcal',
-                                    bold: true),
-                                dataRow(
-                                    'PFC (P/F/C)',
-                                    '${proteinG.round()} / ${fatG.round()} / ${carbG.round()} g',
-                                    bold: true,
-                                    color: Colors.indigo.shade700),
                               ],
                             ),
                           ),
@@ -1744,16 +1714,18 @@ class _BuilderPageState extends State<BuilderPage>
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // サブタブ: 本体 / 加注
-                            SegmentedButton<int>(
-                              segments: const [
-                                ButtonSegment(value: 0, label: Text('本体')),
-                                ButtonSegment(value: 1, label: Text('加注')),
-                              ],
-                              selected: {_zeroSubTab},
-                              showSelectedIcon: false,
-                              onSelectionChanged: (s) =>
-                                  setState(() => _zeroSubTab = s.first),
+                            // サブタブ: 本体 / 加注 (中央寄せ)
+                            Center(
+                              child: SegmentedButton<int>(
+                                segments: const [
+                                  ButtonSegment(value: 0, label: Text('本体')),
+                                  ButtonSegment(value: 1, label: Text('加注')),
+                                ],
+                                selected: {_zeroSubTab},
+                                showSelectedIcon: false,
+                                onSelectionChanged: (s) =>
+                                    setState(() => _zeroSubTab = s.first),
+                              ),
                             ),
                             const SizedBox(height: 10),
                             Row(
