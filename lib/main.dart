@@ -5672,7 +5672,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   }
                 },
                 onExit: (_) => setState(() => _hoveredBarIdx = -1),
-                child: Stack(
+                child: LayoutBuilder(builder: (_, _lbc) => Stack(
                 children: [
                   // ① 積み上げ棒: カロリー内訳 (PN+EN)、独立スケール
                   BarChart(BarChartData(
@@ -5791,8 +5791,48 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ),
                     );
                   }),
+                  // 空白ゾーン凡例（絶食〜栄養開始前の空きスペースに縦配置）
+                  if (preDays > 0)
+                    Builder(builder: (_) {
+                      final zoneW = (_lbc.maxWidth - 24) / n * preDays - 6;
+                      if (zoneW < 30) return const SizedBox.shrink();
+                      Widget leg(Color c, String lbl, bool line) => Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Container(
+                            width: line ? 14 : 10,
+                            height: line ? 3 : 10,
+                            decoration: BoxDecoration(
+                                color: c, borderRadius: BorderRadius.circular(2)),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(lbl,
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black54,
+                                  height: 1.2)),
+                        ]),
+                      );
+                      return Positioned(
+                        left: 4,
+                        top: 42, // 日付軸(38px)の下
+                        child: SizedBox(
+                          width: zoneW,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              leg(Colors.yellow.shade700, 'EN (kcal)', false),
+                              leg(Colors.green.shade300,  'PN (kcal)', false),
+                              leg(Colors.purple.shade200, 'IN (ml)',   true),
+                              leg(Colors.pink.shade300,   'AA (g)',    true),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                 ],
-                ), // Stack
+                )), // Stack / LayoutBuilder
               ), // MouseRegion
               ), // GestureDetector
               ), // SizedBox
