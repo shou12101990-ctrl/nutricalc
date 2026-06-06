@@ -5286,7 +5286,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                     .toList(),
                                 onChanged: (v) => setState(() {
                                   _rampDays = v ?? _rampDays;
-                                  _enStartDay = _rampDays + 1;
+                                  // full達成の変更でEN導入日を強制的に動かさない
+                                  // (同じ日数に揃えられるようにするため)。
+                                  // 初期値の「full+1」はロード時/プロトコル選択時に設定済み。
                                   _rebuildDays();
                                 }),
                               ),
