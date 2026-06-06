@@ -4908,7 +4908,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final cfg = widget.current.autoDesignConfig;
     if (cfg != null) {
       // 保存済み設定を復元 (rampDays・開始日・PN製剤のみ。日別は固定シーケンスから再生成)
-      _rampDays = (cfg['rampDays'] as num?)?.toInt() ?? 5;
+      _rampDays = ((cfg['rampDays'] as num?)?.toInt() ?? 5).clamp(2, 6);
       _enStartDay = (cfg['enStartDay'] as num?)?.toInt() ?? (_rampDays + 1);
       _startDate =
           DateTime.tryParse(cfg['startDate'] as String? ?? '') ?? DateTime.now();
@@ -5192,7 +5192,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               DropdownButton<int>(
                                 value: _rampDays,
                                 isDense: true,
-                                items: List.generate(14, (i) => i + 1)
+                                items: List.generate(5, (i) => i + 2)
                                     .map((d) => DropdownMenuItem(
                                         value: d, child: Text('$d')))
                                     .toList(),
