@@ -4196,7 +4196,22 @@ class NutritionCalculator {
         final mealPac = (enPac / 3).round().clamp(1, enPac);
         final out = <List<DesignItem>>[];
         for (var i = 0; i < ens.length; i++) {
-          out.add([enPacItem(ens[i], 3 * mealPac)]); // 単剤(3食)
+          final prod = ens[i];
+          final pacKcal = (prod.kcal ?? 0).toDouble();
+          // 単調増加制約: minEnKcal を満たす最小pac数まで単剤候補を切り上げ
+          // (連続投与→ボーラス切替時の凹みを防ぐ)
+          int totalPacs = 3 * mealPac;
+          if (minEnKcal > 0 && pacKcal > 0) {
+            final needed = (minEnKcal / pacKcal).ceil();
+            if (needed > totalPacs) {
+              // 目標kcalを超えない範囲で増やす
+              final hardMax = dayTargetKcal > 0
+                  ? (dayTargetKcal / pacKcal).floor().clamp(totalPacs, 99)
+                  : 99;
+              totalPacs = needed.clamp(totalPacs, hardMax);
+            }
+          }
+          out.add([enPacItem(prod, totalPacs)]); // 単剤(単調増加対応)
           for (var j = i + 1; j < ens.length; j++) {
             for (final a in const [1, 2]) {
               // a食をens[i]、(3-a)食をens[j] (食単位混合)
