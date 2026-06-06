@@ -5513,6 +5513,19 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
     // 特別日インデックス
     final fastingIdx   = (widget.current.fastingDate != null) ? 0 : -1;
+    final admissionEntry = widget.current.bedHistory
+        .where((b) => b.fromBed == null)
+        .firstOrNull;
+    final admissionRaw = admissionEntry != null
+        ? DateTime.tryParse(admissionEntry.changedAt)
+        : null;
+    final admissionIdx = admissionRaw != null
+        ? DateTime(admissionRaw.year, admissionRaw.month, admissionRaw.day)
+            .difference(chartOrigin)
+            .inDays
+        : -1;
+    final admissionIdxClamped =
+        (admissionIdx >= 0 && admissionIdx < n) ? admissionIdx : -1;
     final nutritionIdx = preDays;
     final fullIdx      = (preDays + _rampDays - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
@@ -5541,10 +5554,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         height: 1.2)),
               );
 
-          // アイコンの優先順: 絶食日 > 栄養開始日 > Full > EN開始
+          // アイコンの優先順: 絶食日 > 入室日 > 栄養開始日 > Full > EN開始
           Widget? icon;
           if (i == fastingIdx) {
             icon = Icon(Icons.no_meals, size: 14, color: Colors.red.shade400);
+          } else if (i == admissionIdxClamped) {
+            icon = Icon(Icons.bed, size: 14, color: Colors.blueGrey.shade400);
           } else if (i == nutritionIdx) {
             icon = Icon(Icons.restaurant, size: 14, color: Colors.blue.shade600);
           } else if (i == fullIdx && i >= preDays) {
