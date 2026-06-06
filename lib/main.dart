@@ -88,7 +88,7 @@ class NutritionApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'やさしい栄養処方 NutriCalc',
+      title: 'やさしい栄養処方 Nutri Calc β',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1565C0)),
@@ -121,7 +121,7 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('やさしい栄養処方 NutriCalc'),
+        title: const Text('やさしい栄養処方 Nutri Calc β'),
         actions: [
           // 件数はヘッダーではなく患者一覧タイトル横に移動したので非表示
         ],

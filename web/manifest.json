@@ -1,6 +1,6 @@
 {
-    "name": "やさしい栄養処方 NutriCalc",
-    "short_name": "NutriCalc",
+    "name": "やさしい栄養処方 Nutri Calc β",
+    "short_name": "Nutri Calc β",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
