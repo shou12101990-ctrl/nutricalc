@@ -5535,7 +5535,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final bottomDateTitles = AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 58, // 隙間(8px) + 日付(16px) + アイコン(18px) + 余白
+        reservedSize: 56, // 隙間(8px) + 日付(14px) + アイコン(16px) + 余白
         getTitlesWidget: (v, m) {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
@@ -5549,20 +5549,29 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 ),
                 child: Text(text,
                     style: TextStyle(
-                        fontSize: 14.5,
+                        fontSize: 12.5,
                         color: color,
                         fontWeight: FontWeight.bold,
                         height: 1.2)),
               );
 
-          // アイコンの優先順: 絶食日 > 入室日 > 栄養開始日 > Full > EN開始
+          // アイコン: 絶食 > (入室＋栄養開始同日→縦並べ) > 入室 > 栄養開始 > Full > EN
           Widget? icon;
           if (i == fastingIdx) {
-            icon = Icon(Icons.no_meals, size: 18, color: Colors.red.shade400);
+            icon = Icon(Icons.no_meals, size: 16, color: Colors.red.shade400);
+          } else if (i == admissionIdxClamped && i == nutritionIdx) {
+            // 入室と栄養開始が同日 → 縦に併記
+            icon = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.bed, size: 13, color: Colors.blueGrey.shade400),
+                Icon(Icons.restaurant, size: 13, color: Colors.blue.shade600),
+              ],
+            );
           } else if (i == admissionIdxClamped) {
-            icon = Icon(Icons.bed, size: 18, color: Colors.blueGrey.shade400);
+            icon = Icon(Icons.bed, size: 16, color: Colors.blueGrey.shade400);
           } else if (i == nutritionIdx) {
-            icon = Icon(Icons.restaurant, size: 18, color: Colors.blue.shade600);
+            icon = Icon(Icons.restaurant, size: 16, color: Colors.blue.shade600);
           } else if (i == fullIdx && i >= preDays) {
             icon = boxLabel('full', Colors.green.shade700);
           } else if (i == enIdx && i >= preDays && i != nutritionIdx && i != fullIdx) {
@@ -5576,8 +5585,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               const SizedBox(height: 8), // バーと日付の間隔
               Text(dateLabel(i),
                   style: const TextStyle(
-                      fontSize: 16, letterSpacing: -0.5, height: 1.0)),
-              if (icon != null) icon else const SizedBox(height: 18),
+                      fontSize: 14, letterSpacing: -0.5, height: 1.0)),
+              if (icon != null) icon else const SizedBox(height: 16),
             ],
           );
         },
@@ -5587,7 +5596,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // 共通の透明な線グラフビルダー
     // bottomTitles に BarChart と同じ reservedSize を指定して描画エリアを合わせる
     const lineBottom = AxisTitles(
-        sideTitles: SideTitles(showTitles: false, reservedSize: 58));
+        sideTitles: SideTitles(showTitles: false, reservedSize: 56));
     LineChart lineLayer(List<double> ys, double maxY, Color color) =>
         LineChart(LineChartData(
           minX: -0.5,
@@ -5712,7 +5721,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     final isPinned = _selectedBarIdx >= 0;
                     // 棒の高さ比率からY位置を推定
                     const chartH = 240.0;
-                    const bottomReserved = 58.0;
+                    const bottomReserved = 56.0;
                     final drawH = chartH - bottomReserved;
                     final barRatio = maxKcal > 0
                         ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
@@ -5779,7 +5788,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   Positioned(
                     left: 10,
                     top: 0,
-                    bottom: 58,
+                    bottom: 56,
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Container(
