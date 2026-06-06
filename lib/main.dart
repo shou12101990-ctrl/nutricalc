@@ -4656,7 +4656,7 @@ class AppState {
       cases.add(
         PatientCase(
           id: 'seed-1',
-          caseCode: 'CASE-001',
+          caseCode: '01',
           currentBed: '01',
           age: 60,
           heightCm: 150,
