@@ -99,11 +99,11 @@ class LocalStore {
 
   Future<bool> loadDefaultsApplied() async {
     final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/nutrition_defaults_applied.txt').exists();
+    return File('${dir.path}/nutrition_defaults_applied_v2.txt').exists();
   }
 
   Future<void> saveDefaultsApplied() async {
     final dir = await getApplicationDocumentsDirectory();
-    await File('${dir.path}/nutrition_defaults_applied.txt').writeAsString('1');
+    await File('${dir.path}/nutrition_defaults_applied_v2.txt').writeAsString('1');
   }
 }
