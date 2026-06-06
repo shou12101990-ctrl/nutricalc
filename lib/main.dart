@@ -5367,8 +5367,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     color: Colors.yellow.shade700, label: 'EN(kcal)', line: false),
                 _LegendChip(
                     color: Colors.green.shade300, label: 'PN(kcal)', line: false),
-                const _LegendChip(color: Colors.teal, label: 'IN(ml)', line: true),
-                const _LegendChip(color: Colors.blue, label: 'AA(g)', line: true),
+                _LegendChip(color: Colors.purple.shade200, label: 'IN(ml)', line: true),
+                _LegendChip(color: Colors.pink.shade300, label: 'AA(g)', line: true),
               ],
             ),
             const SizedBox(height: 10),
@@ -5425,9 +5425,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     borderData: FlBorderData(show: false),
                   )),
                   // ② 合計IN: マーカー付き線、独立スケール
-                  lineLayer(ins, maxIn, Colors.teal),
+                  lineLayer(ins, maxIn, Colors.purple.shade200),
                   // ③ AA(タンパク)投与量: マーカー付き線、独立スケール
-                  lineLayer(prots, maxAA, Colors.blue),
+                  lineLayer(prots, maxAA, Colors.pink.shade300),
                   // ホバーツールチップ（棒上端の少し上に、ベージュ背景）
                   if (_hoveredBarIdx >= 0 && _hoveredBarIdx < n)
                     Builder(builder: (ctx) {
