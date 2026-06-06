@@ -584,8 +584,9 @@ class CasesPage extends StatelessWidget {
     // 症例名を更新
     if (codeCtrl.text.trim().isNotEmpty) item.caseCode = codeCtrl.text.trim();
 
-    // 絶食日を更新
-    item.fastingDate = fastingDate?.toIso8601String().split('T').first;
+    // 絶食日を更新（ローカル年月日で保存 — toIso8601StringはUTC日付になるため使わない）
+    item.fastingDate = fastingDate == null ? null
+        : '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
 
     // ベッド番号を更新
     final newBed = bedIdx.toString().padLeft(2, '0');
@@ -2401,7 +2402,8 @@ class _BuilderPageState extends State<BuilderPage>
     current.stressFactor = stress;
     current.proteinGoalPerKg = protein;
     current.memo = memoCtrl.text.trim();
-    current.fastingDate = fastingDate?.toIso8601String().split('T').first;
+    current.fastingDate = fastingDate == null ? null
+        : '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
     await widget.state.persist();
     setState(() {});
     widget.refresh();
@@ -5549,8 +5551,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       .floor()
                       .clamp(0, n - 1);
                   setState(() {
-                    // 同じバーをもう一度タップで解除
-                    _selectedBarIdx = (_selectedBarIdx == idx) ? -1 : idx;
+                    final newIdx = (_selectedBarIdx == idx) ? -1 : idx;
+                    _selectedBarIdx = newIdx;
+                    // 解除時はホバーも消す（web では hover が残りフローターが再表示されるのを防ぐ）
+                    if (newIdx == -1) _hoveredBarIdx = -1;
                   });
                 },
                 child: MouseRegion(
@@ -5633,13 +5637,18 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         300;
                     final barW = (chartW - 24) / n;
                     final barCenterX = barW * idx + barW / 2;
-                    const tipW = 136.0;
+                    const tipW = 156.0;
                     final tipX =
                         (barCenterX - tipW / 2).clamp(0.0, chartW - tipW);
+                    final mmdd = '${dates[idx].month.toString().padLeft(2, '0')}/${dates[idx].day.toString().padLeft(2, '0')}';
                     return Positioned(
                       left: tipX,
                       top: barTopY.clamp(0.0, chartH - 80),
-                      child: Container(
+                      child: GestureDetector(
+                        // フローター自体のタップを吸収してチャートの onTapDown に伝搬させない
+                        behavior: HitTestBehavior.opaque,
+                        onTapDown: (_) {},
+                        child: Container(
                         width: tipW,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 9, vertical: 6),
@@ -5667,14 +5676,16 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(dateLabel(idx),
+                                Text(mmdd,
                                     style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold)),
                                 if (isPinned)
                                   GestureDetector(
-                                    onTap: () => setState(
-                                        () => _selectedBarIdx = -1),
+                                    onTap: () => setState(() {
+                                      _selectedBarIdx = -1;
+                                      _hoveredBarIdx = -1;
+                                    }),
                                     child: Icon(Icons.close,
                                         size: 13,
                                         color: Colors.grey.shade500),
@@ -5687,20 +5698,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       fontSize: 11, color: Colors.grey))
                             else ...[
                               Text(
-                                  'IN ${plan.totalVolumeMl.round()}ml',
-                                  style:
-                                      const TextStyle(fontSize: 11)),
+                                  'IN ${plan.totalVolumeMl.round()}ml, ${plan.totalKcal.round()}kcal',
+                                  style: const TextStyle(fontSize: 11)),
                               Text(
-                                  '${plan.totalKcal.round()}kcal',
-                                  style:
-                                      const TextStyle(fontSize: 11)),
-                              Text(
-                                  'タンパク ${plan.totalProteinG.toStringAsFixed(1)}g'
-                                  '${w > 0 ? '\n(${(plan.totalProteinG / w).toStringAsFixed(1)}g/kg)' : ''}',
-                                  style:
-                                      const TextStyle(fontSize: 11)),
+                                  'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
+                                  '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(2)}g/kg)' : ''}',
+                                  style: const TextStyle(fontSize: 11)),
                             ],
                           ],
+                        ),
                         ),
                       ),
                     );
