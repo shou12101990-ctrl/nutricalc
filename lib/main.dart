@@ -924,10 +924,9 @@ class _BuilderPageState extends State<BuilderPage>
   double _lipidGPerKg = 0.4;
   String glucoseSource = '70% グルコース';
   String lipidSource = 'イントラリポス20%';
-  // ゼロmenu: 加注する電解質/微量元素/ビタミン製剤 (null = なし)
-  String? electrolyteSource;
-  String? traceSource;
-  String? vitaminSource;
+  // ゼロmenu: 2サブタブ (0:本体, 1:加注) と加注製剤リスト(複数可)
+  int _zeroSubTab = 0;
+  final List<String> _zeroAdditives = [];
   final Set<String> expandedProducts = {};
   double _enRateMlPerHour = 0;
   double _tpnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
@@ -939,9 +938,11 @@ class _BuilderPageState extends State<BuilderPage>
   @override
   void initState() {
     super.initState();
-    // ゼロmenu 加注の既定: 微量元素・ビタミンは標準で含める、電解質はなし
-    traceSource = widget.state.catalog.byCategory('微量元素').firstOrNull?.name;
-    vitaminSource = widget.state.catalog.byCategory('ビタミン').firstOrNull?.name;
+    // ゼロmenu 加注の既定: 微量元素・ビタミンを標準で1つずつ追加
+    final defTrace = widget.state.catalog.byCategory('微量元素').firstOrNull?.name;
+    final defVit = widget.state.catalog.byCategory('ビタミン').firstOrNull?.name;
+    if (defTrace != null) _zeroAdditives.add(defTrace);
+    if (defVit != null) _zeroAdditives.add(defVit);
     _snapCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 260));
     _snapCtrl.addListener(() {
@@ -1432,198 +1433,337 @@ class _BuilderPageState extends State<BuilderPage>
                       visible: _builderTabIndex == 1,
                       maintainState: true,
                       child: Builder(builder: (context) {
-                        // 加注製剤の容量(ml) / 表示量
-                        double volOf(String? name) {
-                          if (name == null) return 0;
-                          return widget.state.catalog.byName(name)?.volumeMl ?? 0;
+                        Product? prod(String? n) =>
+                            n == null ? null : widget.state.catalog.byName(n);
+                        double round10(double v) => (v / 10).round() * 10.0;
+                        double ratio(Product? p, double ml) =>
+                            (p?.volumeMl ?? 0) > 0 ? ml / p!.volumeMl! : 0;
+
+                        // 本体(ベース)の使用量を10ml単位に丸め
+                        final aminoMl = round10(zeroMenu.aminoVolumeMl);
+                        final gluMl = round10(zeroMenu.glucoseVolumeMl);
+                        final lipMl = round10(zeroMenu.lipidVolumeMl);
+                        final aminoP = prod('アミパレン');
+                        final gluP = prod(glucoseSource);
+                        final lipP = prod(lipidSource);
+
+                        // 加注の合計容量
+                        double addVol = 0;
+                        for (final n in _zeroAdditives) {
+                          addVol += prod(n)?.volumeMl ?? 0;
                         }
-                        String amtOf(String? name) {
-                          if (name == null) return '';
-                          final v = widget.state.catalog.byName(name)?.volumeMl;
-                          return v != null ? '${v.round()} ml' : '1管/キット';
-                        }
-                        // カテゴリ別の加注ドロップダウン
-                        Widget catDropdown(String label, String cat, String? value,
-                            ValueChanged<String?> onCh) {
-                          final prods = widget.state.catalog.byCategory(cat);
-                          return DropdownButtonFormField<String?>(
-                            isExpanded: true,
-                            value: value,
-                            decoration: InputDecoration(
-                                labelText: label,
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 6, horizontal: 4)),
-                            items: [
-                              const DropdownMenuItem<String?>(
-                                  value: null, child: Text('なし')),
-                              ...prods.map((p) => DropdownMenuItem<String?>(
-                                  value: p.name,
-                                  child: Text(p.name,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1))),
-                            ],
-                            onChanged: onCh,
-                          );
-                        }
-                        final totalIn = zeroMenu.aminoVolumeMl +
-                            zeroMenu.glucoseVolumeMl +
-                            zeroMenu.lipidVolumeMl +
-                            volOf(electrolyteSource) +
-                            volOf(traceSource) +
-                            volOf(vitaminSource);
+
+                        // 製剤構成 → IN / kcal / PFC
+                        final proteinG =
+                            (aminoP?.aminoAcidG ?? 0) * ratio(aminoP, aminoMl);
+                        final carbG =
+                            (gluP?.carbBase ?? 0) * ratio(gluP, gluMl);
+                        final fatG =
+                            (lipP?.fatBase ?? 0) * ratio(lipP, lipMl);
+                        final kcal = (aminoP?.kcal ?? 0) * ratio(aminoP, aminoMl) +
+                            (gluP?.kcal ?? 0) * ratio(gluP, gluMl) +
+                            (lipP?.kcal ?? 0) * ratio(lipP, lipMl);
+                        final inMl = aminoMl + gluMl + lipMl + addVol;
                         final lipidGPerKg = (zeroMenu.lipidGram / current.weightKg);
-                        const rowH = 36.0;
-                        Widget dataRow(String label, String val, {bool bold = false}) => SizedBox(
-                          height: rowH,
-                          child: Row(children: [
-                            Expanded(child: Text(label, style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.bold : FontWeight.normal))),
-                            Text(val, style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
-                          ]),
+
+                        const rowH = 32.0;
+                        Widget dataRow(String label, String val,
+                                {bool bold = false, Color? color}) =>
+                            SizedBox(
+                              height: rowH,
+                              child: Row(children: [
+                                Expanded(
+                                    child: Text(label,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: color,
+                                            fontWeight: bold
+                                                ? FontWeight.bold
+                                                : FontWeight.normal))),
+                                Text(val,
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: color,
+                                        fontWeight: bold
+                                            ? FontWeight.bold
+                                            : FontWeight.normal)),
+                              ]),
+                            );
+
+                        // ── 本体タブ: 投与目標設定 ──
+                        final bodyCard = Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('投与目標設定',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall),
+                                const Divider(),
+                                TextField(
+                                  controller: targetKcalController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: '投与カロリー',
+                                    suffixText: targetKcalController.text.isNotEmpty
+                                        ? 'kcal'
+                                        : null,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        vertical: 6, horizontal: 4),
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                                const SizedBox(height: 6),
+                                TextField(
+                                  controller: npcnController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'タンパク投与量 (NPC/N)',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                        vertical: 6, horizontal: 4),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                DropdownButtonFormField<double>(
+                                  value: _lipidGPerKg,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: '脂質量',
+                                    suffixText: 'g/kg/day',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                        vertical: 6, horizontal: 4),
+                                  ),
+                                  items: [
+                                    for (int i = 0; i <= 10; i++)
+                                      DropdownMenuItem(
+                                        value: i / 10.0,
+                                        child: Text((i / 10.0).toStringAsFixed(1)),
+                                      ),
+                                  ],
+                                  onChanged: (v) => setState(
+                                      () => _lipidGPerKg = v ?? _lipidGPerKg),
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  value: glucoseSource,
+                                  decoration: const InputDecoration(
+                                      labelText: '糖質', isDense: true),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: 'ハイカリックRF',
+                                        child: Text('ハイカリックRF')),
+                                    DropdownMenuItem(
+                                        value: '70% グルコース',
+                                        child: Text('70% グルコース')),
+                                    DropdownMenuItem(
+                                        value: '8%グルコース',
+                                        child: Text('8%グルコース')),
+                                  ],
+                                  onChanged: (v) => setState(
+                                      () => glucoseSource = v ?? glucoseSource),
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  value: lipidSource,
+                                  decoration: const InputDecoration(
+                                      labelText: '脂質', isDense: true),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: 'イントラリポス10%',
+                                        child: Text('イントラリポス10%')),
+                                    DropdownMenuItem(
+                                        value: 'イントラリポス20%',
+                                        child: Text('イントラリポス20%')),
+                                  ],
+                                  onChanged: (v) => setState(
+                                      () => lipidSource = v ?? lipidSource),
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton(
+                                    onPressed: () {
+                                      current.zeroMenuConfig = ZeroMenuConfig(
+                                        targetKcal: double.tryParse(
+                                                targetKcalController.text) ??
+                                            targetKcal,
+                                        npcNRatio: double.tryParse(
+                                                npcnController.text) ??
+                                            125,
+                                        lipidGramPerKg: _lipidGPerKg,
+                                        glucoseProductName: glucoseSource,
+                                      );
+                                      widget.state.persist();
+                                      setState(() {});
+                                    },
+                                    child: const Text('保存'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         );
-                        return Row(
+
+                        // ── 加注タブ: 製剤を複数追加 ──
+                        final addCats = ['電解質', '微量元素', 'ビタミン'];
+                        final addProds = [
+                          for (final c in addCats)
+                            ...widget.state.catalog.byCategory(c)
+                        ];
+                        final addCard = Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('加注製剤 (電解質・微量元素・ビタミン)',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall),
+                                const Divider(),
+                                // 追加ドロップダウン (選択で即追加・複数可)
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  value: null,
+                                  decoration: const InputDecoration(
+                                      labelText: '＋ 製剤を追加',
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(
+                                          vertical: 6, horizontal: 4)),
+                                  items: addProds
+                                      .map((p) => DropdownMenuItem<String>(
+                                          value: p.name,
+                                          child: Text(
+                                              '${p.name}  (${p.category})',
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                              style: const TextStyle(
+                                                  fontSize: 13))))
+                                      .toList(),
+                                  onChanged: (v) {
+                                    if (v != null) {
+                                      setState(() => _zeroAdditives.add(v));
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                if (_zeroAdditives.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8),
+                                    child: Text('加注なし',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade500)),
+                                  )
+                                else
+                                  ..._zeroAdditives.asMap().entries.map((e) {
+                                    final vol = prod(e.value)?.volumeMl;
+                                    return SizedBox(
+                                      height: 34,
+                                      child: Row(children: [
+                                        Expanded(
+                                            child: Text(e.value,
+                                                style: const TextStyle(
+                                                    fontSize: 13),
+                                                overflow:
+                                                    TextOverflow.ellipsis)),
+                                        Text(
+                                            vol != null
+                                                ? '${vol.round()} ml'
+                                                : '1管',
+                                            style: const TextStyle(
+                                                fontSize: 13)),
+                                        IconButton(
+                                          icon: const Icon(Icons.close,
+                                              size: 16),
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () => setState(() =>
+                                              _zeroAdditives.removeAt(e.key)),
+                                        ),
+                                      ]),
+                                    );
+                                  }),
+                              ],
+                            ),
+                          ),
+                        );
+
+                        // ── 製剤構成 + サマリー(IN/kcal/PFC) ──
+                        final compCard = Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('製剤構成',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall),
+                                const Divider(),
+                                Text('本体 (10ml単位)',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600)),
+                                dataRow('アミパレン', '${aminoMl.round()} ml'),
+                                dataRow(glucoseSource, '${gluMl.round()} ml'),
+                                dataRow(lipidSource, '${lipMl.round()} ml'),
+                                if (_zeroAdditives.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text('加注',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade600)),
+                                  ..._zeroAdditives.map((n) => dataRow(n,
+                                      prod(n)?.volumeMl != null
+                                          ? '${prod(n)!.volumeMl!.round()} ml'
+                                          : '1管')),
+                                ],
+                                const Divider(height: 14),
+                                dataRow('IN (総水分)', '${inMl.round()} ml',
+                                    bold: true),
+                                dataRow('カロリー', '${kcal.round()} kcal',
+                                    bold: true),
+                                dataRow(
+                                    'PFC (P/F/C)',
+                                    '${proteinG.round()} / ${fatG.round()} / ${carbG.round()} g',
+                                    bold: true,
+                                    color: Colors.indigo.shade700),
+                              ],
+                            ),
+                          ),
+                        );
+
+                        return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 左カード: 設定入力
-                            Expanded(
-                              child: Card(
-                                margin: EdgeInsets.zero,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('投与目標設定', style: Theme.of(context).textTheme.titleSmall),
-                                      const Divider(),
-                                      TextField(
-                                        controller: targetKcalController,
-                                        keyboardType: TextInputType.number,
-                                        decoration: InputDecoration(
-                                          labelText: '投与カロリー',
-                                          suffixText: targetKcalController.text.isNotEmpty ? 'kcal' : null,
-                                          isDense: true,
-                                          contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                                        ),
-                                        onChanged: (_) => setState(() {}),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextField(
-                                        controller: npcnController,
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          labelText: 'タンパク投与量 (NPC/N)',
-                                          isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      DropdownButtonFormField<double>(
-                                        value: _lipidGPerKg,
-                                        isExpanded: true,
-                                        decoration: const InputDecoration(
-                                          labelText: '脂質量',
-                                          suffixText: 'g/kg/day',
-                                          isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                                        ),
-                                        items: [
-                                          for (int i = 0; i <= 10; i++)
-                                            DropdownMenuItem(
-                                              value: i / 10.0,
-                                              child: Text((i / 10.0).toStringAsFixed(1)),
-                                            ),
-                                        ],
-                                        onChanged: (v) => setState(() { _lipidGPerKg = v ?? _lipidGPerKg; }),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      DropdownButtonFormField<String>(
-                                        isExpanded: true,
-                                        value: glucoseSource,
-                                        decoration: const InputDecoration(labelText: '糖質', isDense: true),
-                                        items: const [
-                                          DropdownMenuItem(value: 'ハイカリックRF', child: Text('ハイカリックRF')),
-                                          DropdownMenuItem(value: '70% グルコース', child: Text('70% グルコース')),
-                                          DropdownMenuItem(value: '8%グルコース', child: Text('8%グルコース')),
-                                        ],
-                                        onChanged: (v) => setState(() { glucoseSource = v ?? glucoseSource; }),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      DropdownButtonFormField<String>(
-                                        isExpanded: true,
-                                        value: lipidSource,
-                                        decoration: const InputDecoration(labelText: '脂質', isDense: true),
-                                        items: const [
-                                          DropdownMenuItem(value: 'イントラリポス10%', child: Text('イントラリポス10%')),
-                                          DropdownMenuItem(value: 'イントラリポス20%', child: Text('イントラリポス20%')),
-                                        ],
-                                        onChanged: (v) => setState(() { lipidSource = v ?? lipidSource; }),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      const Divider(height: 12),
-                                      Text('加注 (電解質・微量元素・ビタミン)',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey.shade600)),
-                                      const SizedBox(height: 6),
-                                      catDropdown('電解質', '電解質', electrolyteSource,
-                                          (v) => setState(() => electrolyteSource = v)),
-                                      const SizedBox(height: 8),
-                                      catDropdown('微量元素', '微量元素', traceSource,
-                                          (v) => setState(() => traceSource = v)),
-                                      const SizedBox(height: 8),
-                                      catDropdown('ビタミン', 'ビタミン', vitaminSource,
-                                          (v) => setState(() => vitaminSource = v)),
-                                      const SizedBox(height: 10),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: FilledButton(
-                                          onPressed: () {
-                                            current.zeroMenuConfig = ZeroMenuConfig(
-                                              targetKcal: double.tryParse(targetKcalController.text) ?? targetKcal,
-                                              npcNRatio: double.tryParse(npcnController.text) ?? 125,
-                                              lipidGramPerKg: _lipidGPerKg,
-                                              glucoseProductName: glucoseSource,
-                                            );
-                                            widget.state.persist();
-                                            setState(() {});
-                                          },
-                                          child: const Text('保存'),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                            // サブタブ: 本体 / 加注
+                            SegmentedButton<int>(
+                              segments: const [
+                                ButtonSegment(value: 0, label: Text('本体')),
+                                ButtonSegment(value: 1, label: Text('加注')),
+                              ],
+                              selected: {_zeroSubTab},
+                              showSelectedIcon: false,
+                              onSelectionChanged: (s) =>
+                                  setState(() => _zeroSubTab = s.first),
                             ),
-                            const SizedBox(width: 8),
-                            // 右カード: 計算結果
-                            Expanded(
-                              child: Card(
-                                margin: EdgeInsets.zero,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('ゼロmenu 以下', style: Theme.of(context).textTheme.titleSmall),
-                                      const Divider(),
-                                      dataRow('アミパレン', '${zeroMenu.aminoVolumeMl.round()} ml'),
-                                      dataRow(glucoseSource, '${zeroMenu.glucoseVolumeMl.round()} ml'),
-                                      dataRow(lipidSource, '${zeroMenu.lipidVolumeMl.round()} ml'),
-                                      // 加注 (選択時のみ表示)
-                                      if (electrolyteSource != null)
-                                        dataRow(electrolyteSource!, amtOf(electrolyteSource)),
-                                      if (traceSource != null)
-                                        dataRow(traceSource!, amtOf(traceSource)),
-                                      if (vitaminSource != null)
-                                        dataRow(vitaminSource!, amtOf(vitaminSource)),
-                                      const Divider(height: 12),
-                                      dataRow('総水分 (IN)', '${totalIn.round()} ml',
-                                          bold: true),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                    child: _zeroSubTab == 0 ? bodyCard : addCard),
+                                const SizedBox(width: 8),
+                                Expanded(child: compCard),
+                              ],
                             ),
                           ],
                         );
