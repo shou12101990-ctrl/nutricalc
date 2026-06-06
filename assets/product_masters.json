@@ -1345,7 +1345,12 @@
       "carb_g_or_kcal_basis": 0.0,
       "notes": null,
       "sheet_row": 79,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 2
+        }
+      }
     },
     {
       "id": "ppn_80",
@@ -1377,7 +1382,12 @@
       "carb_g_or_kcal_basis": 0.0,
       "notes": null,
       "sheet_row": 81,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 150
+        }
+      }
     },
     {
       "id": "ppn_82",
@@ -1393,7 +1403,12 @@
       "carb_g_or_kcal_basis": 0.0,
       "notes": null,
       "sheet_row": 82,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 2
+        }
+      }
     },
     {
       "id": "ppn_83",
@@ -1409,7 +1424,12 @@
       "carb_g_or_kcal_basis": 0.0,
       "notes": null,
       "sheet_row": 83,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 2
+        }
+      }
     },
     {
       "id": "ppn_84",
@@ -1425,7 +1445,13 @@
       "carb_g_or_kcal_basis": 0.0,
       "notes": null,
       "sheet_row": 84,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 14,
+          "Cl": 94
+        }
+      }
     },
     {
       "id": "ppn_85",
@@ -1441,7 +1467,12 @@
       "carb_g_or_kcal_basis": 0.0,
       "notes": null,
       "sheet_row": 85,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 3
+        }
+      }
     },
     {
       "id": "ppn_86",
