@@ -4902,6 +4902,7 @@ class AutoDesignPage extends StatelessWidget {
 class _AutoDesignPageState extends State<AutoDesignInline> {
   int _hoveredBarIdx = -1;  // グラフホバー中のバーインデックス (-1=なし)
   int _selectedBarIdx = -1; // タップ固定のバーインデックス (-1=なし)
+  double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
   int _totalDays = 5; // シミュレーション全体の日数 (= _enStartDay + EN食上げ7日 -1)
@@ -5638,23 +5639,16 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (details) {
                   if (n == 0) return;
-                  final chartWidth = (context.findRenderObject() as RenderBox?)
-                          ?.size.width ??
-                      300;
-                  final barWidth = (chartWidth - 24) / n;
+                  final barWidth = _cachedChartW / n;
                   final idx = (details.localPosition.dx / barWidth)
                       .floor()
                       .clamp(0, n - 1);
-                  // 別のバーなら切り替え、同じバーなら何もしない（外タップで消去）
                   setState(() { _selectedBarIdx = idx; });
                 },
                 child: MouseRegion(
                 onHover: (e) {
                   if (n == 0) return;
-                  final chartWidth = (context.findRenderObject() as RenderBox?)
-                          ?.size.width ??
-                      300;
-                  final barWidth = (chartWidth - 24) / n;
+                  final barWidth = _cachedChartW / n;
                   final idx = (e.localPosition.dx / barWidth)
                       .floor()
                       .clamp(0, n - 1);
@@ -5663,7 +5657,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   }
                 },
                 onExit: (_) => setState(() => _hoveredBarIdx = -1),
-                child: LayoutBuilder(builder: (_, _lbc) => Stack(
+                child: LayoutBuilder(builder: (_, _lbc) {
+                  _cachedChartW = _lbc.maxWidth;
+                  return Stack(
                 children: [
                   // ① 積み上げ棒: カロリー内訳 (PN+EN)、独立スケール
                   BarChart(BarChartData(
@@ -5722,10 +5718,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
                         : 0.0;
                     final barTopY = drawH * (1.0 - barRatio) - 8;
-                    final chartW = (context.findRenderObject() as RenderBox?)
-                            ?.size.width ??
-                        300;
-                    final barW = (chartW - 24) / n;
+                    final chartW = _cachedChartW;
+                    final barW = chartW / n;
                     final barCenterX = barW * idx + barW / 2;
                     const tipW = 156.0;
                     final tipX =
@@ -5781,50 +5775,43 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ),
                     );
                   }),
-                  // 空白ゾーン凡例（絶食〜栄養開始前の空きスペースに縦配置）
-                  if (preDays > 0)
-                    Builder(builder: (_) {
-                      final zoneW = (_lbc.maxWidth - 24) / n * preDays - 6;
-                      if (zoneW < 30) return const SizedBox.shrink();
-                      Widget leg(Color c, String lbl, bool line) => Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          Container(
-                            width: line ? 14 : 10,
-                            height: line ? 3 : 10,
-                            decoration: BoxDecoration(
-                                color: c, borderRadius: BorderRadius.circular(2)),
-                          ),
-                          const SizedBox(width: 3),
-                          Text(lbl,
-                              style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.black54,
-                                  height: 1.2)),
-                        ]),
-                      );
-                      return Positioned(
-                        left: 10,
-                        top: 0,
-                        bottom: 58, // BarChartのbottomReservedと合わせる
-                        width: zoneW,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              leg(Colors.yellow.shade700, 'EN (kcal)', false),
-                              leg(Colors.green.shade300,  'PN (kcal)', false),
-                              leg(Colors.purple.shade200, 'IN (ml)',   true),
-                              leg(Colors.pink.shade300,   'AA (g)',    true),
-                            ],
-                          ),
+                  // 凡例カード（常時表示・絶食期間がない場合はグラフに重なる）
+                  Positioned(
+                    left: 10,
+                    top: 0,
+                    bottom: 58,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.88),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: Colors.black12, width: 0.8),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 4,
+                                offset: Offset(0, 1)),
+                          ],
                         ),
-                      );
-                    }),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _legItem(Colors.yellow.shade700, 'EN (kcal)', false),
+                            _legItem(Colors.green.shade300,  'PN (kcal)', false),
+                            _legItem(Colors.purple.shade200, 'IN (ml)',   true),
+                            _legItem(Colors.pink.shade300,   'AA (g)',    true),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
-                )), // Stack / LayoutBuilder
+                ); }), // Stack / LayoutBuilder
               ), // MouseRegion
               ), // GestureDetector
               ), // SizedBox
@@ -5836,6 +5823,22 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   }
 
   // Dayカードのタップで処方詳細(何を何pac)をダイアログ表示
+  Widget _legItem(Color c, String lbl, bool line) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(
+        width: line ? 18 : 13,
+        height: line ? 3.5 : 13,
+        decoration: BoxDecoration(
+            color: c, borderRadius: BorderRadius.circular(2)),
+      ),
+      const SizedBox(width: 5),
+      Text(lbl,
+          style: const TextStyle(
+              fontSize: 13, color: Colors.black54, height: 1.3)),
+    ]),
+  );
+
   void _showDayDetail(int i, DesignPlan plan, double dayKcal, double dayProt) {
     final date = _dateOf(i);
     final mode = _dayModes[i];
