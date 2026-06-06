@@ -5530,8 +5530,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final fullIdx      = (preDays + _rampDays - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
 
-    // 日付軸を上(topTitles)に配置 → BarChart の上端より上に日付が来る
-    final topDateTitles = AxisTitles(
+    // 日付軸を下(bottomTitles)に配置
+    final bottomDateTitles = AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
         reservedSize: 38, // 日付(12px) + アイコン(14px) + 余白
@@ -5699,9 +5699,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]);
                     }),
                     titlesData: FlTitlesData(
-                      bottomTitles: hidden,
+                      bottomTitles: bottomDateTitles, // 日付を下に
                       leftTitles: hidden,
-                      topTitles: topDateTitles, // 日付を上に
+                      topTitles: hidden,
                       rightTitles: hidden,
                     ),
                     gridData: const FlGridData(show: false),
@@ -5725,13 +5725,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     final isPinned = _selectedBarIdx >= 0;
                     // 棒の高さ比率からY位置を推定
                     const chartH = 240.0;
-                    const topReserved = 22.0;
-                    final drawH = chartH - topReserved;
+                    const bottomReserved = 38.0;
+                    final drawH = chartH - bottomReserved;
                     final barRatio = maxKcal > 0
                         ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
                         : 0.0;
-                    final barTopY =
-                        topReserved + drawH * (1.0 - barRatio) - 8;
+                    final barTopY = drawH * (1.0 - barRatio) - 8;
                     final chartW = (context.findRenderObject() as RenderBox?)
                             ?.size.width ??
                         300;
@@ -5815,7 +5814,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       );
                       return Positioned(
                         left: 4,
-                        top: 42, // 日付軸(38px)の下
+                        top: 4, // 上部余白
                         child: SizedBox(
                           width: zoneW,
                           child: Column(
