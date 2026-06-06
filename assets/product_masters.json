@@ -979,7 +979,20 @@
       "carb_g_or_kcal_basis": 120.0,
       "notes": null,
       "sheet_row": 63,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 50,
+          "K": 30,
+          "Cl": 50,
+          "Ca": 8,
+          "Mg": 6,
+          "P": 8
+        },
+        "trace": {
+          "Zn": 20
+        }
+      }
     },
     {
       "id": "tpn_64",
@@ -995,7 +1008,20 @@
       "carb_g_or_kcal_basis": 160.0,
       "notes": null,
       "sheet_row": 64,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 50,
+          "K": 30,
+          "Cl": 50,
+          "Ca": 8,
+          "Mg": 6,
+          "P": 8
+        },
+        "trace": {
+          "Zn": 20
+        }
+      }
     },
     {
       "id": "tpn_65",
@@ -1011,7 +1037,20 @@
       "carb_g_or_kcal_basis": 250.0,
       "notes": null,
       "sheet_row": 65,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 51,
+          "K": 30,
+          "Cl": 50,
+          "Ca": 8,
+          "Mg": 6,
+          "P": 8
+        },
+        "trace": {
+          "Zn": 20
+        }
+      }
     },
     {
       "id": "tpn_66",
@@ -1027,7 +1066,18 @@
       "carb_g_or_kcal_basis": 120.0,
       "notes": null,
       "sheet_row": 66,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "K": 30,
+          "Ca": 8.5,
+          "Mg": 10,
+          "P": 4.8
+        },
+        "trace": {
+          "Zn": 10
+        }
+      }
     },
     {
       "id": "tpn_67",
@@ -1043,7 +1093,18 @@
       "carb_g_or_kcal_basis": 175.0,
       "notes": null,
       "sheet_row": 67,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "K": 30,
+          "Ca": 8.5,
+          "Mg": 10,
+          "P": 4.8
+        },
+        "trace": {
+          "Zn": 10
+        }
+      }
     },
     {
       "id": "tpn_68",
@@ -1059,7 +1120,18 @@
       "carb_g_or_kcal_basis": 250.0,
       "notes": null,
       "sheet_row": 68,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "K": 30,
+          "Ca": 8.5,
+          "Mg": 10,
+          "P": 8.1
+        },
+        "trace": {
+          "Zn": 20
+        }
+      }
     },
     {
       "id": "tpn_69",
@@ -1075,7 +1147,18 @@
       "carb_g_or_kcal_basis": 250.0,
       "notes": "・熱量効率は70% Gluに次いで良く, INを減らすために用いる.\n　500ml 1000kcalをベースに各種製剤を足し合わせる.\n・肝不全患者の糖質負荷として, Glu 100mg/dLを目標に10ml/g (5g/h)程度投与する.\n・Na 25mEq, Mg 3mEq, Zn 10μmolなどを含有する.",
       "sheet_row": 69,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 25,
+          "Ca": 3,
+          "Mg": 3,
+          "Cl": 15
+        },
+        "trace": {
+          "Zn": 10
+        }
+      }
     },
     {
       "id": "tpn_70",
