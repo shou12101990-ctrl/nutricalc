@@ -246,6 +246,16 @@ class CasesPage extends StatelessWidget {
                                     const SizedBox(width: 2),
                                     Text(admDate, style: const TextStyle(fontSize: 13, color: Colors.grey)),
                                   ],
+                                  if (item.fastingDate != null) ...[
+                                    const SizedBox(width: 10),
+                                    Icon(Icons.no_meals, size: 14, color: Colors.red.shade300),
+                                    const SizedBox(width: 2),
+                                    Text(() {
+                                      final p = DateTime.tryParse(item.fastingDate!);
+                                      return p == null ? item.fastingDate!
+                                          : '${p.month}/${p.day}';
+                                    }(), style: TextStyle(fontSize: 13, color: Colors.red.shade300)),
+                                  ],
                                 ],
                               );
                             }),
@@ -468,6 +478,9 @@ class CasesPage extends StatelessWidget {
             ? DateTime.tryParse(admissionEntry.changedAt)
             : null) ??
         DateTime.now();
+    DateTime? fastingDate = item.fastingDate != null
+        ? DateTime.tryParse(item.fastingDate!)
+        : null;
     int bedIdx = int.tryParse(item.currentBed.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
     bedIdx = bedIdx.clamp(1, 8);
 
@@ -489,6 +502,40 @@ class CasesPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // 絶食日
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(Icons.restaurant_menu,
+                          size: 22, color: Colors.grey.shade600),
+                      Positioned(
+                        right: 0, bottom: 0,
+                        child: Icon(Icons.cancel,
+                            size: 13, color: Colors.red.shade400),
+                      ),
+                    ],
+                  ),
+                  title: Text(
+                    fastingDate == null
+                        ? '絶食日: 未設定'
+                        : '絶食日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                        color: fastingDate == null ? Colors.grey : null),
+                  ),
+                  trailing: fastingDate != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setLocal(() => fastingDate = null),
+                        )
+                      : null,
+                  onTap: () async {
+                    final picked = await _quickPickDate(
+                        ctx, fastingDate ?? admissionDate);
+                    if (picked != null) setLocal(() => fastingDate = picked);
+                  },
+                ),
                 // 入室日時
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -536,6 +583,9 @@ class CasesPage extends StatelessWidget {
 
     // 症例名を更新
     if (codeCtrl.text.trim().isNotEmpty) item.caseCode = codeCtrl.text.trim();
+
+    // 絶食日を更新
+    item.fastingDate = fastingDate?.toIso8601String().split('T').first;
 
     // ベッド番号を更新
     final newBed = bedIdx.toString().padLeft(2, '0');
@@ -3617,6 +3667,7 @@ class PatientCase {
   ZeroMenuConfig zeroMenuConfig;
   Map<String, dynamic>? autoDesignConfig; // Day別投与設計の保存
   String memo; // 合併症・コメントなど
+  String? fastingDate; // 絶食開始日 (ISO date string, null=未設定)
 
   String get displayLabel => '$caseCode / $currentBed';
 
@@ -3661,6 +3712,7 @@ class PatientCase {
         'zeroMenuConfig': zeroMenuConfig.toMap(),
         'autoDesignConfig': autoDesignConfig,
         'memo': memo,
+        'fastingDate': fastingDate,
       };
 
   factory PatientCase.fromMap(Map<String, dynamic> map) => PatientCase(
@@ -3691,7 +3743,7 @@ class PatientCase {
             ? null
             : Map<String, dynamic>.from(map['autoDesignConfig']),
         memo: (map['memo'] as String?) ?? '',
-      );
+      )..fastingDate = map['fastingDate'] as String?;
 }
 
 class ProtocolTemplate {
