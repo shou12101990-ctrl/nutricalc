@@ -2294,6 +2294,9 @@ class _BuilderPageState extends State<BuilderPage>
     double stress = current.stressFactor;
     double protein = current.proteinGoalPerKg;
     final memoCtrl = TextEditingController(text: current.memo);
+    DateTime? fastingDate = current.fastingDate != null
+        ? DateTime.tryParse(current.fastingDate!)
+        : null;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -2371,6 +2374,40 @@ class _BuilderPageState extends State<BuilderPage>
                       hintText: '例: 糖尿病、CKDステージ3'),
                   maxLines: 2,
                 ),
+                // 絶食日
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(Icons.restaurant_menu,
+                          size: 22, color: Colors.grey.shade600),
+                      Positioned(
+                        right: 0, bottom: 0,
+                        child: Icon(Icons.cancel,
+                            size: 13, color: Colors.red.shade400),
+                      ),
+                    ],
+                  ),
+                  title: Text(
+                    fastingDate == null
+                        ? '絶食日: 未設定'
+                        : '絶食日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                        color: fastingDate == null ? Colors.grey : null),
+                  ),
+                  trailing: fastingDate != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setLocal(() => fastingDate = null),
+                        )
+                      : null,
+                  onTap: () async {
+                    final picked = await _quickPickDate(
+                        context, fastingDate ?? DateTime.now());
+                    if (picked != null) setLocal(() => fastingDate = picked);
+                  },
+                ),
               ],
             ),
           ),
@@ -2390,6 +2427,7 @@ class _BuilderPageState extends State<BuilderPage>
     current.stressFactor = stress;
     current.proteinGoalPerKg = protein;
     current.memo = memoCtrl.text.trim();
+    current.fastingDate = fastingDate?.toIso8601String().split('T').first;
     await widget.state.persist();
     setState(() {});
     widget.refresh();
