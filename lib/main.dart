@@ -5534,7 +5534,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final bottomDateTitles = AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 50, // 隙間(8px) + 日付(12px) + アイコン(14px) + 余白
+        reservedSize: 58, // 隙間(8px) + 日付(16px) + アイコン(18px) + 余白
         getTitlesWidget: (v, m) {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
@@ -5548,7 +5548,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 ),
                 child: Text(text,
                     style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 14.5,
                         color: color,
                         fontWeight: FontWeight.bold,
                         height: 1.2)),
@@ -5557,11 +5557,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           // アイコンの優先順: 絶食日 > 入室日 > 栄養開始日 > Full > EN開始
           Widget? icon;
           if (i == fastingIdx) {
-            icon = Icon(Icons.no_meals, size: 14, color: Colors.red.shade400);
+            icon = Icon(Icons.no_meals, size: 18, color: Colors.red.shade400);
           } else if (i == admissionIdxClamped) {
-            icon = Icon(Icons.bed, size: 14, color: Colors.blueGrey.shade400);
+            icon = Icon(Icons.bed, size: 18, color: Colors.blueGrey.shade400);
           } else if (i == nutritionIdx) {
-            icon = Icon(Icons.restaurant, size: 14, color: Colors.blue.shade600);
+            icon = Icon(Icons.restaurant, size: 18, color: Colors.blue.shade600);
           } else if (i == fullIdx && i >= preDays) {
             icon = boxLabel('full', Colors.green.shade700);
           } else if (i == enIdx && i >= preDays && i != nutritionIdx && i != fullIdx) {
@@ -5575,8 +5575,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               const SizedBox(height: 8), // バーと日付の間隔
               Text(dateLabel(i),
                   style: const TextStyle(
-                      fontSize: 12, letterSpacing: -0.5, height: 1.0)),
-              if (icon != null) icon else const SizedBox(height: 14),
+                      fontSize: 16, letterSpacing: -0.5, height: 1.0)),
+              if (icon != null) icon else const SizedBox(height: 18),
             ],
           );
         },
@@ -5586,7 +5586,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // 共通の透明な線グラフビルダー
     // bottomTitles に BarChart と同じ reservedSize を指定して描画エリアを合わせる
     const lineBottom = AxisTitles(
-        sideTitles: SideTitles(showTitles: false, reservedSize: 50));
+        sideTitles: SideTitles(showTitles: false, reservedSize: 58));
     LineChart lineLayer(List<double> ys, double maxY, Color color) =>
         LineChart(LineChartData(
           minX: -0.5,
@@ -5716,7 +5716,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     final isPinned = _selectedBarIdx >= 0;
                     // 棒の高さ比率からY位置を推定
                     const chartH = 240.0;
-                    const bottomReserved = 50.0;
+                    const bottomReserved = 58.0;
                     final drawH = chartH - bottomReserved;
                     final barRatio = maxKcal > 0
                         ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
@@ -5806,7 +5806,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       return Positioned(
                         left: 10,
                         top: 0,
-                        bottom: 50, // BarChartのbottomReservedと合わせる
+                        bottom: 58, // BarChartのbottomReservedと合わせる
                         width: zoneW,
                         child: Align(
                           alignment: Alignment.centerLeft,
