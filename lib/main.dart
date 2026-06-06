@@ -5531,77 +5531,70 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final fullIdx      = (preDays + _rampDays - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
 
-    // 日付軸を下(bottomTitles)に配置
-    final bottomDateTitles = AxisTitles(
-      sideTitles: SideTitles(
-        showTitles: true,
-        reservedSize: 56, // 隙間(8px) + 日付(14px) + アイコン(16px) + 余白
-        getTitlesWidget: (v, m) {
-          final i = v.round();
-          if (i < 0 || i >= n) return const SizedBox.shrink();
+    // 日付＋イベントアイコンのセル（グラフ下の独立Rowで使用）
+    Widget dateCell(int i) {
+      if (i < 0 || i >= n) return const SizedBox.shrink();
 
-          // 同日イベントを収集して縦並べ
-          // 表示順(上→下): 絶食 > 入室 > 栄養開始 > EN > full (EN/full同日はEN上)
-          final List<bool> flags = [
-            i == fastingIdx,
-            i == admissionIdxClamped,
-            i == nutritionIdx,
-            i == enIdx && i >= preDays,
-            i == fullIdx && i >= preDays,
-          ];
-          final int evCount = flags.where((f) => f).length;
-          final double ic = evCount >= 2 ? 12.0 : 16.0; // アイコンサイズ
-          final double fs = evCount >= 2 ? 10.0 : 12.5; // boxLabel文字サイズ
+      // 同日イベントを収集して縦並べ
+      // 表示順(上→下): 絶食 > 入室 > 栄養開始 > EN > full (EN/full同日はEN上)
+      final List<bool> flags = [
+        i == fastingIdx,
+        i == admissionIdxClamped,
+        i == nutritionIdx,
+        i == enIdx && i >= preDays,
+        i == fullIdx && i >= preDays,
+      ];
+      final int evCount = flags.where((f) => f).length;
+      final double ic = evCount >= 2 ? 12.0 : 16.0; // アイコンサイズ
+      final double fs = evCount >= 2 ? 10.0 : 12.5; // boxLabel文字サイズ
 
-          Widget mkBox(String t, Color c) => Container(
-                padding: EdgeInsets.symmetric(
-                    horizontal: evCount >= 2 ? 2 : 3,
-                    vertical: evCount >= 2 ? 0.5 : 1),
-                decoration: BoxDecoration(
-                  border: Border.all(color: c, width: 0.9),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Text(t,
-                    style: TextStyle(
-                        fontSize: fs,
-                        color: c,
-                        fontWeight: FontWeight.bold,
-                        height: 1.2)),
-              );
-
-          final evWidgets = [
-            if (flags[0]) Icon(Icons.no_meals,   size: ic, color: Colors.red.shade400),
-            if (flags[1]) Icon(Icons.bed,         size: ic, color: Colors.blueGrey.shade400),
-            if (flags[2]) Icon(Icons.restaurant,  size: ic, color: Colors.blue.shade600),
-            if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
-            if (flags[4]) mkBox('full', Colors.green.shade700),
-          ];
-
-          Widget? icon;
-          if (evWidgets.length == 1) {
-            icon = evWidgets.first;
-          } else if (evWidgets.length >= 2) {
-            icon = Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: evWidgets,
-            );
-          }
-
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8), // バーと日付の間隔
-              Text(dateLabel(i),
-                  style: const TextStyle(
-                      fontSize: 14, letterSpacing: -0.5, height: 1.0)),
-              if (icon != null) icon else const SizedBox(height: 16),
-            ],
+      Widget mkBox(String t, Color c) => Container(
+            padding: EdgeInsets.symmetric(
+                horizontal: evCount >= 2 ? 2 : 3,
+                vertical: evCount >= 2 ? 0.5 : 1),
+            decoration: BoxDecoration(
+              border: Border.all(color: c, width: 0.9),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Text(t,
+                style: TextStyle(
+                    fontSize: fs,
+                    color: c,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2)),
           );
-        },
-      ),
-    );
+
+      final evWidgets = [
+        if (flags[0]) Icon(Icons.no_meals,   size: ic, color: Colors.red.shade400),
+        if (flags[1]) Icon(Icons.bed,         size: ic, color: Colors.blueGrey.shade400),
+        if (flags[2]) Icon(Icons.restaurant,  size: ic, color: Colors.blue.shade600),
+        if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
+        if (flags[4]) mkBox('full', Colors.green.shade700),
+      ];
+
+      Widget? icon;
+      if (evWidgets.length == 1) {
+        icon = evWidgets.first;
+      } else if (evWidgets.length >= 2) {
+        icon = Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: evWidgets,
+        );
+      }
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 8), // バーと日付の間隔
+          Text(dateLabel(i),
+              style: const TextStyle(
+                  fontSize: 14, letterSpacing: -0.5, height: 1.0)),
+          if (icon != null) icon else const SizedBox(height: 16),
+        ],
+      );
+    }
 
     // 共通の透明な線グラフビルダー（タイトルなし・全4辺hidden）
     LineChart lineLayer(List<double> ys, double maxY, Color color) =>
@@ -5675,167 +5668,190 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 onExit: (_) => setState(() => _hoveredBarIdx = -1),
                 child: LayoutBuilder(builder: (_, _lbc) {
                   _cachedChartW = _lbc.maxWidth;
-                  return Stack(
-                children: [
-                  // ① 積み上げ棒: カロリー内訳 (PN+EN)、独立スケール
-                  BarChart(BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    minY: 0,
-                    maxY: maxKcal,
-                    barTouchData: BarTouchData(enabled: false),
-                    barGroups: List.generate(n, (i) {
-                      final enK = enKcals[i];
-                      final total = plans[i].totalKcal;
-                      final otherK = (total - enK).clamp(0.0, double.infinity);
-                      return BarChartGroupData(x: i, barRods: [
-                        BarChartRodData(
-                          toY: total,
-                          width: 16,
-                          borderRadius: BorderRadius.circular(2),
-                          rodStackItems: [
-                            BarChartRodStackItem(
-                                0, enK, Colors.yellow.shade700), // EN 下
-                            BarChartRodStackItem(
-                                enK, total, Colors.green.shade300), // PN 上
-                          ],
-                        ),
-                      ]);
-                    }),
-                    titlesData: FlTitlesData(
-                      bottomTitles: bottomDateTitles, // 日付を下に
-                      leftTitles: hidden,
-                      topTitles: hidden,
-                      rightTitles: hidden,
-                    ),
-                    gridData: const FlGridData(show: false),
-                    borderData: FlBorderData(show: false),
-                  )),
-                  // ② 合計IN — Positioned+ClipRectで日付軸エリアに入らないよう制限
-                  Positioned(
-                    top: 0, left: 0, right: 0, bottom: 56,
-                    child: ClipRect(
-                        child: lineLayer(ins, maxIn, Colors.purple.shade200)),
-                  ),
-                  // ③ AA(タンパク) — 同上
-                  Positioned(
-                    top: 0, left: 0, right: 0, bottom: 56,
-                    child: ClipRect(
-                        child: lineLayer(prots, maxAA, Colors.pink.shade300)),
-                  ),
-                  // フローター: タップ固定優先、次いでホバー
-                  Builder(builder: (ctx) {
-                    final displayIdx = _selectedBarIdx >= 0
-                        ? _selectedBarIdx
-                        : _hoveredBarIdx;
-                    if (displayIdx < 0 || displayIdx >= n) {
-                      return const SizedBox.shrink();
-                    }
-                    final idx = displayIdx;
-                    final plan = plans[idx];
-                    final w = widget.current.weightKg;
-                    final isPinned = _selectedBarIdx >= 0;
-                    // 棒の高さ比率からY位置を推定
-                    const chartH = 240.0;
-                    const bottomReserved = 56.0;
-                    final drawH = chartH - bottomReserved;
-                    final barRatio = maxKcal > 0
-                        ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
-                        : 0.0;
-                    final barTopY = drawH * (1.0 - barRatio) - 8;
-                    final chartW = _cachedChartW;
-                    final barW = chartW / n;
-                    final barCenterX = barW * idx + barW / 2;
-                    const tipW = 156.0;
-                    final tipX =
-                        (barCenterX - tipW / 2).clamp(0.0, chartW - tipW);
-                    final mmdd = '${dates[idx].month.toString().padLeft(2, '0')}/${dates[idx].day.toString().padLeft(2, '0')}';
-                    return Positioned(
-                      left: tipX,
-                      top: barTopY.clamp(0.0, chartH - 80),
-                      child: Container(
-                        width: tipW,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isPinned
-                              ? const Color(0xFFF0F4FF)  // タップ固定: 薄青
-                              : const Color(0xFFFFF8E7), // ホバー: ベージュ
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                              color: isPinned
-                                  ? Colors.blue.shade200
-                                  : Colors.brown.shade200,
-                              width: 0.6),
-                          boxShadow: const [
-                            BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 4,
-                                offset: Offset(1, 2)),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(mmdd,
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold)),
-                            if (plan.items.isEmpty)
-                              const Text('栄養開始前',
-                                  style: TextStyle(
-                                      fontSize: 11, color: Colors.grey))
-                            else ...[
-                              Text(
-                                  'IN ${plan.totalVolumeMl.round()}ml, ${plan.totalKcal.round()}kcal',
-                                  style: const TextStyle(fontSize: 11)),
-                              Text(
-                                  'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
-                                  '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(2)}g/kg)' : ''}',
-                                  style: const TextStyle(fontSize: 11)),
+                  const plotH = 184.0; // プロット領域(棒・線)の高さ
+                  const axisH = 56.0;  // 日付＋アイコン軸の高さ
+                  return Column(
+                    children: [
+                      // === プロット領域: 棒グラフ・線グラフを同一184px領域に重ねる ===
+                      // 棒も線も同じ高さの箱に置くので、ゼロ基線(=底辺)が物理的に完全一致する
+                      SizedBox(
+                        height: plotH,
+                        child: ClipRect(
+                          child: Stack(
+                            children: [
+                              // ① 積み上げ棒: カロリー内訳 (PN+EN)
+                              BarChart(BarChartData(
+                                alignment: BarChartAlignment.spaceAround,
+                                minY: 0,
+                                maxY: maxKcal,
+                                barTouchData: BarTouchData(enabled: false),
+                                barGroups: List.generate(n, (i) {
+                                  final enK = enKcals[i];
+                                  final total = plans[i].totalKcal;
+                                  return BarChartGroupData(x: i, barRods: [
+                                    BarChartRodData(
+                                      toY: total,
+                                      width: 16,
+                                      borderRadius: BorderRadius.circular(2),
+                                      rodStackItems: [
+                                        BarChartRodStackItem(
+                                            0, enK, Colors.yellow.shade700),
+                                        BarChartRodStackItem(
+                                            enK, total, Colors.green.shade300),
+                                      ],
+                                    ),
+                                  ]);
+                                }),
+                                titlesData: const FlTitlesData(
+                                  bottomTitles: hidden,
+                                  leftTitles: hidden,
+                                  topTitles: hidden,
+                                  rightTitles: hidden,
+                                ),
+                                gridData: const FlGridData(show: false),
+                                borderData: FlBorderData(show: false),
+                              )),
+                              // ② 合計IN ③ AA — 棒と同じ箱に重ねる
+                              lineLayer(ins, maxIn, Colors.purple.shade200),
+                              lineLayer(prots, maxAA, Colors.pink.shade300),
+                              // フローター: タップ固定優先、次いでホバー
+                              Builder(builder: (ctx) {
+                                final displayIdx = _selectedBarIdx >= 0
+                                    ? _selectedBarIdx
+                                    : _hoveredBarIdx;
+                                if (displayIdx < 0 || displayIdx >= n) {
+                                  return const SizedBox.shrink();
+                                }
+                                final idx = displayIdx;
+                                final plan = plans[idx];
+                                final w = widget.current.weightKg;
+                                final isPinned = _selectedBarIdx >= 0;
+                                final barRatio = maxKcal > 0
+                                    ? (plans[idx].totalKcal / maxKcal)
+                                        .clamp(0.0, 1.0)
+                                    : 0.0;
+                                final barTopY = plotH * (1.0 - barRatio) - 8;
+                                final chartW = _cachedChartW;
+                                final barW = chartW / n;
+                                final barCenterX = barW * idx + barW / 2;
+                                const tipW = 156.0;
+                                final tipX = (barCenterX - tipW / 2)
+                                    .clamp(0.0, chartW - tipW);
+                                final mmdd =
+                                    '${dates[idx].month.toString().padLeft(2, '0')}/${dates[idx].day.toString().padLeft(2, '0')}';
+                                return Positioned(
+                                  left: tipX,
+                                  top: barTopY.clamp(0.0, plotH - 60),
+                                  child: Container(
+                                    width: tipW,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 9, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: isPinned
+                                          ? const Color(0xFFF0F4FF)
+                                          : const Color(0xFFFFF8E7),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: isPinned
+                                              ? Colors.blue.shade200
+                                              : Colors.brown.shade200,
+                                          width: 0.6),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                            color: Colors.black26,
+                                            blurRadius: 4,
+                                            offset: Offset(1, 2)),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(mmdd,
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold)),
+                                        if (plan.items.isEmpty)
+                                          const Text('栄養開始前',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey))
+                                        else ...[
+                                          Text(
+                                              'IN ${plan.totalVolumeMl.round()}ml, ${plan.totalKcal.round()}kcal',
+                                              style: const TextStyle(
+                                                  fontSize: 11)),
+                                          Text(
+                                              'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
+                                              '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(2)}g/kg)' : ''}',
+                                              style: const TextStyle(
+                                                  fontSize: 11)),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                              // 凡例カード（プロット領域の上下中央・左寄せ）
+                              Positioned(
+                                left: 10,
+                                top: 0,
+                                bottom: 0,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.88),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: Colors.black12, width: 0.8),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                            color: Colors.black12,
+                                            blurRadius: 4,
+                                            offset: Offset(0, 1)),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _legItem(Colors.yellow.shade700,
+                                            'EN (kcal)', false),
+                                        _legItem(Colors.green.shade300,
+                                            'PN (kcal)', false),
+                                        _legItem(Colors.purple.shade200,
+                                            'IN (ml)', true),
+                                        _legItem(Colors.pink.shade300,
+                                            'AA (g)', true),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    );
-                  }),
-                  // 凡例カード（常時表示・絶食期間がない場合はグラフに重なる）
-                  Positioned(
-                    left: 10,
-                    top: 0,
-                    bottom: 56,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.88),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: Colors.black12, width: 0.8),
-                          boxShadow: const [
-                            BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 4,
-                                offset: Offset(0, 1)),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                      // === 日付＋イベントアイコン軸（棒・線と独立した別Row） ===
+                      SizedBox(
+                        height: axisH,
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _legItem(Colors.yellow.shade700, 'EN (kcal)', false),
-                            _legItem(Colors.green.shade300,  'PN (kcal)', false),
-                            _legItem(Colors.purple.shade200, 'IN (ml)',   true),
-                            _legItem(Colors.pink.shade300,   'AA (g)',    true),
+                            for (var i = 0; i < n; i++)
+                              Expanded(child: dateCell(i)),
                           ],
                         ),
                       ),
-                    ),
-                  ),
-                ],
-                ); }), // Stack / LayoutBuilder
+                    ],
+                  );
+                }), // Column / LayoutBuilder
               ), // MouseRegion
               ), // GestureDetector
               ), // SizedBox
