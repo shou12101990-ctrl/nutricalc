@@ -6,6 +6,25 @@ import 'package:flutter/services.dart';
 
 import 'local_store.dart';
 
+/// 日付を1タップで選択して即閉じるカレンダーダイアログ
+Future<DateTime?> _quickPickDate(BuildContext context, DateTime initial) {
+  return showDialog<DateTime>(
+    context: context,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: CalendarDatePicker(
+          initialDate: initial,
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2100),
+          onDateChanged: (d) => Navigator.pop(ctx, d),
+        ),
+      ),
+    ),
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final catalog = await ProductCatalog.load();
@@ -428,12 +447,7 @@ class CasesPage extends StatelessWidget {
                     '入室日: ${admissionDate.year}/${admissionDate.month.toString().padLeft(2, '0')}/${admissionDate.day.toString().padLeft(2, '0')}',
                   ),
                   onTap: () async {
-                    final picked = await showDatePicker(
-                      context: ctx,
-                      initialDate: admissionDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
+                    final picked = await _quickPickDate(ctx, admissionDate);
                     if (picked != null) setLocal(() => admissionDate = picked);
                   },
                 ),
@@ -520,15 +534,8 @@ class CasesPage extends StatelessWidget {
                   title: Text(
                       '日付: ${selectedDate.year}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.day.toString().padLeft(2, '0')}'),
                   onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (picked != null) {
-                      setLocal(() => selectedDate = picked);
-                    }
+                    final picked = await _quickPickDate(context, selectedDate);
+                    if (picked != null) setLocal(() => selectedDate = picked);
                   },
                 ),
                 const SizedBox(height: 8),
@@ -630,15 +637,8 @@ class CasesPage extends StatelessWidget {
                   title: Text(
                       '日付: ${selectedDate.year}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.day.toString().padLeft(2, '0')}'),
                   onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (picked != null) {
-                      setLocal(() => selectedDate = picked);
-                    }
+                    final picked = await _quickPickDate(context, selectedDate);
+                    if (picked != null) setLocal(() => selectedDate = picked);
                   },
                 ),
                 const SizedBox(height: 8),
@@ -1798,7 +1798,8 @@ class _BuilderPageState extends State<BuilderPage>
                       child: AutoDesignInline(
                           key: _autoDesignKey,
                           state: widget.state,
-                          current: current),
+                          current: current,
+                          onSettingsChanged: () { if (mounted) setState(() {}); }),
                     ),
                   ],
                 ),
@@ -4745,9 +4746,11 @@ class _MealPicker extends StatelessWidget {
 /// Day別 投与設計画面
 // インライン版(BuilderPageタブ内)とページ版で共用するウィジェット
 class AutoDesignInline extends StatefulWidget {
-  const AutoDesignInline({super.key, required this.state, required this.current});
+  const AutoDesignInline({super.key, required this.state, required this.current, this.onSettingsChanged});
   final AppState state;
   final PatientCase current;
+  /// 設定変更時に親ウィジェットへ通知（チャートパネルのリアルタイム更新用）
+  final VoidCallback? onSettingsChanged;
 
   @override
   State<AutoDesignInline> createState() => _AutoDesignPageState();
@@ -4934,6 +4937,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   void _rebuildDays() {
     if (_enStartDay < 1) _enStartDay = 1;
     _totalDays = _enStartDay + _enRampDays - 1;
+    // 設定変更を親(チャートパネル)に通知
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onSettingsChanged?.call();
+    });
     final n = _totalDays;
     _dayPercents = List.generate(n, (i) {
       final day = i + 1;
@@ -5030,13 +5037,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             minimumSize: const Size(0, 0),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                         onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _startDate,
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2100),
-                          );
-                          if (picked != null) setState(() => _startDate = picked);
+                          final picked = await _quickPickDate(context, _startDate);
+                          if (picked != null) {
+                            setState(() => _startDate = picked);
+                            widget.onSettingsChanged?.call();
+                          }
                         },
                         child: Text(
                             '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
@@ -5065,7 +5070,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text('EN導入: Day'),
+                      const Text('EN導入時期: Day'),
                       DropdownButton<int>(
                         value: _enStartDay.clamp(1, 21),
                         isDense: true,
