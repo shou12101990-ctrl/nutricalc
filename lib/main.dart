@@ -4221,6 +4221,16 @@ class NutritionCalculator {
             }
           }
         }
+        // TPN(PN主剤)の使用量を100ml単位に丸める。
+        // 過剰栄養は禁忌のため、丸めで残りkcalを超える場合は100ml切り下げる。
+        if (pnMl > 0 && pnDensity > 0) {
+          double rounded = (pnMl / 100).round() * 100.0;
+          while (rounded > 0 && pnDensity * rounded > restKcal + 1e-6) {
+            rounded -= 100;
+          }
+          pnMl = rounded;
+          pnUnits = pnMl > 0 ? (pnMl / bagVol).ceil() : null;
+        }
         final pnKcal = pnDensity * pnMl;
         final pnProt = (pnBase.aminoAcidG ?? 0) * pnMl / bagVol;
         if (pnMl > 0) {
