@@ -5508,6 +5508,25 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final prots = plans.map((p) => p.totalProteinG).toList();
     final n = plans.length;
 
+    // 必須脂肪酸欠乏(EFAD)チェック:
+    //   絶食開始(chartOrigin)からday14までに脂質が全く補充されていなければアラート。
+    //   各itemの脂質gは製剤のfatBaseを投与量比で按分して算出。
+    double fatOfPlan(DesignPlan p) {
+      double f = 0;
+      for (final it in p.items) {
+        final prod = widget.state.catalog.byName(it.name);
+        final base = prod?.fatBase ?? 0;
+        if (base <= 0) continue;
+        final pv = prod?.volumeMl ?? 0;
+        f += pv > 0 ? base * it.volumeMl / pv : base * (it.units ?? 0);
+      }
+      return f;
+    }
+    // day14まで到達し、その間の累積脂質がほぼ0なら欠乏リスク
+    final efadRisk = n >= 14 &&
+        List.generate(14, (i) => fatOfPlan(plans[i]))
+            .fold<double>(0.0, (s, v) => s + v) < 1.0;
+
     // 日付ラベル: 同月内は日のみ, 月が変わる初日はmm/dd
     final dates = List.generate(n, (i) => chartOrigin.add(Duration(days: i)));
     String dateLabel(int i) {
@@ -5673,6 +5692,46 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           children: [
             const Text('栄養の推移', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
+            // 必須脂肪酸欠乏(EFAD)アラート
+            if (efadRisk) ...[
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade400, width: 1),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 18, color: Colors.orange.shade800),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text.rich(TextSpan(children: [
+                        TextSpan(
+                            text: '必須脂肪酸欠乏に注意\n',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange.shade900,
+                                fontSize: 12.5,
+                                height: 1.4)),
+                        TextSpan(
+                            text:
+                                '絶食開始からDay14までに脂質が投与されていません。脂肪乳剤の投与を検討してください。',
+                            style: TextStyle(
+                                color: Colors.orange.shade900,
+                                fontSize: 11.5,
+                                height: 1.4)),
+                      ])),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             TapRegion(
               // チャート外タップでフローターを消去
               onTapOutside: (_) {
