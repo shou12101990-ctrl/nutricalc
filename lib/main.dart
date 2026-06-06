@@ -5161,6 +5161,26 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       color: Colors.pink.shade700)),
                             ),
                           ],
+                          // 対目標比チップ（緑）
+                          if (plan.items.isNotEmpty && dayKcal > 0) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                    color: Colors.green.shade300, width: 0.8),
+                              ),
+                              child: Text(
+                                '対目標 ${(plan.totalKcal / dayKcal * 100).round()}%',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.green.shade800),
+                              ),
+                            ),
+                          ],
                           const Spacer(),
                           const Icon(Icons.touch_app,
                               size: 14, color: Colors.grey),
