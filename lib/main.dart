@@ -5866,6 +5866,22 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final thiamineRisk =
         preDays >= 5 && designPlans.any((p) => carbOfPlan(p) > 0);
 
+    // PN主体モニタリングアラート:
+    //   EN≤30ml/hでPNが栄養の主体となる期間が、絶食開始から一定日数(7日)続く場合、
+    //   電解質・微量元素・ビタミンの過不足を採血で確認し補正を検討するよう促す。
+    int pnHeavyMaxDay = 0;
+    for (int i = preDays; i < n; i++) {
+      final j = i - preDays;
+      if (j < 0 || j >= _dayEnDose.length) continue;
+      final enRate = _rateOf(_dayEnDose[j]);
+      final pnKcal = plans[i].totalKcal - _enKcalOfPlan(plans[i]);
+      if (enRate <= 30 && pnKcal > 1) {
+        final dayFromFasting = i + 1; // chartOrigin=絶食開始 → i番目はDay(i+1)
+        if (dayFromFasting > pnHeavyMaxDay) pnHeavyMaxDay = dayFromFasting;
+      }
+    }
+    final pnMonitorRisk = pnHeavyMaxDay >= 7;
+
     // 日付ラベル: 同月内は日のみ, 月が変わる初日はmm/dd
     final dates = List.generate(n, (i) => chartOrigin.add(Duration(days: i)));
     String dateLabel(int i) {
@@ -5916,11 +5932,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       ];
       final bool hasEvent = flags.any((f) => f);
       final int evCount = flags.where((f) => f).length;
-      final double ic = evCount >= 2 ? 12.0 : 16.0; // アイコンサイズ
-      // no_meals(絶食)は禁止スラッシュが箱の対角いっぱいに伸びるため、
-      // 同じsizeでもrestaurantより一回り大きく見える。視覚サイズを揃える補正。
-      final double icFast = ic - 2;
-      final double fs = evCount >= 2 ? 10.0 : 12.5; // boxLabel文字サイズ
+      final double fs = evCount >= 2 ? 10.0 : 12.5; // boxラベル文字/アイコンサイズ
 
       // 横幅が詰まっているとき(セル幅が狭い)は、日付ラベルを
       // 「イベント日」または「5の倍数の日」のみに間引く
@@ -5954,10 +5966,20 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     height: 1.2)),
           ));
 
+      // Material アイコンを四角囲みにする（mkBoxと同じ枠スタイル）
+      Widget mkIconBox(IconData icon, Color c) => noWrap(Container(
+            padding: EdgeInsets.all(evCount >= 2 ? 1 : 1.5),
+            decoration: BoxDecoration(
+              border: Border.all(color: c, width: 0.9),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Icon(icon, size: fs, color: c),
+          ));
+
       final evWidgets = [
-        if (flags[0]) Icon(Icons.no_meals,   size: icFast, color: Colors.red.shade400),
-        if (flags[1]) Icon(Icons.bed,         size: ic, color: Colors.blueGrey.shade400),
-        if (flags[2]) Icon(Icons.restaurant,  size: ic, color: Colors.blue.shade600),
+        if (flags[0]) mkIconBox(Icons.no_meals,   Colors.red.shade400),
+        if (flags[1]) mkIconBox(Icons.bed,         Colors.blueGrey.shade400),
+        if (flags[2]) mkIconBox(Icons.restaurant,  Colors.blue.shade600),
         if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
         if (flags[4]) mkBox('full', Colors.green.shade700),
       ];
@@ -6046,6 +6068,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 body:
                     '絶食5日以上＋糖質投与でビタミンB1の需要が増大し欠乏しうる（貯蔵は約2週間で枯渇）。'
                     '糖負荷の前〜同時にビタミンB1（例: 100〜300mg/日）を補充してください。',
+              ),
+            if (pnMonitorRisk)
+              _chartAlert(
+                color: Colors.teal.shade700,
+                title: '採血で電解質・微量元素の確認を',
+                body:
+                    'EN≤30ml/hでPN主体の状態が絶食からDay$pnHeavyMaxDayまで続きます。'
+                    'P・K・Mg・亜鉛・ビタミン等の過不足が生じやすい時期です。'
+                    '採血検査を追加し、必要に応じて補正を検討してください。',
               ),
             TapRegion(
               // チャート外タップでフローターを消去
