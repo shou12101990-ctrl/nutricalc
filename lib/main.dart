@@ -3202,8 +3202,16 @@ class _MasterPageState extends State<MasterPage> {
                   value: p.content.isEmpty ? '-' : p.content,
                   onTap: () => _editContent(p)),
               InfoChip(label: 'NPC/N', value: p.npcNRatio?.toString() ?? '-'),
-              InfoChip(label: '脂質 @g', value: p.fatBase?.toString() ?? '-'),
-              InfoChip(label: '糖質 @g', value: p.carbBase?.toString() ?? '-'),
+              InfoChip(
+                  label: '脂質',
+                  value: (p.fatBase == null || p.fatBase == 0)
+                      ? '-'
+                      : '${p.fatBase!.toStringAsFixed(p.fatBase! % 1 == 0 ? 0 : 1)}g'),
+              InfoChip(
+                  label: '糖質',
+                  value: (p.carbBase == null || p.carbBase == 0)
+                      ? '-'
+                      : '${p.carbBase!.toStringAsFixed(p.carbBase! % 1 == 0 ? 0 : 1)}g'),
             ],
           ),
           const SizedBox(height: 8),
