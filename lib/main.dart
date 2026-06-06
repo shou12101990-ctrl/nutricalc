@@ -56,15 +56,7 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('やさしい栄養処方 NutriCalc'),
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Center(
-              child: Text(
-                '症例 ${widget.state.cases.length} 件',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-            ),
-          )
+          // 件数はヘッダーではなく患者一覧タイトル横に移動したので非表示
         ],
       ),
       body: pages[index],
@@ -98,12 +90,21 @@ class CasesPage extends StatelessWidget {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              runSpacing: 12,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text('患者一覧',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    const Text('患者一覧',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 6),
+                    Text('(${state.cases.length}人)',
+                        style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                  ],
+                ),
                 FilledButton(
                   onPressed: () => _openCaseDialog(context),
                   child: const Text('新規入室'),
@@ -153,20 +154,8 @@ class CasesPage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.person, size: 18),
-                                const SizedBox(width: 4),
-                                Text(item.caseCode,
-                                    style: const TextStyle(
-                                        fontSize: 16, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(item.patientInfoLine,
-                                style: const TextStyle(fontSize: 14)),
-                            const SizedBox(height: 2),
-                            Builder(builder: (context) {
+                            // 1行目: 患者No / ベッド / 入室日
+                            Builder(builder: (ctx) {
                               final admission = item.bedHistory.where((b) => b.fromBed == null).firstOrNull;
                               final admDate = admission == null ? '' : (() {
                                 final p = DateTime.tryParse(admission.changedAt);
@@ -175,15 +164,34 @@ class CasesPage extends StatelessWidget {
                               })();
                               return Row(
                                 children: [
+                                  const Icon(Icons.person, size: 16),
+                                  const SizedBox(width: 2),
+                                  Text(item.caseCode,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 10),
                                   const Icon(Icons.bed, size: 16, color: Colors.grey),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${item.currentBed}　入室 $admDate',
-                                    style: const TextStyle(fontSize: 13, color: Colors.grey),
-                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(item.currentBed,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                  if (admDate.isNotEmpty) ...[
+                                    const SizedBox(width: 10),
+                                    const Icon(Icons.login, size: 14, color: Colors.grey),
+                                    const SizedBox(width: 2),
+                                    Text(admDate, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                                  ],
                                 ],
                               );
                             }),
+                            const SizedBox(height: 2),
+                            Text(item.patientInfoLine,
+                                style: const TextStyle(fontSize: 14)),
+                            if (item.memo.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(item.memo,
+                                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                            ],
                           ],
                         ),
                       ),
@@ -817,8 +825,11 @@ class _BuilderPageState extends State<BuilderPage>
   String lipidSource = 'イントラリポス20%';
   final Set<String> expandedProducts = {};
   double _enRateMlPerHour = 0;
-  double _tpnRateMlPerHour = 0;
-  double _ppnRateMlPerHour = 0;
+  double _tpnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
+  double _ppnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
+  // PN使用量指定 (0 = 全量, >0 = ml指定)
+  double _tpnVolumeMl = 0;
+  double _ppnVolumeMl = 0;
 
   @override
   void initState() {
@@ -914,6 +925,23 @@ class _BuilderPageState extends State<BuilderPage>
     }
   }
 
+  /// TPN/PPN使用量ml指定時にpac数を更新 (EN同様の自動調整)
+  void _adjustPnUnitsForVolume(PatientCase current, String cat, double volumeMl) {
+    for (final item in current.regimenItems.toList()) {
+      final product = widget.state.catalog.byId(item.productId);
+      if (product == null || product.category != cat) continue;
+      final vol = product.volumeMl ?? 0;
+      if (vol <= 0) continue;
+      final needed = volumeMl <= 0
+          ? item.units // 全量 → 変更なし(現在のpac数を維持)
+          : (volumeMl / vol).ceil().clamp(1, 20);
+      if (item.units > 0 && item.units != needed && volumeMl > 0) {
+        widget.state.setUnits(current.id, product, needed);
+      }
+    }
+    setState(() {});
+  }
+
   AggregateResult _aggregateWithRates(PatientCase current) {
     double totalVolumeMl = 0;
     double totalKcal = 0;
@@ -970,6 +998,9 @@ class _BuilderPageState extends State<BuilderPage>
       proteinKcal += fullProt * 4 * factor;
     }
 
+    // TPN/PPNは使用量ml指定(0=全量)を速度換算して按分
+    _tpnRateMlPerHour = _tpnVolumeMl > 0 ? _tpnVolumeMl / 24 : 0;
+    _ppnRateMlPerHour = _ppnVolumeMl > 0 ? _ppnVolumeMl / 24 : 0;
     processCategory('EN', _enRateMlPerHour);
     processCategory('TPN', _tpnRateMlPerHour);
     processCategory('PPN', _ppnRateMlPerHour);
@@ -1237,6 +1268,14 @@ class _BuilderPageState extends State<BuilderPage>
                               'タンパク ${targetProtein.round()} g/day',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
+                            if (current.memo.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(current.memo,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: Colors.grey)),
+                            ],
                           ],
                         ),
                       ),
@@ -1440,15 +1479,26 @@ class _BuilderPageState extends State<BuilderPage>
                                           () => category = effectiveCategory));
                                 }
                                 // EN/TPN/PPN タブ + 流量ドロップダウン（選択中カテゴリに対応）
-                                final currentRate = effectiveCategory == 'EN'
-                                    ? _enRateMlPerHour
-                                    : effectiveCategory == 'TPN'
-                                        ? _tpnRateMlPerHour
-                                        : _ppnRateMlPerHour;
+                                // PN使用量オプション: 全量 + 200-2000ml (100ml刻み)
+                                final pnVolumeOptions = <double>[0,
+                                  ...List.generate(19, (i) => (i + 2) * 100.0)];
+                                String pnVolLabel(double v) =>
+                                    v <= 0 ? '全量' : '${v.toInt()}ml';
+                                final curPnVol = effectiveCategory == 'TPN'
+                                    ? _tpnVolumeMl
+                                    : _ppnVolumeMl;
+                                // スイッチを画面中央、DDをスイッチ右端〜右壁の中間に配置
                                 return Row(
                                   children: [
-                                    Expanded(
+                                    const Expanded(child: SizedBox()), // 左スペーサー
+                                    SizedBox(
+                                      width: 160,
                                       child: SegmentedButton<String>(
+                                        showSelectedIcon: false,
+                                        style: ButtonStyle(
+                                          visualDensity: VisualDensity.compact,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
                                         segments: activeCategories
                                             .map((cat) => ButtonSegment(
                                                 value: cat, label: Text(cat)))
@@ -1458,29 +1508,52 @@ class _BuilderPageState extends State<BuilderPage>
                                             setState(() => category = newSel.first),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    DropdownButton<double>(
-                                      value: currentRate,
-                                      isDense: true,
-                                      items: _infusionRateOptions
-                                          .map((v) => DropdownMenuItem(
-                                              value: v,
-                                              child: Text(_rateLabel(v),
-                                                  style: const TextStyle(fontSize: 13))))
-                                          .toList(),
-                                      onChanged: (v) async {
-                                        if (effectiveCategory == 'EN') {
-                                          setState(() => _enRateMlPerHour = v ?? 0);
-                                          if ((v ?? 0) > 0) {
-                                            await _adjustEnUnitsForRate(current);
-                                            if (mounted) setState(() {});
-                                          }
-                                        } else if (effectiveCategory == 'TPN') {
-                                          setState(() => _tpnRateMlPerHour = v ?? 0);
-                                        } else {
-                                          setState(() => _ppnRateMlPerHour = v ?? 0);
-                                        }
-                                      },
+                                    // 右半分: DDをスイッチ右端〜右壁の中間に配置
+                                    Expanded(
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 12),
+                                          child: effectiveCategory == 'EN'
+                                            ? DropdownButton<double>(
+                                              value: _enRateMlPerHour,
+                                              isDense: true,
+                                              items: _infusionRateOptions
+                                                  .map((v) => DropdownMenuItem(
+                                                      value: v,
+                                                      child: Text(_rateLabel(v),
+                                                          style: const TextStyle(fontSize: 13))))
+                                                  .toList(),
+                                              onChanged: (v) async {
+                                                setState(() => _enRateMlPerHour = v ?? 0);
+                                                if ((v ?? 0) > 0) {
+                                                  await _adjustEnUnitsForRate(current);
+                                                  if (mounted) setState(() {});
+                                                }
+                                              },
+                                            )
+                                            : DropdownButton<double>(
+                                              value: curPnVol,
+                                              isDense: true,
+                                              items: pnVolumeOptions
+                                                  .map((v) => DropdownMenuItem(
+                                                      value: v,
+                                                      child: Text(pnVolLabel(v),
+                                                          style: const TextStyle(fontSize: 13))))
+                                                  .toList(),
+                                              onChanged: (v) {
+                                                final vol = v ?? 0;
+                                                if (effectiveCategory == 'TPN') {
+                                                  setState(() => _tpnVolumeMl = vol);
+                                                  _adjustPnUnitsForVolume(current, 'TPN', vol);
+                                                } else {
+                                                  setState(() => _ppnVolumeMl = vol);
+                                                  _adjustPnUnitsForVolume(current, 'PPN', vol);
+                                                }
+                                              },
+                                            ),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 );
@@ -1872,14 +1945,24 @@ class _BuilderPageState extends State<BuilderPage>
                                                           return p != null && p.category == 'TPN' && i.units > 0;
                                                         }).map((i) {
                                                           final p = widget.state.catalog.byId(i.productId)!;
-                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('TPN  ${p.name} ${i.units}本', style: ts));
+                                                          final pacs = (_tpnVolumeMl > 0)
+                                                              ? ((_tpnVolumeMl / (p.volumeMl ?? 1)).ceil())
+                                                              : i.units;
+                                                          final volMl = _tpnVolumeMl > 0 ? _tpnVolumeMl : (p.volumeMl ?? 0) * i.units.toDouble();
+                                                          final rateMlH = (volMl / 24).round();
+                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('TPN  ${p.name} ${pacs}本  ${rateMlH}ml/h', style: ts));
                                                         }),
                                                         if (ppnUnits > 0) ...current.regimenItems.where((i) {
                                                           final p = widget.state.catalog.byId(i.productId);
                                                           return p != null && p.category == 'PPN' && i.units > 0;
                                                         }).map((i) {
                                                           final p = widget.state.catalog.byId(i.productId)!;
-                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('PPN  ${p.name} ${i.units}本', style: ts));
+                                                          final pacs = (_ppnVolumeMl > 0)
+                                                              ? ((_ppnVolumeMl / (p.volumeMl ?? 1)).ceil())
+                                                              : i.units;
+                                                          final volMl = _ppnVolumeMl > 0 ? _ppnVolumeMl : (p.volumeMl ?? 0) * i.units.toDouble();
+                                                          final rateMlH = (volMl / 24).round();
+                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('PPN  ${p.name} ${pacs}本  ${rateMlH}ml/h', style: ts));
                                                         }),
                                                       ],
                                                     );
@@ -1902,96 +1985,67 @@ class _BuilderPageState extends State<BuilderPage>
                                             child: Column(
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                // 上段: 円グラフ + 縦棒（中央揃え）
+                                                // ドーナツグラフ（中央に目標達成率）
                                                 SizedBox(
-                                                  height: 160,
-                                                  child: Row(
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                                  height: 150,
+                                                  child: Stack(
+                                                    alignment: Alignment.center,
                                                     children: [
-                                                      Expanded(
-                                                        child: SizedBox(
-                                                          height: 130,
-                                                          child: PieChart(
-                                                            PieChartData(
-                                                              startDegreeOffset: 270,
-                                                              sectionsSpace: 2,
-                                                              centerSpaceRadius: 0,
-                                                              sections: [
-                                                                PieChartSectionData(
-                                                                  value: aggregate.proteinPercent <= 0 ? 0 : aggregate.proteinKcal,
-                                                                  color: Colors.blue,
-                                                                  title: aggregate.proteinPercent < 3 ? '' : '${aggregate.proteinPercent.toStringAsFixed(0)}%',
-                                                                  titleStyle: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.bold),
-                                                                  radius: 72,
-                                                                ),
-                                                                PieChartSectionData(
-                                                                  value: aggregate.fatPercent <= 0 ? 0 : aggregate.fatKcal,
-                                                                  color: Colors.orange,
-                                                                  title: aggregate.fatPercent < 3 ? '' : '${aggregate.fatPercent.toStringAsFixed(0)}%',
-                                                                  titleStyle: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.bold),
-                                                                  radius: 72,
-                                                                ),
-                                                                PieChartSectionData(
-                                                                  value: aggregate.carbPercent <= 0 ? 0 : aggregate.carbKcal,
-                                                                  color: Colors.yellow.shade700,
-                                                                  title: aggregate.carbPercent < 3 ? '' : '${aggregate.carbPercent.toStringAsFixed(0)}%',
-                                                                  titleStyle: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.bold),
-                                                                  radius: 72,
-                                                                ),
-                                                              ],
+                                                      PieChart(
+                                                        PieChartData(
+                                                          startDegreeOffset: 270,
+                                                          sectionsSpace: 2,
+                                                          centerSpaceRadius: 28, // 穴を小さく
+                                                          sections: [
+                                                            PieChartSectionData(
+                                                              value: aggregate.proteinPercent <= 0 ? 0 : aggregate.proteinKcal,
+                                                              color: Colors.blue,
+                                                              title: aggregate.proteinPercent < 5 ? '' : '${aggregate.proteinPercent.toStringAsFixed(0)}%',
+                                                              titleStyle: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
+                                                              titlePositionPercentageOffset: 0.47, // 3%中心寄せ
+                                                              radius: 52,
                                                             ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 12),
-                                                      // 縦棒グラフ
-                                                      SizedBox(
-                                                        width: 28,
-                                                        height: 130,
-                                                        child: Stack(
-                                                          alignment: Alignment.bottomCenter,
-                                                          children: [
-                                                            Container(
-                                                              decoration: BoxDecoration(
-                                                                color: Colors.grey.shade300,
-                                                                borderRadius: BorderRadius.circular(4),
-                                                              ),
+                                                            PieChartSectionData(
+                                                              value: aggregate.fatPercent <= 0 ? 0 : aggregate.fatKcal,
+                                                              color: Colors.orange,
+                                                              title: aggregate.fatPercent < 5 ? '' : '${aggregate.fatPercent.toStringAsFixed(0)}%',
+                                                              titleStyle: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
+                                                              titlePositionPercentageOffset: 0.47,
+                                                              radius: 52,
                                                             ),
-                                                            FractionallySizedBox(
-                                                              heightFactor: (aggregate.targetPercent(targetKcal) / 100).clamp(0.0, 1.0),
-                                                              child: Container(
-                                                                decoration: BoxDecoration(
-                                                                  color: Colors.green.shade300,
-                                                                  borderRadius: BorderRadius.circular(4),
-                                                                ),
-                                                              ),
+                                                            PieChartSectionData(
+                                                              value: aggregate.carbPercent <= 0 ? 0 : aggregate.carbKcal,
+                                                              color: Colors.yellow.shade700,
+                                                              title: aggregate.carbPercent < 5 ? '' : '${aggregate.carbPercent.toStringAsFixed(0)}%',
+                                                              titleStyle: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
+                                                              titlePositionPercentageOffset: 0.47,
+                                                              radius: 52,
                                                             ),
                                                           ],
+                                                        ),
+                                                      ),
+                                                      // 中央: 目標達成率をドーナツの穴の中央に配置
+                                                      Center(
+                                                        child: Text(
+                                                          '${aggregate.targetPercent(targetKcal).toStringAsFixed(0)}%',
+                                                          style: const TextStyle(
+                                                              fontSize: 16,
+                                                              fontWeight: FontWeight.bold),
                                                         ),
                                                       ),
                                                     ],
                                                   ),
                                                 ),
-                                                const SizedBox(height: 8),
-                                                // 下段: PFC凡例 + %nute
+                                                // PFC凡例（ドーナツ下端から10px）
+                                                const SizedBox(height: 10),
                                                 Row(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
-                                                    Expanded(
-                                                      child: Row(
-                                                        mainAxisAlignment: MainAxisAlignment.center,
-                                                        children: [
-                                                          _PfcLegendItem(color: Colors.blue, label: 'P'),
-                                                          const SizedBox(width: 16),
-                                                          _PfcLegendItem(color: Colors.orange, label: 'F'),
-                                                          const SizedBox(width: 16),
-                                                          _PfcLegendItem(color: Colors.yellow.shade700, label: 'C'),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      '${aggregate.targetPercent(targetKcal).toStringAsFixed(1)}%nute',
-                                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                                                    ),
+                                                    _PfcLegendItem(color: Colors.blue, label: 'P'),
+                                                    const SizedBox(width: 12),
+                                                    _PfcLegendItem(color: Colors.orange, label: 'F'),
+                                                    const SizedBox(width: 12),
+                                                    _PfcLegendItem(color: Colors.yellow.shade700, label: 'C'),
                                                   ],
                                                 ),
                                               ],
@@ -2105,6 +2159,7 @@ class _BuilderPageState extends State<BuilderPage>
     double activity = current.activityFactor;
     double stress = current.stressFactor;
     double protein = current.proteinGoalPerKg;
+    final memoCtrl = TextEditingController(text: current.memo);
 
     final saved = await showDialog<bool>(
       context: context,
@@ -2117,7 +2172,7 @@ class _BuilderPageState extends State<BuilderPage>
               children: [
                 DropdownButtonFormField<double>(
                   initialValue: activity,
-                  decoration: const InputDecoration(labelText: '活動係数'),
+                  decoration: const InputDecoration(labelText: '活動係数 (AF)'),
                   items: [for (var i = 0; i < 7; i++) 1.0 + i * 0.1]
                       .map((v) => DropdownMenuItem(
                           value: double.parse(v.toStringAsFixed(1)),
@@ -2125,15 +2180,41 @@ class _BuilderPageState extends State<BuilderPage>
                       .toList(),
                   onChanged: (v) => setLocal(() => activity = v ?? activity),
                 ),
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8, top: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '1.0-1.1 寝たきり体動なし　1.1-1.2 寝たきり体動あり\n'
+                    '1.2-1.3 車椅子　1.3-1.4 歩行　1.5〜 積極的リハ',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ),
                 DropdownButtonFormField<double>(
                   initialValue: stress,
-                  decoration: const InputDecoration(labelText: '侵害係数'),
+                  decoration: const InputDecoration(labelText: '侵害係数 (SF)'),
                   items: [for (var i = 0; i < 13; i++) 0.9 + i * 0.1]
                       .map((v) => DropdownMenuItem(
                           value: double.parse(v.toStringAsFixed(1)),
                           child: Text(v.toStringAsFixed(1))))
                       .toList(),
                   onChanged: (v) => setLocal(() => stress = v ?? stress),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8, top: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '1.0 ストレスなし　1.1-1.8 手術　1.1-1.3 癌\n'
+                    '1.2-1.5 感染症/発熱（敗血症 1.6）　1.2-2.0 熱傷',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
                 ),
                 DropdownButtonFormField<double>(
                   initialValue: protein,
@@ -2145,6 +2226,14 @@ class _BuilderPageState extends State<BuilderPage>
                           child: Text(v.toStringAsFixed(1))))
                       .toList(),
                   onChanged: (v) => setLocal(() => protein = v ?? protein),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: memoCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'メモ（合併症・コメントなど）',
+                      hintText: '例: 糖尿病、CKDステージ3'),
+                  maxLines: 2,
                 ),
               ],
             ),
@@ -2164,6 +2253,7 @@ class _BuilderPageState extends State<BuilderPage>
     current.activityFactor = activity;
     current.stressFactor = stress;
     current.proteinGoalPerKg = protein;
+    current.memo = memoCtrl.text.trim();
     await widget.state.persist();
     setState(() {});
     widget.refresh();
@@ -3422,6 +3512,7 @@ class PatientCase {
     required this.selectedProtocolId,
     required this.zeroMenuConfig,
     this.autoDesignConfig,
+    this.memo = '',
   });
 
   final String id;
@@ -3440,6 +3531,7 @@ class PatientCase {
   String selectedProtocolId;
   ZeroMenuConfig zeroMenuConfig;
   Map<String, dynamic>? autoDesignConfig; // Day別投与設計の保存
+  String memo; // 合併症・コメントなど
 
   String get displayLabel => '$caseCode / $currentBed';
 
@@ -3483,6 +3575,7 @@ class PatientCase {
         'selectedProtocolId': selectedProtocolId,
         'zeroMenuConfig': zeroMenuConfig.toMap(),
         'autoDesignConfig': autoDesignConfig,
+        'memo': memo,
       };
 
   factory PatientCase.fromMap(Map<String, dynamic> map) => PatientCase(
@@ -3512,6 +3605,7 @@ class PatientCase {
         autoDesignConfig: map['autoDesignConfig'] == null
             ? null
             : Map<String, dynamic>.from(map['autoDesignConfig']),
+        memo: (map['memo'] as String?) ?? '',
       );
 }
 
@@ -4630,6 +4724,7 @@ class AutoDesignPage extends StatelessWidget {
 }
 
 class _AutoDesignPageState extends State<AutoDesignInline> {
+  int _hoveredBarIdx = -1; // グラフホバー中のバーインデックス (-1=なし)
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
   int _totalDays = 5; // シミュレーション全体の日数 (= _enStartDay + EN食上げ7日 -1)
@@ -4898,7 +4993,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           if (picked != null) setState(() => _startDate = picked);
                         },
                         child: Text(
-                            '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}'),
+                            '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
+                            style: const TextStyle(fontSize: 14)),
                       ),
                     ],
                   ),
@@ -4999,9 +5095,20 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           ),
                           if (showEn) ...[
                             const SizedBox(width: 4),
-                            Text(_doseLabel(_dayEnDose[i]),
-                                style: const TextStyle(
-                                    fontSize: 11, color: Colors.grey)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.pink.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                    color: Colors.pink.shade200, width: 0.8),
+                              ),
+                              child: Text(_doseLabel(_dayEnDose[i]),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.pink.shade700)),
+                            ),
                           ],
                           const Spacer(),
                           const Icon(Icons.touch_app,
@@ -5094,37 +5201,43 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       ...designPlans,
     ];
 
-    // グラフの日付ラベル: 先頭は今日から、開始日以降は_startDateから
-    String mmdd(int i) {
-      final d = todayNorm.add(Duration(days: i));
-      return '${d.month}/${d.day}';
-    }
-
     final enKcals = plans.map(_enKcalOfPlan).toList();
     final ins = plans.map((p) => p.totalVolumeMl).toList();
     final prots = plans.map((p) => p.totalProteinG).toList();
     final n = plans.length;
-    // 3つの独立スケール（各自の最大値で全高を使う）
+
+    // 日付ラベル: 同月内は日のみ, 月が変わる初日はmm/dd
+    final dates = List.generate(n, (i) => todayNorm.add(Duration(days: i)));
+    String dateLabel(int i) {
+      if (i == 0) return '${dates[i].month}/${dates[i].day}';
+      if (dates[i].month != dates[i - 1].month) {
+        return '${dates[i].month}/${dates[i].day}';
+      }
+      return '${dates[i].day}';
+    }
+    // 後方互換
+    String mmdd(int i) => dateLabel(i);
     final maxKcal =
         plans.map((p) => p.totalKcal).fold<double>(1, (a, b) => a > b ? a : b) * 1.1;
     final maxIn = ins.fold<double>(1, (a, b) => a > b ? a : b) * 1.1;
     final maxAA = prots.fold<double>(1, (a, b) => a > b ? a : b) * 1.15;
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
-    final bottomTitles = AxisTitles(
+    // 日付軸を上(topTitles)に配置 → BarChart の上端より上に日付が来る
+    final topDateTitles = AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 24,
+        reservedSize: 22,
         getTitlesWidget: (v, m) {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
-          return Text(mmdd(i),
+          return Text(dateLabel(i),
               style: const TextStyle(
-                  fontSize: 12, letterSpacing: -0.8, height: 1.0));
+                  fontSize: 12, letterSpacing: -0.5, height: 1.0));
         },
       ),
     );
 
-    // 共通の透明な線グラフビルダー（独立スケールで重ねる）
+    // 共通の透明な線グラフビルダー（独立スケール・minY=0で軸より下に出ない）
     LineChart lineLayer(List<double> ys, double maxY, Color color) =>
         LineChart(LineChartData(
           minX: -0.5,
@@ -5151,6 +5264,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           ),
           gridData: const FlGridData(show: false),
           borderData: FlBorderData(show: false),
+          clipData: const FlClipData.all(), // minY=0より下にはみ出さない
           lineTouchData: const LineTouchData(enabled: false),
         ));
 
@@ -5177,99 +5291,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             const SizedBox(height: 10),
             SizedBox(
               height: 240,
-              child: GestureDetector(
-                onTapUp: (details) {
-                  // タップ位置からバーインデックスを計算してポップアップ表示
-                  final box = context.findRenderObject() as RenderBox?;
-                  if (box == null || n == 0) return;
-                  // Stack全体の幅を使って等分割
-                  // barWidth ≒ 描画幅 / n (spaceAroundアライメント近似)
-                  final chartWidth = box.size.width - 24; // Paddingの余白を差し引く
-                  final barWidth = chartWidth / n;
-                  final idx =
-                      (details.localPosition.dx / barWidth).floor().clamp(0, n - 1);
-                  final plan = plans[idx];
-                  final dateStr = mmdd(idx);
-                  final w = widget.current.weightKg;
-                  // タップ位置を画面座標に変換してポップアップを近くに配置
-                  final tapGlobal = (context.findRenderObject() as RenderBox?)
-                          ?.localToGlobal(details.localPosition) ??
-                      details.globalPosition;
-                  final screen = MediaQuery.of(context).size;
-                  const tipW = 130.0, tipH = 68.0;
-                  final posX =
-                      (tapGlobal.dx - tipW / 2).clamp(8.0, screen.width - tipW - 8);
-                  final posY =
-                      (tapGlobal.dy - tipH - 12).clamp(8.0, screen.height - tipH - 8);
-                  showDialog<void>(
-                    context: context,
-                    barrierColor: Colors.transparent,
-                    barrierDismissible: true,
-                    builder: (ctx) => GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => Navigator.pop(ctx),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              left: posX,
-                              top: posY,
-                              child: Container(
-                                width: tipW,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 9, vertical: 7),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                      color: Colors.grey.shade400,
-                                      width: 0.5),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                        color: Colors.black26,
-                                        blurRadius: 4,
-                                        offset: Offset(1, 2)),
-                                  ],
-                                ),
-                                child: plan.items.isEmpty
-                                    ? const Text('栄養開始前',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey))
-                                    : Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(dateStr,
-                                              style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight:
-                                                      FontWeight.bold)),
-                                          Text(
-                                              'IN ${plan.totalVolumeMl.round()}ml',
-                                              style: const TextStyle(
-                                                  fontSize: 11)),
-                                          Text(
-                                              '${plan.totalKcal.round()}kcal',
-                                              style: const TextStyle(
-                                                  fontSize: 11)),
-                                          Text(
-                                              'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
-                                              '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(1)}g/kg)' : ''}',
-                                              style: const TextStyle(
-                                                  fontSize: 11)),
-                                        ],
-                                      ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
+              child: MouseRegion(
+                onHover: (e) {
+                  if (n == 0) return;
+                  final chartWidth = (context.findRenderObject() as RenderBox?)
+                          ?.size.width ??
+                      300;
+                  final barWidth = (chartWidth - 24) / n;
+                  final idx = (e.localPosition.dx / barWidth)
+                      .floor()
+                      .clamp(0, n - 1);
+                  if (idx != _hoveredBarIdx) {
+                    setState(() => _hoveredBarIdx = idx);
+                  }
                 },
+                onExit: (_) => setState(() => _hoveredBarIdx = -1),
                 child: Stack(
                 children: [
                   // ① 積み上げ棒: カロリー内訳 (PN+EN)、独立スケール
@@ -5297,9 +5333,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]);
                     }),
                     titlesData: FlTitlesData(
-                      bottomTitles: bottomTitles,
+                      bottomTitles: hidden,
                       leftTitles: hidden,
-                      topTitles: hidden,
+                      topTitles: topDateTitles, // 日付を上に
                       rightTitles: hidden,
                     ),
                     gridData: const FlGridData(show: false),
@@ -5309,9 +5345,85 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   lineLayer(ins, maxIn, Colors.teal),
                   // ③ AA(タンパク)投与量: マーカー付き線、独立スケール
                   lineLayer(prots, maxAA, Colors.blue),
+                  // ホバーツールチップ（棒上端の少し上に、ベージュ背景）
+                  if (_hoveredBarIdx >= 0 && _hoveredBarIdx < n)
+                    Builder(builder: (ctx) {
+                      final idx = _hoveredBarIdx;
+                      final plan = plans[idx];
+                      final w = widget.current.weightKg;
+                      // 棒の高さ比率からY位置を推定
+                      const chartH = 240.0;
+                      const topReserved = 22.0; // topTitles の reservedSize
+                      final drawH = chartH - topReserved;
+                      final barRatio = maxKcal > 0
+                          ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
+                          : 0.0;
+                      final barTopY =
+                          topReserved + drawH * (1.0 - barRatio) - 8;
+                      // X位置: 等分割近似
+                      final chartW = (context.findRenderObject() as RenderBox?)
+                              ?.size.width ??
+                          300;
+                      final barW = (chartW - 24) / n;
+                      final barCenterX = barW * idx + barW / 2;
+                      const tipW = 130.0;
+                      final tipX =
+                          (barCenterX - tipW / 2).clamp(0.0, chartW - tipW);
+                      return Positioned(
+                        left: tipX,
+                        top: barTopY.clamp(0.0, chartH - 70),
+                        child: IgnorePointer(
+                          child: Container(
+                            width: tipW,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF8E7), // ベージュ
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color: Colors.brown.shade200, width: 0.6),
+                              boxShadow: const [
+                                BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 4,
+                                    offset: Offset(1, 2)),
+                              ],
+                            ),
+                            child: plan.items.isEmpty
+                                ? const Text('栄養開始前',
+                                    style: TextStyle(
+                                        fontSize: 11, color: Colors.grey))
+                                : Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(dateLabel(idx),
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold)),
+                                      Text(
+                                          'IN ${plan.totalVolumeMl.round()}ml',
+                                          style: const TextStyle(
+                                              fontSize: 11)),
+                                      Text(
+                                          '${plan.totalKcal.round()}kcal',
+                                          style: const TextStyle(
+                                              fontSize: 11)),
+                                      Text(
+                                          'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
+                                          '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(1)}g/kg)' : ''}',
+                                          style: const TextStyle(
+                                              fontSize: 11)),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      );
+                    }),
                 ],
                 ), // Stack
-              ), // GestureDetector
+              ), // MouseRegion
             ),
           ],
         ),
