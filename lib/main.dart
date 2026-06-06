@@ -1816,8 +1816,8 @@ class _BuilderPageState extends State<BuilderPage>
             child: Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: SizedBox(
-                height: _summaryHeight,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: _summaryHeight, minHeight: 80),
                 child: Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1826,6 +1826,7 @@ class _BuilderPageState extends State<BuilderPage>
                         width: 0.8),
                   ),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       GestureDetector(
                         behavior: HitTestBehavior.translucent,
@@ -1860,7 +1861,8 @@ class _BuilderPageState extends State<BuilderPage>
                         ),
                       ),
                     ),
-                    Expanded(
+                    Flexible(
+                      fit: FlexFit.loose,
                       child: ClipRect(
                         child: SingleChildScrollView(
                           physics: const BouncingScrollPhysics(),
