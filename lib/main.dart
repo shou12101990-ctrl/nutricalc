@@ -1215,7 +1215,11 @@ class _BuilderPageState extends State<BuilderPage>
     }
 
     final screenH = MediaQuery.of(context).size.height;
-    final snapPoints = [80.0, screenH * 0.42, screenH * 0.85];
+    final _mqPad = MediaQuery.of(context).padding;
+    // パネルの最大高さ = 画面高さ - ステータスバー - AppBar - ホームインジケータ - パディング16
+    final maxSummaryH = (screenH - _mqPad.top - kToolbarHeight - _mqPad.bottom - 16.0)
+        .clamp(200.0, screenH);
+    final snapPoints = [80.0, maxSummaryH * 0.5, maxSummaryH];
 
     return Scaffold(
           appBar: AppBar(
@@ -1305,6 +1309,13 @@ class _BuilderPageState extends State<BuilderPage>
                         selected: {_builderTabIndex},
                         onSelectionChanged: (Set<int> newSelection) {
                           setState(() => _builderTabIndex = newSelection.first);
+                          // 自動計算タブ初回表示時: AutoDesignInline のinitState完了後に
+                          // もう一度 setState してグラフパネルを描画する
+                          if (newSelection.first == 2) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) setState(() {});
+                            });
+                          }
                         },
                       ),
                     ),
@@ -1815,7 +1826,7 @@ class _BuilderPageState extends State<BuilderPage>
                           final expansion = -d.delta.dy;
                           setState(() {
                             _summaryHeight =
-                                (_summaryHeight + expansion).clamp(80.0, screenH * 0.85);
+                                (_summaryHeight + expansion).clamp(80.0, maxSummaryH);
                           });
                           if (expansion > 0 && _listScroll.hasClients) {
                             final next = (_listScroll.offset + expansion)
@@ -1857,9 +1868,15 @@ class _BuilderPageState extends State<BuilderPage>
                               children: [
                                 Text('サマリー', style: Theme.of(context).textTheme.titleMedium),
                                 const SizedBox(height: 8),
-                                // ── 2カード: 処方+サマリー | 円グラフ ──
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(minHeight: 250),
+                                // ── 2カード: 処方+サマリー | 円グラフ（画面幅に応じてレスポンシブ）──
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                  final availW = constraints.maxWidth;
+                                  final scale = (availW / 380).clamp(0.72, 1.0);
+                                  final chartSize = (150 * scale).roundToDouble();
+                                  final labelFs = (12.5 * scale).clamp(10.0, 12.5);
+                                  return ConstrainedBox(
+                                  constraints: const BoxConstraints(minHeight: 200),
                                   child: IntrinsicHeight(
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1881,11 +1898,11 @@ class _BuilderPageState extends State<BuilderPage>
                                                   final w = current.weightKg;
                                                   final protPerKg = w > 0 ? aggregate.totalProteinG / w : 0.0;
                                                   final fatPerKg = w > 0 ? aggregate.totalFatG / w : 0.0;
-                                                  const ss = TextStyle(fontSize: 12.5);
+                                                    final ss = TextStyle(fontSize: labelFs);
                                                   return Column(
                                                     crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
-                                                      const Text('合計', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                                                      Text('合計', style: TextStyle(fontSize: labelFs, fontWeight: FontWeight.bold)),
                                                       const SizedBox(height: 2),
                                                       Text('IN ${aggregate.totalVolumeMl.round()}ml, 総カロリー ${aggregate.totalKcal.round()}kcal', style: ss),
                                                       Text('タンパク ${aggregate.totalProteinG.toStringAsFixed(1)}g/day (${protPerKg.toStringAsFixed(1)}g/kg)', style: ss),
@@ -1895,7 +1912,7 @@ class _BuilderPageState extends State<BuilderPage>
                                                   );
                                                 }),
                                                 const Divider(height: 14),
-                                                const Text('処方', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                                                Text('処方', style: TextStyle(fontSize: labelFs, fontWeight: FontWeight.bold)),
                                                 const SizedBox(height: 6),
                                                 if (isScratchMode) ...[
                                                   Text('${scratchInfusionRateMlPerHour.round()} ml/h', style: const TextStyle(fontSize: 12.5)),
@@ -1908,7 +1925,7 @@ class _BuilderPageState extends State<BuilderPage>
                                                     Text('${glucoseProduct.name}  $scratchGlucoseUnits', style: const TextStyle(fontSize: 12.5)),
                                                 ] else ...[
                                                   Builder(builder: (c) {
-                                                    const ts = TextStyle(fontSize: 12.5);
+                                                    final ts = TextStyle(fontSize: labelFs);
                                                     final tpnUnits = _rateCategoryUnits('TPN', _tpnRateMlPerHour);
                                                     final ppnUnits = _rateCategoryUnits('PPN', _ppnRateMlPerHour);
                                                     final tpnVolume = _rateCategoryDailyVolume('TPN', _tpnRateMlPerHour);
@@ -1985,9 +2002,12 @@ class _BuilderPageState extends State<BuilderPage>
                                             child: Column(
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                // ドーナツグラフ（中央に目標達成率）
-                                                SizedBox(
-                                                  height: 150,
+                                                // ドーナツグラフ: カードの縦中央に配置するため Expanded で空間を埋める
+                                                Expanded(
+                                                  child: Center(
+                                                  child: SizedBox(
+                                                  width: chartSize,
+                                                  height: chartSize,
                                                   child: Stack(
                                                     alignment: Alignment.center,
                                                     children: [
@@ -1995,47 +2015,49 @@ class _BuilderPageState extends State<BuilderPage>
                                                         PieChartData(
                                                           startDegreeOffset: 270,
                                                           sectionsSpace: 2,
-                                                          centerSpaceRadius: 28, // 穴を小さく
+                                                          centerSpaceRadius: (28 * scale).clamp(18, 28),
                                                           sections: [
                                                             PieChartSectionData(
                                                               value: aggregate.proteinPercent <= 0 ? 0 : aggregate.proteinKcal,
                                                               color: Colors.blue,
                                                               title: aggregate.proteinPercent < 5 ? '' : '${aggregate.proteinPercent.toStringAsFixed(0)}%',
-                                                              titleStyle: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
-                                                              titlePositionPercentageOffset: 0.47, // 3%中心寄せ
-                                                              radius: 52,
+                                                              titleStyle: TextStyle(fontSize: (12 * scale).clamp(9.0, 12.0), color: Colors.black, fontWeight: FontWeight.bold),
+                                                              titlePositionPercentageOffset: 0.47,
+                                                              radius: (52 * scale).clamp(34, 52),
                                                             ),
                                                             PieChartSectionData(
                                                               value: aggregate.fatPercent <= 0 ? 0 : aggregate.fatKcal,
                                                               color: Colors.orange,
                                                               title: aggregate.fatPercent < 5 ? '' : '${aggregate.fatPercent.toStringAsFixed(0)}%',
-                                                              titleStyle: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
+                                                              titleStyle: TextStyle(fontSize: (12 * scale).clamp(9.0, 12.0), color: Colors.black, fontWeight: FontWeight.bold),
                                                               titlePositionPercentageOffset: 0.47,
-                                                              radius: 52,
+                                                              radius: (52 * scale).clamp(34, 52),
                                                             ),
                                                             PieChartSectionData(
                                                               value: aggregate.carbPercent <= 0 ? 0 : aggregate.carbKcal,
                                                               color: Colors.yellow.shade700,
                                                               title: aggregate.carbPercent < 5 ? '' : '${aggregate.carbPercent.toStringAsFixed(0)}%',
-                                                              titleStyle: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
+                                                              titleStyle: TextStyle(fontSize: (12 * scale).clamp(9.0, 12.0), color: Colors.black, fontWeight: FontWeight.bold),
                                                               titlePositionPercentageOffset: 0.47,
-                                                              radius: 52,
+                                                              radius: (52 * scale).clamp(34, 52),
                                                             ),
                                                           ],
                                                         ),
                                                       ),
-                                                      // 中央: 目標達成率をドーナツの穴の中央に配置
+                                                      // 中央: 目標達成率
                                                       Center(
                                                         child: Text(
                                                           '${aggregate.targetPercent(targetKcal).toStringAsFixed(0)}%',
-                                                          style: const TextStyle(
-                                                              fontSize: 16,
+                                                          style: TextStyle(
+                                                              fontSize: (16 * scale).clamp(12.0, 16.0),
                                                               fontWeight: FontWeight.bold),
                                                         ),
                                                       ),
                                                     ],
-                                                  ),
-                                                ),
+                                                  ),   // Stack
+                                                  ),   // SizedBox
+                                                  ),   // Center
+                                                ),     // Expanded
                                                 // PFC凡例（ドーナツ下端から10px）
                                                 const SizedBox(height: 10),
                                                 Row(
@@ -2054,9 +2076,10 @@ class _BuilderPageState extends State<BuilderPage>
                                         ),
                                       ),
                                     ],
-                                  ),
-                                  ),
-                                ),
+                                  ),   // Row
+                                  ),   // IntrinsicHeight
+                                  );   // ConstrainedBox (return)
+                                  }), // LayoutBuilder
                               ],
                             ),
                           ),
@@ -2078,8 +2101,10 @@ class _BuilderPageState extends State<BuilderPage>
   }
 
   Widget _buildAutoChartPanel(double screenH) {
-    final maxPanel = screenH * 0.85;
-    final snapPoints = [_chartPanelMin, screenH * 0.5, maxPanel];
+    final _cqPad = MediaQuery.of(context).padding;
+    final maxPanel = (screenH - _cqPad.top - kToolbarHeight - _cqPad.bottom - 16.0)
+        .clamp(200.0, screenH);
+    final snapPoints = [_chartPanelMin, maxPanel * 0.5, maxPanel];
     if (_chartPanelHeight > maxPanel) _chartPanelHeight = maxPanel;
     return SafeArea(
       top: false,
@@ -2137,9 +2162,18 @@ class _BuilderPageState extends State<BuilderPage>
                       controller: _chartScroll,
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: _autoDesignKey.currentState
-                              ?._buildBarChartsForBuilder() ??
-                          const SizedBox.shrink(),
+                      child: Builder(builder: (ctx) {
+                        final chart = _autoDesignKey.currentState
+                            ?._buildBarChartsForBuilder();
+                        if (chart == null) {
+                          // 初回フレームで state が未初期化の場合、次フレームで再描画
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) setState(() {});
+                          });
+                          return const SizedBox.shrink();
+                        }
+                        return chart;
+                      }),
                     ),
                   ),
                 ),
@@ -2678,8 +2712,12 @@ class _NotePageState extends State<NotePage>
         ? _editableSections
         : _editableSections.where((s) => s.category == _selected).toList();
     final screenH = MediaQuery.of(context).size.height;
-    final maxPanel = screenH * 0.85;
-    final snapPoints = [_panelMin, screenH * 0.5, maxPanel];
+    final _nqPad = MediaQuery.of(context).padding;
+    // ノートページはHomePageのScaffold内（AppBar+NavigationBar(80)を除く）
+    const _navBarH = 80.0;
+    final maxPanel = (screenH - _nqPad.top - kToolbarHeight - _navBarH - _nqPad.bottom)
+        .clamp(200.0, screenH);
+    final snapPoints = [_panelMin, maxPanel * 0.5, maxPanel];
     if (_panelHeight > maxPanel) _panelHeight = maxPanel;
 
     return Column(
@@ -4632,14 +4670,14 @@ class _PfcLegendItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 14, height: 14,
+          width: 12, height: 12,
           decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(width: 3),
         Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
       ],
     );
