@@ -5027,61 +5027,97 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 設定を縦並び
-                  Row(
+                  // 設定を3行テーブル形式（ラベル列を固定幅で揃える）
+                  Table(
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                    columnWidths: const {
+                      0: IntrinsicColumnWidth(), // ラベル列（最長に合わせる）
+                      1: IntrinsicColumnWidth(), // 値列
+                    },
                     children: [
-                      const Text('栄養開始日: '),
-                      TextButton(
-                        style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                        onPressed: () async {
-                          final picked = await _quickPickDate(context, _startDate);
-                          if (picked != null) {
-                            setState(() => _startDate = picked);
-                            widget.onSettingsChanged?.call();
-                          }
-                        },
-                        child: Text(
-                            '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
-                            style: const TextStyle(fontSize: 14)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Text('full nutritionまで: '),
-                      DropdownButton<int>(
-                        value: _rampDays,
-                        isDense: true,
-                        items: List.generate(14, (i) => i + 1)
-                            .map((d) => DropdownMenuItem(value: d, child: Text('$d日')))
-                            .toList(),
-                        onChanged: (v) => setState(() {
-                          _rampDays = v ?? _rampDays;
-                          _enStartDay = _rampDays + 1;
-                          _rebuildDays();
-                        }),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Text('EN導入時期: Day'),
-                      DropdownButton<int>(
-                        value: _enStartDay.clamp(1, 21),
-                        isDense: true,
-                        items: List.generate(21, (i) => i + 1)
-                            .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
-                            .toList(),
-                        onChanged: (v) => setState(() {
-                          _enStartDay = v ?? _enStartDay;
-                          _rebuildDays();
-                        }),
-                      ),
+                      // 行1: 栄養開始日
+                      TableRow(children: [
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8, bottom: 6),
+                          child: Text('栄養開始日:',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                minimumSize: const Size(0, 0),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                            onPressed: () async {
+                              final picked = await _quickPickDate(context, _startDate);
+                              if (picked != null) {
+                                setState(() => _startDate = picked);
+                                widget.onSettingsChanged?.call();
+                              }
+                            },
+                            child: Text(
+                                '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
+                                style: const TextStyle(fontSize: 13)),
+                          ),
+                        ),
+                      ]),
+                      // 行2: full nutrition達成
+                      TableRow(children: [
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8, bottom: 6),
+                          child: Text('full nutrition達成:',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Day ', style: TextStyle(fontSize: 13)),
+                              DropdownButton<int>(
+                                value: _rampDays,
+                                isDense: true,
+                                items: List.generate(14, (i) => i + 1)
+                                    .map((d) => DropdownMenuItem(
+                                        value: d, child: Text('$d')))
+                                    .toList(),
+                                onChanged: (v) => setState(() {
+                                  _rampDays = v ?? _rampDays;
+                                  _enStartDay = _rampDays + 1;
+                                  _rebuildDays();
+                                }),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ]),
+                      // 行3: EN導入時期
+                      TableRow(children: [
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: Text('EN導入時期:',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Day ', style: TextStyle(fontSize: 13)),
+                            DropdownButton<int>(
+                              value: _enStartDay.clamp(1, 21),
+                              isDense: true,
+                              items: List.generate(21, (i) => i + 1)
+                                  .map((d) => DropdownMenuItem(
+                                      value: d, child: Text('$d')))
+                                  .toList(),
+                              onChanged: (v) => setState(() {
+                                _enStartDay = v ?? _enStartDay;
+                                _rebuildDays();
+                              }),
+                            ),
+                          ],
+                        ),
+                      ]),
                     ],
                   ),
                   const SizedBox(height: 4),
