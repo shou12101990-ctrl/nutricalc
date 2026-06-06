@@ -5470,17 +5470,43 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final maxIn = ins.fold<double>(1, (a, b) => a > b ? a : b) * 1.1;
     final maxAA = prots.fold<double>(1, (a, b) => a > b ? a : b) * 1.15;
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
+    // 特別日インデックス
+    final fastingIdx   = (widget.current.fastingDate != null) ? 0 : -1;
+    final nutritionIdx = preDays;
+    final fullIdx      = (preDays + _rampDays - 1).clamp(0, n - 1);
+    final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
+
     // 日付軸を上(topTitles)に配置 → BarChart の上端より上に日付が来る
     final topDateTitles = AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 22,
+        reservedSize: 34, // 日付(12px) + アイコン(10px) + 余白
         getTitlesWidget: (v, m) {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
-          return Text(dateLabel(i),
-              style: const TextStyle(
-                  fontSize: 12, letterSpacing: -0.5, height: 1.0));
+
+          // アイコンの優先順: 絶食日 > 栄養開始日 > Full > EN開始
+          Widget? icon;
+          if (i == fastingIdx) {
+            icon = Icon(Icons.no_meals, size: 10, color: Colors.red.shade400);
+          } else if (i == nutritionIdx) {
+            icon = Icon(Icons.restaurant, size: 10, color: Colors.blue.shade600);
+          } else if (i == fullIdx && i >= preDays) {
+            icon = Icon(Icons.check_circle, size: 10, color: Colors.green.shade700);
+          } else if (i == enIdx && i >= preDays && i != nutritionIdx && i != fullIdx) {
+            icon = Icon(Icons.water_drop, size: 10, color: Colors.yellow.shade700);
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Text(dateLabel(i),
+                  style: const TextStyle(
+                      fontSize: 12, letterSpacing: -0.5, height: 1.0)),
+              if (icon != null) icon else const SizedBox(height: 10),
+            ],
+          );
         },
       ),
     );
