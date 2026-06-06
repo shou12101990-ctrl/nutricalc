@@ -5163,33 +5163,74 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       1: IntrinsicColumnWidth(), // 値列
                     },
                     children: [
-                      // 行0: 絶食日（患者情報から表示のみ）
-                      if (widget.current.fastingDate != null)
-                        TableRow(children: [
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8, bottom: 6),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.no_meals, size: 13, color: Colors.red.shade400),
-                                const SizedBox(width: 4),
-                                Text('絶食日:',
-                                    style: TextStyle(fontSize: 13, color: Colors.red.shade400)),
-                              ],
-                            ),
+                      // 行0: 絶食日（常時表示・タップで設定）
+                      TableRow(children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8, bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.no_meals, size: 13, color: Colors.red.shade400),
+                              const SizedBox(width: 4),
+                              Text('絶食日:',
+                                  style: TextStyle(fontSize: 13, color: Colors.red.shade400)),
+                            ],
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Builder(builder: (_) {
-                              final p = DateTime.tryParse(widget.current.fastingDate!);
-                              final label = p == null
-                                  ? widget.current.fastingDate!
-                                  : '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}';
-                              return Text(label,
-                                  style: TextStyle(fontSize: 13, color: Colors.red.shade400));
-                            }),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    minimumSize: const Size(0, 0),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    foregroundColor: Colors.red.shade400),
+                                onPressed: () async {
+                                  final fd = widget.current.fastingDate;
+                                  final initial = fd != null
+                                      ? (DateTime.tryParse(fd) ?? _startDate)
+                                      : _startDate;
+                                  final picked = await _quickPickDate(context, initial);
+                                  if (picked != null) {
+                                    setState(() {
+                                      widget.current.fastingDate =
+                                          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                                    });
+                                    widget.state.persist();
+                                    widget.onSettingsChanged?.call();
+                                  }
+                                },
+                                child: Builder(builder: (_) {
+                                  final fd = widget.current.fastingDate;
+                                  final p = fd != null ? DateTime.tryParse(fd) : null;
+                                  final label = p != null
+                                      ? '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}'
+                                      : '未設定';
+                                  return Text(label,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: p != null
+                                              ? Colors.red.shade400
+                                              : Colors.grey));
+                                }),
+                              ),
+                              if (widget.current.fastingDate != null)
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() => widget.current.fastingDate = null);
+                                    widget.state.persist();
+                                    widget.onSettingsChanged?.call();
+                                  },
+                                  child: Icon(Icons.clear,
+                                      size: 14, color: Colors.grey.shade500),
+                                ),
+                            ],
                           ),
-                        ]),
+                        ),
+                      ]),
                       // 行1: 栄養開始日
                       TableRow(children: [
                         Padding(
