@@ -1190,7 +1190,23 @@
       "carb_g_or_kcal_basis": 37.5,
       "notes": "・アミノフリードをベースにvit Bを添加したもの.\n　三大栄養素＋vit B1\n・BCAA比率30%で E/N比 1.4としている (TEO基準)\n・8h毎に交換なので1000ml/dayいくときは\n　\"60ml/hで間4hあけて投与”とかにする.",
       "sheet_row": 74,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 35,
+          "K": 20,
+          "Cl": 35,
+          "Ca": 5,
+          "Mg": 5,
+          "P": 10
+        },
+        "trace": {
+          "Zn": 5
+        },
+        "vit": {
+          "B1": 1.92
+        }
+      }
     },
     {
       "id": "ppn_75",
@@ -1206,7 +1222,13 @@
       "carb_g_or_kcal_basis": 37.5,
       "notes": null,
       "sheet_row": 75,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 34,
+          "Cl": 34
+        }
+      }
     },
     {
       "id": "ppn_76",
@@ -1222,7 +1244,23 @@
       "carb_g_or_kcal_basis": 75.0,
       "notes": null,
       "sheet_row": 76,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 34.2,
+          "K": 20,
+          "Cl": 35.2,
+          "Ca": 5,
+          "Mg": 5.1,
+          "P": 10
+        },
+        "trace": {
+          "Zn": 4.9
+        },
+        "vit": {
+          "B1": 2
+        }
+      }
     },
     {
       "id": "ppn_77",
@@ -1238,7 +1276,20 @@
       "carb_g_or_kcal_basis": 37.5,
       "notes": "・ツインパルをベースにvit Bを添加したもの.\n　三大栄養素＋vit B1\n・BCAA比率30%で E/N比 1.4としている (TEO基準)",
       "sheet_row": 77,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 34.2,
+          "K": 20,
+          "Cl": 35.2,
+          "Ca": 5,
+          "Mg": 5.1,
+          "P": 10
+        },
+        "trace": {
+          "Zn": 4.8
+        }
+      }
     },
     {
       "id": "ppn_78",
@@ -1254,7 +1305,20 @@
       "carb_g_or_kcal_basis": 75.0,
       "notes": null,
       "sheet_row": 78,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 35,
+          "K": 20,
+          "Cl": 35,
+          "Ca": 5,
+          "Mg": 5,
+          "P": 10
+        },
+        "trace": {
+          "Zn": 5
+        }
+      }
     },
     {
       "id": "ppn_79",

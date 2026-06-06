@@ -3218,8 +3218,10 @@ class _MasterPageState extends State<MasterPage> {
     return '$v';
   }
 
-  /// 微量栄養素セクション (電解質/微量元素/ビタミン、1袋あたり)
-  Widget _microSection(Map<String, dynamic> micro) {
+  /// 微量栄養素セクション (電解質/微量元素/ビタミン)
+  /// perL=true: 濃度(per L)表記 [PPN] / false: 1袋あたり [TPN等]
+  Widget _microSection(Map<String, dynamic> micro, {bool perL = false}) {
+    final per = perL ? '/L' : '/袋';
     final rows = <Widget>[];
     Widget line(String head, String body, Color c) => Padding(
           padding: const EdgeInsets.only(bottom: 4),
@@ -3242,9 +3244,9 @@ class _MasterPageState extends State<MasterPage> {
       for (final k in ['Na', 'K', 'Cl', 'Ca', 'Mg']) {
         if (elec[k] != null) parts.add('$k ${_numFmt(elec[k])}');
       }
-      var body = parts.isEmpty ? '' : '${parts.join(' / ')} mEq/袋';
+      var body = parts.isEmpty ? '' : '${parts.join(' / ')} mEq$per';
       if (elec['P'] != null) {
-        body += '${body.isEmpty ? '' : ', '}P ${_numFmt(elec['P'])} mmol/袋';
+        body += '${body.isEmpty ? '' : ', '}P ${_numFmt(elec['P'])} mmol$per';
       }
       rows.add(line('電解質', body, Colors.indigo.shade700));
     }
@@ -3255,7 +3257,7 @@ class _MasterPageState extends State<MasterPage> {
       for (final k in ['Zn', 'Fe', 'Mn', 'Cu', 'I', 'Se']) {
         if (trace[k] != null) parts.add('$k ${_numFmt(trace[k])}');
       }
-      rows.add(line('微量元素', '${parts.join(' / ')} μmol/袋', Colors.deepOrange.shade700));
+      rows.add(line('微量元素', '${parts.join(' / ')} μmol$per', Colors.deepOrange.shade700));
     }
 
     final vit = (micro['vit'] as Map?)?.cast<String, dynamic>();
@@ -3279,7 +3281,7 @@ class _MasterPageState extends State<MasterPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('含有量 (1袋あたり)',
+          Text(perL ? '含有量 (mEq/L = 1L中の濃度)' : '含有量 (1袋あたり)',
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
@@ -3369,7 +3371,7 @@ class _MasterPageState extends State<MasterPage> {
           // 微量栄養素 (電解質/微量元素/ビタミン) — micro データがある製剤のみ
           if (p.micro != null) ...[
             const SizedBox(height: 10),
-            _microSection(p.micro!),
+            _microSection(p.micro!, perL: p.category == 'PPN'),
           ],
           const SizedBox(height: 8),
           // コメントと編集ボタン
