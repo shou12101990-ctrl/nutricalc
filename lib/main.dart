@@ -5534,7 +5534,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final bottomDateTitles = AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 38, // 日付(12px) + アイコン(14px) + 余白
+        reservedSize: 50, // 隙間(8px) + 日付(12px) + アイコン(14px) + 余白
         getTitlesWidget: (v, m) {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
@@ -5572,17 +5572,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
+              const SizedBox(height: 8), // バーと日付の間隔
               Text(dateLabel(i),
                   style: const TextStyle(
                       fontSize: 12, letterSpacing: -0.5, height: 1.0)),
-              if (icon != null) icon else const SizedBox(height: 10),
+              if (icon != null) icon else const SizedBox(height: 14),
             ],
           );
         },
       ),
     );
 
-    // 共通の透明な線グラフビルダー（独立スケール・minY=0で軸より下に出ない）
+    // 共通の透明な線グラフビルダー
+    // bottomTitles に BarChart と同じ reservedSize を指定して描画エリアを合わせる
+    const lineBottom = AxisTitles(
+        sideTitles: SideTitles(showTitles: false, reservedSize: 50));
     LineChart lineLayer(List<double> ys, double maxY, Color color) =>
         LineChart(LineChartData(
           minX: -0.5,
@@ -5602,14 +5606,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             ),
           ],
           titlesData: const FlTitlesData(
-            bottomTitles: hidden,
+            bottomTitles: lineBottom, // BarChartと描画エリアを揃える
             leftTitles: hidden,
             topTitles: hidden,
             rightTitles: hidden,
           ),
           gridData: const FlGridData(show: false),
           borderData: FlBorderData(show: false),
-          clipData: const FlClipData.all(), // minY=0より下にはみ出さない
+          clipData: const FlClipData.all(),
           lineTouchData: const LineTouchData(enabled: false),
         ));
 
@@ -5620,20 +5624,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('栄養の推移', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 14,
-              runSpacing: 4,
-              children: [
-                _LegendChip(
-                    color: Colors.yellow.shade700, label: 'EN(kcal)', line: false),
-                _LegendChip(
-                    color: Colors.green.shade300, label: 'PN(kcal)', line: false),
-                _LegendChip(color: Colors.purple.shade200, label: 'IN(ml)', line: true),
-                _LegendChip(color: Colors.pink.shade300, label: 'AA(g)', line: true),
-              ],
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             TapRegion(
               // チャート外タップでフローターを消去
               onTapOutside: (_) {
@@ -5725,7 +5716,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     final isPinned = _selectedBarIdx >= 0;
                     // 棒の高さ比率からY位置を推定
                     const chartH = 240.0;
-                    const bottomReserved = 38.0;
+                    const bottomReserved = 50.0;
                     final drawH = chartH - bottomReserved;
                     final barRatio = maxKcal > 0
                         ? (plans[idx].totalKcal / maxKcal).clamp(0.0, 1.0)
@@ -5813,10 +5804,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         ]),
                       );
                       return Positioned(
-                        left: 4,
-                        top: 4, // 上部余白
-                        child: SizedBox(
-                          width: zoneW,
+                        left: 10,
+                        top: 0,
+                        bottom: 50, // BarChartのbottomReservedと合わせる
+                        width: zoneW,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
