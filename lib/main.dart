@@ -3111,16 +3111,23 @@ class _MasterPageState extends State<MasterPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Center(
-          child: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'EN', label: Text('EN')),
-              ButtonSegment(value: 'TPN', label: Text('TPN')),
-              ButtonSegment(value: 'PPN', label: Text('PPN')),
-            ],
-            selected: {category},
-            onSelectionChanged: (newSel) =>
-                setState(() => category = newSel.first),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Center(
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'EN', label: Text('EN')),
+                ButtonSegment(value: 'TPN', label: Text('TPN')),
+                ButtonSegment(value: 'PPN', label: Text('PPN')),
+                ButtonSegment(value: '電解質', label: Text('電解質')),
+                ButtonSegment(value: '微量元素', label: Text('微量元素')),
+                ButtonSegment(value: 'ビタミン', label: Text('ビタミン')),
+              ],
+              selected: {category},
+              showSelectedIcon: false,
+              onSelectionChanged: (newSel) =>
+                  setState(() => category = newSel.first),
+            ),
           ),
         ),
         const SizedBox(height: 8),
