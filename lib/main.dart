@@ -3204,6 +3204,93 @@ class _MasterPageState extends State<MasterPage> {
     );
   }
 
+  // ビタミンの単位 (1袋あたり)
+  static const _vitUnits = {
+    'B1': 'mg', 'B2': 'mg', 'B6': 'mg', 'B12': 'μg',
+    'ナイアシン': 'mg', 'パントテン酸': 'mg', '葉酸': 'mg', 'ビオチン': 'μg',
+    'C': 'mg', 'A': 'IU', 'D': 'μg', 'E': 'mg', 'K': 'mg',
+  };
+
+  String _numFmt(dynamic v) {
+    if (v is num) {
+      return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+    }
+    return '$v';
+  }
+
+  /// 微量栄養素セクション (電解質/微量元素/ビタミン、1袋あたり)
+  Widget _microSection(Map<String, dynamic> micro) {
+    final rows = <Widget>[];
+    Widget line(String head, String body, Color c) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 12.5, color: Colors.black87, height: 1.4),
+              children: [
+                TextSpan(
+                    text: '$head  ',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: c)),
+                TextSpan(text: body),
+              ],
+            ),
+          ),
+        );
+
+    final elec = (micro['elec'] as Map?)?.cast<String, dynamic>();
+    if (elec != null && elec.isNotEmpty) {
+      final parts = <String>[];
+      for (final k in ['Na', 'K', 'Cl', 'Ca', 'Mg']) {
+        if (elec[k] != null) parts.add('$k ${_numFmt(elec[k])}');
+      }
+      var body = parts.isEmpty ? '' : '${parts.join(' / ')} mEq';
+      if (elec['P'] != null) {
+        body += '${body.isEmpty ? '' : ', '}P ${_numFmt(elec['P'])} mmol';
+      }
+      rows.add(line('電解質', body, Colors.indigo.shade700));
+    }
+
+    final trace = (micro['trace'] as Map?)?.cast<String, dynamic>();
+    if (trace != null && trace.isNotEmpty) {
+      final parts = <String>[];
+      for (final k in ['Zn', 'Fe', 'Mn', 'Cu', 'I', 'Se']) {
+        if (trace[k] != null) parts.add('$k ${_numFmt(trace[k])}');
+      }
+      rows.add(line('微量元素', '${parts.join(' / ')} μmol', Colors.deepOrange.shade700));
+    }
+
+    final vit = (micro['vit'] as Map?)?.cast<String, dynamic>();
+    if (vit != null && vit.isNotEmpty) {
+      final parts = <String>[];
+      vit.forEach((k, v) {
+        final u = _vitUnits[k] ?? '';
+        parts.add('$k ${_numFmt(v)}$u');
+      });
+      rows.add(line('ビタミン', parts.join(' / '), Colors.purple.shade700));
+    }
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('含有量 (1袋あたり)',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueGrey.shade400)),
+          const SizedBox(height: 6),
+          ...rows,
+        ],
+      ),
+    );
+  }
+
   Widget _productCard(Product p) {
     final isAdopted = widget.state.isAdopted(p.id);
     final typeColor =
@@ -3279,6 +3366,11 @@ class _MasterPageState extends State<MasterPage> {
                       : '${p.carbBase!.toStringAsFixed(p.carbBase! % 1 == 0 ? 0 : 1)}g'),
             ],
           ),
+          // 微量栄養素 (電解質/微量元素/ビタミン) — micro データがある製剤のみ
+          if (p.micro != null) ...[
+            const SizedBox(height: 10),
+            _microSection(p.micro!),
+          ],
           const SizedBox(height: 8),
           // コメントと編集ボタン
           Row(
@@ -3558,6 +3650,7 @@ class Product {
     required this.fatBase,
     required this.carbBase,
     required this.notes,
+    this.micro,
   });
 
   final String id;
@@ -3573,6 +3666,9 @@ class Product {
   double? fatBase;
   double? carbBase;
   String? notes;
+  // 微量栄養素(1袋あたり): {elec:{Na,K,Cl,Ca,Mg,P}, trace:{Zn,Fe,Mn,Cu,I,Se}, vit:{...}}
+  // elec: Na/K/Cl/Ca/Mg=mEq, P=mmol / trace=μmol / vit=各単位
+  Map<String, dynamic>? micro;
 
   /// カテゴリ表示名（EN_AUXは「EN補助」と表示）
   String get categoryLabel {
@@ -3605,6 +3701,7 @@ class Product {
       fatBase: toDouble(map['fat_g_or_kcal_basis']),
       carbBase: toDouble(map['carb_g_or_kcal_basis']),
       notes: map['notes'] as String?,
+      micro: (map['micro'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
@@ -3622,6 +3719,7 @@ class Product {
         'fat_g_or_kcal_basis': fatBase,
         'carb_g_or_kcal_basis': carbBase,
         'notes': notes,
+        'micro': micro,
       };
 
   String get volumeMlString => volumeMl == null
