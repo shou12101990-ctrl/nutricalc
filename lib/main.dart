@@ -1232,13 +1232,16 @@ class _BuilderPageState extends State<BuilderPage>
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.remove_circle_outline, size: 18),
+            icon: const Icon(Icons.remove_circle_outline, size: 20),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
             visualDensity: VisualDensity.compact,
+            color: Colors.red.shade400,
             onPressed:
                 cnt > 0 ? () => setState(() => _zeroAdditives.remove(p.name)) : null,
           ),
           SizedBox(
-              width: 16,
+              width: 18,
               child: Text('$cnt',
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -1246,8 +1249,11 @@ class _BuilderPageState extends State<BuilderPage>
                       fontWeight: FontWeight.bold,
                       color: cnt > 0 ? Colors.blue.shade700 : Colors.grey))),
           IconButton(
-            icon: const Icon(Icons.add_circle, size: 18),
+            icon: const Icon(Icons.add_circle, size: 20),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
             visualDensity: VisualDensity.compact,
+            color: Colors.blue.shade600,
             onPressed: () => setState(() => _zeroAdditives.add(p.name)),
           ),
         ]),
