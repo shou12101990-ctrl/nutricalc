@@ -5342,15 +5342,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
-                                color: Colors.yellow.shade50,
+                                color: Colors.amber.shade200,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                    color: Colors.yellow.shade600, width: 0.8),
+                                    color: Colors.amber.shade600, width: 0.8),
                               ),
                               child: Text(_doseLabel(_dayEnDose[i]),
                                   style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.yellow.shade800)),
+                                      color: Colors.brown.shade700)),
                             ),
                           ],
                           const Spacer(),
@@ -5537,7 +5537,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               ],
             ),
             const SizedBox(height: 10),
-            SizedBox(
+            TapRegion(
+              // チャート外タップでフローターを消去
+              onTapOutside: (_) {
+                if (_selectedBarIdx >= 0) {
+                  setState(() { _selectedBarIdx = -1; _hoveredBarIdx = -1; });
+                }
+              },
+              child: SizedBox(
               height: 240,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -5550,12 +5557,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   final idx = (details.localPosition.dx / barWidth)
                       .floor()
                       .clamp(0, n - 1);
-                  setState(() {
-                    final newIdx = (_selectedBarIdx == idx) ? -1 : idx;
-                    _selectedBarIdx = newIdx;
-                    // 解除時はホバーも消す（web では hover が残りフローターが再表示されるのを防ぐ）
-                    if (newIdx == -1) _hoveredBarIdx = -1;
-                  });
+                  // 別のバーなら切り替え、同じバーなら何もしない（外タップで消去）
+                  setState(() { _selectedBarIdx = idx; });
                 },
                 child: MouseRegion(
                 onHover: (e) {
@@ -5644,11 +5647,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     return Positioned(
                       left: tipX,
                       top: barTopY.clamp(0.0, chartH - 80),
-                      child: GestureDetector(
-                        // フローター自体のタップを吸収してチャートの onTapDown に伝搬させない
-                        behavior: HitTestBehavior.opaque,
-                        onTapDown: (_) {},
-                        child: Container(
+                      child: Container(
                         width: tipW,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 9, vertical: 6),
@@ -5673,25 +5672,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(mmdd,
-                                    style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold)),
-                                if (isPinned)
-                                  GestureDetector(
-                                    onTap: () => setState(() {
-                                      _selectedBarIdx = -1;
-                                      _hoveredBarIdx = -1;
-                                    }),
-                                    child: Icon(Icons.close,
-                                        size: 13,
-                                        color: Colors.grey.shade500),
-                                  ),
-                              ],
-                            ),
+                            Text(mmdd,
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
                             if (plan.items.isEmpty)
                               const Text('栄養開始前',
                                   style: TextStyle(
@@ -5707,7 +5691,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             ],
                           ],
                         ),
-                        ),
                       ),
                     );
                   }),
@@ -5715,7 +5698,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 ), // Stack
               ), // MouseRegion
               ), // GestureDetector
-            ),
+              ), // SizedBox
+            ), // TapRegion
           ],
         ),
       ),
