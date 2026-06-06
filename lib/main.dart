@@ -5041,7 +5041,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final color = switch (mode) {
       'TPN' => Colors.blue,
       'TPN+EN' => Colors.teal,
-      'EN' => Colors.green,
+      'EN' => Colors.yellow.shade700,
       _ => Colors.grey,
     };
     return Container(
@@ -5192,8 +5192,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       TableRow(children: [
                         Padding(
                           padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Text('栄養開始日:',
-                              style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.restaurant, size: 13, color: Colors.blue.shade600),
+                            const SizedBox(width: 4),
+                            Text('栄養開始日:',
+                                style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
+                          ]),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -5218,10 +5222,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]),
                       // 行2: full nutrition達成
                       TableRow(children: [
-                        const Padding(
-                          padding: EdgeInsets.only(right: 8, bottom: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8, bottom: 6),
                           child: Text('full nutrition達成:',
-                              style: TextStyle(fontSize: 13)),
+                              style: TextStyle(fontSize: 13, color: Colors.green.shade800)),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -5336,15 +5340,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
-                                color: Colors.pink.shade50,
+                                color: Colors.yellow.shade50,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                    color: Colors.pink.shade200, width: 0.8),
+                                    color: Colors.yellow.shade600, width: 0.8),
                               ),
                               child: Text(_doseLabel(_dayEnDose[i]),
                                   style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.pink.shade700)),
+                                      color: Colors.yellow.shade800)),
                             ),
                           ],
                           const Spacer(),
