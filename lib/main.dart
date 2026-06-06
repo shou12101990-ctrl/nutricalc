@@ -3208,7 +3208,7 @@ class _MasterPageState extends State<MasterPage> {
   static const _vitUnits = {
     'B1': 'mg', 'B2': 'mg', 'B6': 'mg', 'B12': 'μg',
     'ナイアシン': 'mg', 'パントテン酸': 'mg', '葉酸': 'mg', 'ビオチン': 'μg',
-    'C': 'mg', 'A': 'IU', 'D': 'μg', 'E': 'mg', 'K': 'mg',
+    'C': 'mg', 'A': 'VA単位', 'D': 'μg', 'E': 'mg', 'K1': 'mg',
   };
 
   String _numFmt(dynamic v) {
@@ -3242,9 +3242,9 @@ class _MasterPageState extends State<MasterPage> {
       for (final k in ['Na', 'K', 'Cl', 'Ca', 'Mg']) {
         if (elec[k] != null) parts.add('$k ${_numFmt(elec[k])}');
       }
-      var body = parts.isEmpty ? '' : '${parts.join(' / ')} mEq';
+      var body = parts.isEmpty ? '' : '${parts.join(' / ')} mEq/袋';
       if (elec['P'] != null) {
-        body += '${body.isEmpty ? '' : ', '}P ${_numFmt(elec['P'])} mmol';
+        body += '${body.isEmpty ? '' : ', '}P ${_numFmt(elec['P'])} mmol/袋';
       }
       rows.add(line('電解質', body, Colors.indigo.shade700));
     }
@@ -3255,7 +3255,7 @@ class _MasterPageState extends State<MasterPage> {
       for (final k in ['Zn', 'Fe', 'Mn', 'Cu', 'I', 'Se']) {
         if (trace[k] != null) parts.add('$k ${_numFmt(trace[k])}');
       }
-      rows.add(line('微量元素', '${parts.join(' / ')} μmol', Colors.deepOrange.shade700));
+      rows.add(line('微量元素', '${parts.join(' / ')} μmol/袋', Colors.deepOrange.shade700));
     }
 
     final vit = (micro['vit'] as Map?)?.cast<String, dynamic>();
