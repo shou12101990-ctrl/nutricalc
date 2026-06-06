@@ -5159,14 +5159,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               style: const TextStyle(
                                   fontSize: 12, color: Colors.grey)),
                           const SizedBox(width: 4),
-                          // 目標% or "full nutrition"
+                          // 目標% or "full nutrition"（常にgreen）
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 1),
                             decoration: BoxDecoration(
-                              color: pct >= 100
-                                  ? Colors.green.shade100
-                                  : Colors.grey.shade100,
+                              color: Colors.green.shade100,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -5175,9 +5173,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                   : '目標 ${pct.toStringAsFixed(0)}%',
                               style: TextStyle(
                                   fontSize: 11,
-                                  color: pct >= 100
-                                      ? Colors.green.shade800
-                                      : Colors.grey.shade700),
+                                  color: Colors.green.shade800),
                             ),
                           ),
                           if (showEn) ...[
@@ -5195,26 +5191,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                   style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.pink.shade700)),
-                            ),
-                          ],
-                          // 対目標比チップ（緑）
-                          if (plan.items.isNotEmpty && dayKcal > 0) ...[
-                            const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: Colors.green.shade300, width: 0.8),
-                              ),
-                              child: Text(
-                                '対目標 ${(plan.totalKcal / dayKcal * 100).round()}%',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.green.shade800),
-                              ),
                             ),
                           ],
                           const Spacer(),
