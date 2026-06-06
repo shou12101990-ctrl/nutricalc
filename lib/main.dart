@@ -5932,7 +5932,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       ];
       final bool hasEvent = flags.any((f) => f);
       final int evCount = flags.where((f) => f).length;
-      final double fs = evCount >= 2 ? 10.0 : 12.5; // boxラベル文字/アイコンサイズ
+      final double fs = evCount >= 2 ? 12.0 : 15.0; // boxラベル文字/アイコンサイズ
 
       // 横幅が詰まっているとき(セル幅が狭い)は、日付ラベルを
       // 「イベント日」または「5の倍数の日」のみに間引く
@@ -6009,7 +6009,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     fontSize: 14, letterSpacing: -0.5, height: 1.0)))
           else
             const SizedBox(height: 14),
-          if (icon != null) icon else const SizedBox(height: 16),
+          const SizedBox(height: 8), // 日付とスタンプの間隔
+          if (icon != null) icon else const SizedBox(height: 20),
         ],
       );
     }
@@ -6086,7 +6087,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 }
               },
               child: SizedBox(
-              height: 240,
+              height: 250,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (details) {
@@ -6112,7 +6113,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 child: LayoutBuilder(builder: (_, _lbc) {
                   _cachedChartW = _lbc.maxWidth;
                   const plotH = 184.0; // プロット領域(棒・線)の高さ
-                  const axisH = 56.0;  // 日付＋アイコン軸の高さ
+                  const axisH = 66.0;  // 日付＋アイコン軸の高さ
                   return Column(
                     children: [
                       // === プロット領域: 棒グラフ・線グラフを同一184px領域に重ねる ===
