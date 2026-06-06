@@ -3824,7 +3824,7 @@ class NutritionCalculator {
   }
 
   /// 自動設計。
-  /// ルール: カロリーは目標の80〜100%(オーバー不可)、タンパクは90〜100%(オーバー不可)。
+  /// ルール: カロリーは目標の90〜100%(オーバー不可)、タンパクは90〜100%(オーバー不可)。
   /// mode: 'EN'(EN最大2剤+PPN補正) / 'TPN'(TPN単剤+PPN補正) / 'BOTH'(両案) / 'ZERO'(静注ブレンド)
   static List<DesignPlan> autoDesign({
     required String mode,
@@ -3896,7 +3896,7 @@ class NutritionCalculator {
   static DesignPlan? _designWithBase(List<Product> bases, List<Product> ppns,
       double targetKcal, double targetProtein, String label,
       {required int maxBase}) {
-    final minKcal = targetKcal * 0.8;
+    final minKcal = targetKcal * 0.9;
     List<MapEntry<Product, int>>? best;
     double bestIn = double.infinity;
 
@@ -3908,7 +3908,7 @@ class NutritionCalculator {
         inMl += (e.key.volumeMl ?? 0) * e.value;
       }
       if (kcal > targetKcal) return; // カロリーオーバー不可
-      if (kcal < minKcal) return; // -20%未満は不採用
+      if (kcal < minKcal) return; // -10%未満は不採用
       if (prot > targetProtein) return; // タンパクオーバー不可
       // カロリー条件を満たす中で IN(投与量) 最小を採用
       if (inMl < bestIn) {
@@ -4142,7 +4142,7 @@ class NutritionCalculator {
           proteinG: (p.aminoAcidG ?? 0) * vol / (p.volumeMl ?? 1));
     }
 
-    // 評価(under feeding基準): kcalは当日目標の80-100%、タンパク90-100%、
+    // 評価(under feeding基準): kcalは当日目標の90-100%、タンパク90-100%、
     //   over nutritionは厳禁、INは~1000ml/dayを確保したい。スコア小が良。
     //   planEnKcal: ENアイテム由来kcal（候補ループ側で計算して渡す）
     double scoreOf(DesignPlan plan, double planEnKcal) {
@@ -4153,10 +4153,10 @@ class NutritionCalculator {
         final r = k / tK;
         if (r > 1.0) {
           s += (r - 1.0) * 100; // over厳禁
-        } else if (r < 0.8) {
-          s += (0.8 - r) * 50; // 80%未満の下振れ
+        } else if (r < 0.9) {
+          s += (0.9 - r) * 50; // 90%未満の下振れ
         } else {
-          s += (1.0 - r) * 5; // 80-100%窓内は目標寄りを微優先
+          s += (1.0 - r) * 5; // 90-100%窓内は目標寄りを微優先
         }
       }
       if (tP > 0) {
