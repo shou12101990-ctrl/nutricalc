@@ -820,7 +820,7 @@ class _BuilderPageState extends State<BuilderPage>
   int _builderTabIndex = 0;
   final targetKcalController = TextEditingController(text: '1500');
   final npcnController = TextEditingController(text: '125');
-  final lipidController = TextEditingController(text: '0.4');
+  double _lipidGPerKg = 0.4;
   String glucoseSource = '70% グルコース';
   String lipidSource = 'イントラリポス20%';
   final Set<String> expandedProducts = {};
@@ -1070,7 +1070,7 @@ class _BuilderPageState extends State<BuilderPage>
     final zeroMenu = NutritionCalculator.zeroMenuSuggestion(
       targetKcal: double.tryParse(targetKcalController.text) ?? targetKcal,
       npcNRatio: double.tryParse(npcnController.text) ?? 125,
-      lipidGramPerKg: double.tryParse(lipidController.text) ?? 0.4,
+      lipidGramPerKg: _lipidGPerKg,
       weightKg: current.weightKg,
       glucoseProduct: widget.state.catalog.byName(glucoseSource),
       aminoProduct: widget.state.catalog.byName('アミパレン'),
@@ -1374,16 +1374,23 @@ class _BuilderPageState extends State<BuilderPage>
                                         ),
                                       ),
                                       const SizedBox(height: 6),
-                                      TextField(
-                                        controller: lipidController,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        decoration: InputDecoration(
+                                      DropdownButtonFormField<double>(
+                                        value: _lipidGPerKg,
+                                        isExpanded: true,
+                                        decoration: const InputDecoration(
                                           labelText: '脂質量',
-                                          suffixText: lipidController.text.isNotEmpty ? 'g/kg/day' : null,
+                                          suffixText: 'g/kg/day',
                                           isDense: true,
-                                          contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                                          contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                                         ),
-                                        onChanged: (_) => setState(() {}),
+                                        items: [
+                                          for (int i = 0; i <= 10; i++)
+                                            DropdownMenuItem(
+                                              value: i / 10.0,
+                                              child: Text((i / 10.0).toStringAsFixed(1)),
+                                            ),
+                                        ],
+                                        onChanged: (v) => setState(() { _lipidGPerKg = v ?? _lipidGPerKg; }),
                                       ),
                                       const SizedBox(height: 8),
                                       DropdownButtonFormField<String>(
@@ -1416,7 +1423,7 @@ class _BuilderPageState extends State<BuilderPage>
                                             current.zeroMenuConfig = ZeroMenuConfig(
                                               targetKcal: double.tryParse(targetKcalController.text) ?? targetKcal,
                                               npcNRatio: double.tryParse(npcnController.text) ?? 125,
-                                              lipidGramPerKg: double.tryParse(lipidController.text) ?? 0.4,
+                                              lipidGramPerKg: _lipidGPerKg,
                                               glucoseProductName: glucoseSource,
                                             );
                                             widget.state.persist();
