@@ -6,6 +6,54 @@ import 'package:flutter/services.dart';
 
 import 'local_store.dart';
 
+/// AF / SF ドロップダウン用の説明ラベル（値の toStringAsFixed(1) をキーにする）
+const _afHints = {
+  '1.0': '寝たきり体動なし',
+  '1.1': '寝たきり体動あり',
+  '1.2': '車椅子',
+  '1.3': '歩行',
+  '1.4': '歩行あり',
+  '1.5': '積極的リハ',
+  '1.6': '積極的リハ',
+};
+const _sfHints = {
+  '0.9': '',
+  '1.0': 'ストレスなし',
+  '1.1': '手術 / 癌',
+  '1.2': '手術 / 癌 / 感染症',
+  '1.3': '手術 / 癌 / 感染症',
+  '1.4': '感染症 / 発熱',
+  '1.5': '感染症 / 発熱',
+  '1.6': '敗血症',
+  '1.7': '手術',
+  '1.8': '手術',
+  '1.9': '熱傷',
+  '2.0': '熱傷',
+  '2.1': '熱傷',
+};
+
+/// AF/SF DropdownMenuItem 生成ヘルパー (数値 + 薄い説明ラベル)
+DropdownMenuItem<double> _factorItem(double v, Map<String, String> hints) {
+  final key = v.toStringAsFixed(1);
+  final hint = hints[key] ?? '';
+  return DropdownMenuItem<double>(
+    value: double.parse(key),
+    child: Row(
+      children: [
+        Text(key, style: const TextStyle(fontSize: 14)),
+        if (hint.isNotEmpty) ...[
+          const SizedBox(width: 10),
+          Text(hint,
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.normal)),
+        ],
+      ],
+    ),
+  );
+}
+
 /// 日付を1タップで選択して即閉じるカレンダーダイアログ
 Future<DateTime?> _quickPickDate(BuildContext context, DateTime initial) {
   return showDialog<DateTime>(
@@ -332,21 +380,23 @@ class CasesPage extends StatelessWidget {
                 DropdownButtonFormField<double>(
                   initialValue: activity,
                   decoration: const InputDecoration(labelText: '活動係数'),
-                  items: List.generate(7, (i) => 1.0 + i * 0.1)
-                      .map((v) => DropdownMenuItem(
-                          value: double.parse(v.toStringAsFixed(1)),
-                          child: Text(v.toStringAsFixed(1))))
-                      .toList(),
+                  items: [for (var i = 0; i < 7; i++) _factorItem(1.0 + i * 0.1, _afHints)],
+                  selectedItemBuilder: (context) => [
+                    for (var i = 0; i < 7; i++)
+                      Align(alignment: Alignment.centerLeft,
+                            child: Text((1.0 + i * 0.1).toStringAsFixed(1))),
+                  ],
                   onChanged: (v) => setLocal(() => activity = v ?? activity),
                 ),
                 DropdownButtonFormField<double>(
                   initialValue: stress,
                   decoration: const InputDecoration(labelText: '侵害係数'),
-                  items: List.generate(13, (i) => 0.9 + i * 0.1)
-                      .map((v) => DropdownMenuItem(
-                          value: double.parse(v.toStringAsFixed(1)),
-                          child: Text(v.toStringAsFixed(1))))
-                      .toList(),
+                  items: [for (var i = 0; i < 13; i++) _factorItem(0.9 + i * 0.1, _sfHints)],
+                  selectedItemBuilder: (context) => [
+                    for (var i = 0; i < 13; i++)
+                      Align(alignment: Alignment.centerLeft,
+                            child: Text((0.9 + i * 0.1).toStringAsFixed(1))),
+                  ],
                   onChanged: (v) => setLocal(() => stress = v ?? stress),
                 ),
                 SliderWithLabel(
@@ -2207,11 +2257,12 @@ class _BuilderPageState extends State<BuilderPage>
                 DropdownButtonFormField<double>(
                   initialValue: activity,
                   decoration: const InputDecoration(labelText: '活動係数 (AF)'),
-                  items: [for (var i = 0; i < 7; i++) 1.0 + i * 0.1]
-                      .map((v) => DropdownMenuItem(
-                          value: double.parse(v.toStringAsFixed(1)),
-                          child: Text(v.toStringAsFixed(1))))
-                      .toList(),
+                  items: [for (var i = 0; i < 7; i++) _factorItem(1.0 + i * 0.1, _afHints)],
+                  selectedItemBuilder: (context) => [
+                    for (var i = 0; i < 7; i++)
+                      Align(alignment: Alignment.centerLeft,
+                            child: Text((1.0 + i * 0.1).toStringAsFixed(1))),
+                  ],
                   onChanged: (v) => setLocal(() => activity = v ?? activity),
                 ),
                 Container(
@@ -2230,11 +2281,12 @@ class _BuilderPageState extends State<BuilderPage>
                 DropdownButtonFormField<double>(
                   initialValue: stress,
                   decoration: const InputDecoration(labelText: '侵害係数 (SF)'),
-                  items: [for (var i = 0; i < 13; i++) 0.9 + i * 0.1]
-                      .map((v) => DropdownMenuItem(
-                          value: double.parse(v.toStringAsFixed(1)),
-                          child: Text(v.toStringAsFixed(1))))
-                      .toList(),
+                  items: [for (var i = 0; i < 13; i++) _factorItem(0.9 + i * 0.1, _sfHints)],
+                  selectedItemBuilder: (context) => [
+                    for (var i = 0; i < 13; i++)
+                      Align(alignment: Alignment.centerLeft,
+                            child: Text((0.9 + i * 0.1).toStringAsFixed(1))),
+                  ],
                   onChanged: (v) => setLocal(() => stress = v ?? stress),
                 ),
                 Container(
