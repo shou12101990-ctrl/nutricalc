@@ -1843,12 +1843,13 @@ class _BuilderPageState extends State<BuilderPage>
                           }
                         },
                         onVerticalDragEnd: (_) {
-                          final target = snapPoints.reduce((a, b) =>
+                          final nearest = snapPoints.reduce((a, b) =>
                               (a - _summaryHeight).abs() <
                                       (b - _summaryHeight).abs()
                                   ? a
                                   : b);
-                          _snapTo(target);
+                          // 上端(最大)まで引っ張ったら下端(最小)に戻す
+                          _snapTo(nearest >= maxSummaryH ? 80.0 : nearest);
                         },
                       child: Container(
                         color: Colors.transparent,
@@ -2142,12 +2143,13 @@ class _BuilderPageState extends State<BuilderPage>
                     });
                   },
                   onVerticalDragEnd: (_) {
-                    final target = snapPoints.reduce((a, b) =>
+                    final nearest = snapPoints.reduce((a, b) =>
                         (a - _chartPanelHeight).abs() <
                                 (b - _chartPanelHeight).abs()
                             ? a
                             : b);
-                    _chartSnapTo(target);
+                    // 上端(最大)まで引っ張ったら下端(最小)に戻す
+                    _chartSnapTo(nearest >= maxPanel ? _chartPanelMin : nearest);
                   },
                   child: Container(
                     color: Colors.transparent,
@@ -2816,12 +2818,13 @@ class _NotePageState extends State<NotePage>
                         });
                       },
                       onVerticalDragEnd: (_) {
-                        final target = snapPoints.reduce((a, b) =>
+                        final nearest = snapPoints.reduce((a, b) =>
                             (a - _panelHeight).abs() <
                                     (b - _panelHeight).abs()
                                 ? a
                                 : b);
-                        _snapTo(target);
+                        // 上端(最大)まで引っ張ったら下端(最小)に戻す
+                        _snapTo(nearest >= maxPanel ? _panelMin : nearest);
                       },
                       child: Container(
                         color: Colors.transparent,
