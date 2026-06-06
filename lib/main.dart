@@ -3208,7 +3208,7 @@ class _MasterPageState extends State<MasterPage> {
   static const _vitUnits = {
     'B1': 'mg', 'B2': 'mg', 'B6': 'mg', 'B12': 'μg',
     'ナイアシン': 'mg', 'パントテン酸': 'mg', '葉酸': 'mg', 'ビオチン': 'μg',
-    'C': 'mg', 'A': 'VA単位', 'D': 'μg', 'E': 'mg', 'K1': 'mg',
+    'C': 'mg', 'A': 'VA単位', 'D': 'μg', 'E': 'mg', 'K': 'mg',
   };
 
   String _numFmt(dynamic v) {
