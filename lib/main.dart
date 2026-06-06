@@ -5544,11 +5544,25 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         i == enIdx && i >= preDays,
         i == fullIdx && i >= preDays,
       ];
+      final bool hasEvent = flags.any((f) => f);
       final int evCount = flags.where((f) => f).length;
       final double ic = evCount >= 2 ? 12.0 : 16.0; // アイコンサイズ
       final double fs = evCount >= 2 ? 10.0 : 12.5; // boxLabel文字サイズ
 
-      Widget mkBox(String t, Color c) => Container(
+      // 横幅が詰まっているとき(セル幅が狭い)は、日付ラベルを
+      // 「イベント日」または「5の倍数の日」のみに間引く
+      final double cellW = n > 0 ? _cachedChartW / n : 999;
+      final bool cramped = cellW < 30;
+      final bool showDate = !cramped || hasEvent || dates[i].day % 5 == 0;
+
+      // 横幅をはみ出しても折り返さない（横方向の制約を外す）
+      Widget noWrap(Widget child) => UnconstrainedBox(
+            constrainedAxis: Axis.vertical,
+            clipBehavior: Clip.none,
+            child: child,
+          );
+
+      Widget mkBox(String t, Color c) => noWrap(Container(
             padding: EdgeInsets.symmetric(
                 horizontal: evCount >= 2 ? 2 : 3,
                 vertical: evCount >= 2 ? 0.5 : 1),
@@ -5557,12 +5571,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               borderRadius: BorderRadius.circular(2),
             ),
             child: Text(t,
+                softWrap: false,
+                maxLines: 1,
+                overflow: TextOverflow.visible,
                 style: TextStyle(
                     fontSize: fs,
                     color: c,
                     fontWeight: FontWeight.bold,
                     height: 1.2)),
-          );
+          ));
 
       final evWidgets = [
         if (flags[0]) Icon(Icons.no_meals,   size: ic, color: Colors.red.shade400),
@@ -5588,9 +5605,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 8), // バーと日付の間隔
-          Text(dateLabel(i),
-              style: const TextStyle(
-                  fontSize: 14, letterSpacing: -0.5, height: 1.0)),
+          if (showDate)
+            noWrap(Text(dateLabel(i),
+                softWrap: false,
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: const TextStyle(
+                    fontSize: 14, letterSpacing: -0.5, height: 1.0)))
+          else
+            const SizedBox(height: 14),
           if (icon != null) icon else const SizedBox(height: 16),
         ],
       );
