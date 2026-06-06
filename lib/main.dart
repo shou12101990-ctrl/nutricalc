@@ -5190,10 +5190,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         ]),
                       // 行1: 栄養開始日
                       TableRow(children: [
-                        const Padding(
-                          padding: EdgeInsets.only(right: 8, bottom: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8, bottom: 6),
                           child: Text('栄養開始日:',
-                              style: TextStyle(fontSize: 13)),
+                              style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -5201,7 +5201,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 4),
                                 minimumSize: const Size(0, 0),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: Colors.blue.shade600),
                             onPressed: () async {
                               final picked = await _quickPickDate(context, _startDate);
                               if (picked != null) {
@@ -5211,7 +5212,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             },
                             child: Text(
                                 '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
-                                style: const TextStyle(fontSize: 13)),
+                                style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
                           ),
                         ),
                       ]),
