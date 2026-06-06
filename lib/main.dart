@@ -2318,19 +2318,6 @@ class _BuilderPageState extends State<BuilderPage>
                   ],
                   onChanged: (v) => setLocal(() => activity = v ?? activity),
                 ),
-                Container(
-                  margin: const EdgeInsets.only(bottom: 8, top: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    '1.0-1.1 寝たきり体動なし　1.1-1.2 寝たきり体動あり\n'
-                    '1.2-1.3 車椅子　1.3-1.4 歩行　1.5〜 積極的リハ',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                ),
                 DropdownButtonFormField<double>(
                   initialValue: stress,
                   decoration: const InputDecoration(labelText: '侵害係数 (SF)'),
@@ -2341,19 +2328,6 @@ class _BuilderPageState extends State<BuilderPage>
                             child: Text((0.9 + i * 0.1).toStringAsFixed(1))),
                   ],
                   onChanged: (v) => setLocal(() => stress = v ?? stress),
-                ),
-                Container(
-                  margin: const EdgeInsets.only(bottom: 8, top: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    '1.0 ストレスなし　1.1-1.8 手術　1.1-1.3 癌\n'
-                    '1.2-1.5 感染症/発熱（敗血症 1.6）　1.2-2.0 熱傷',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
                 ),
                 DropdownButtonFormField<double>(
                   initialValue: protein,
