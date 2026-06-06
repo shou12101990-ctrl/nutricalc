@@ -5527,6 +5527,25 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         List.generate(14, (i) => fatOfPlan(plans[i]))
             .fold<double>(0.0, (s, v) => s + v) < 1.0;
 
+    // ビタミンB1(チアミン)アラート: リフィーディング症候群/Wernicke脳症予防
+    //   公開情報: B1体内貯蔵は約30mg=2〜3週で枯渇。糖質(ブドウ糖)負荷でB1消費が
+    //   増大し、絶食後の栄養再開でWernicke脳症/乳酸アシドーシスを来しうる。
+    //   NICE基準: 5日以上の絶食/低栄養はリフィーディング高リスク。
+    //   → 絶食≥5日 かつ 糖質投与あり でB1補充を促す。
+    double carbOfPlan(DesignPlan p) {
+      double c = 0;
+      for (final it in p.items) {
+        final prod = widget.state.catalog.byName(it.name);
+        final base = prod?.carbBase ?? 0;
+        if (base <= 0) continue;
+        final pv = prod?.volumeMl ?? 0;
+        c += pv > 0 ? base * it.volumeMl / pv : base * (it.units ?? 0);
+      }
+      return c;
+    }
+    final thiamineRisk =
+        preDays >= 5 && designPlans.any((p) => carbOfPlan(p) > 0);
+
     // 日付ラベル: 同月内は日のみ, 月が変わる初日はmm/dd
     final dates = List.generate(n, (i) => chartOrigin.add(Duration(days: i)));
     String dateLabel(int i) {
@@ -5692,46 +5711,22 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           children: [
             const Text('栄養の推移', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            // 必須脂肪酸欠乏(EFAD)アラート
-            if (efadRisk) ...[
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade400, width: 1),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.warning_amber_rounded,
-                        size: 18, color: Colors.orange.shade800),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text.rich(TextSpan(children: [
-                        TextSpan(
-                            text: '必須脂肪酸欠乏に注意\n',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.orange.shade900,
-                                fontSize: 12.5,
-                                height: 1.4)),
-                        TextSpan(
-                            text:
-                                '絶食開始からDay14までに脂質が投与されていません。脂肪乳剤の投与を検討してください。',
-                            style: TextStyle(
-                                color: Colors.orange.shade900,
-                                fontSize: 11.5,
-                                height: 1.4)),
-                      ])),
-                    ),
-                  ],
-                ),
+            // 栄養管理アラート
+            if (efadRisk)
+              _chartAlert(
+                color: Colors.orange.shade800,
+                title: '必須脂肪酸欠乏に注意',
+                body:
+                    '絶食開始からDay14までに脂質が投与されていません。脂肪乳剤の投与を検討してください。',
               ),
-            ],
+            if (thiamineRisk)
+              _chartAlert(
+                color: Colors.red.shade700,
+                title: 'リフィーディング症候群・Wernicke脳症に注意',
+                body:
+                    '絶食5日以上＋糖質投与でビタミンB1の需要が増大し欠乏しうる（貯蔵は約2週間で枯渇）。'
+                    '糖負荷の前〜同時にビタミンB1（例: 100〜300mg/日）を補充してください。',
+              ),
             TapRegion(
               // チャート外タップでフローターを消去
               onTapOutside: (_) {
@@ -5975,6 +5970,45 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               fontSize: 13, color: Colors.black54, height: 1.3)),
     ]),
   );
+
+  /// 栄養管理アラート用の共通バナー
+  Widget _chartAlert({
+    required Color color,
+    required String title,
+    required String body,
+  }) =>
+      Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color, width: 1),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 18, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text.rich(TextSpan(children: [
+                TextSpan(
+                    text: '$title\n',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        fontSize: 12.5,
+                        height: 1.4)),
+                TextSpan(
+                    text: body,
+                    style: TextStyle(
+                        color: color, fontSize: 11.5, height: 1.4)),
+              ])),
+            ),
+          ],
+        ),
+      );
 
   void _showDayDetail(int i, DesignPlan plan, double dayKcal, double dayProt) {
     final date = _dateOf(i);
