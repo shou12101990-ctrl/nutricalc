@@ -242,9 +242,9 @@ class CasesPage extends StatelessWidget {
                                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                                   if (admDate.isNotEmpty) ...[
                                     const SizedBox(width: 10),
-                                    const Icon(Icons.login, size: 14, color: Colors.grey),
+                                    Icon(Icons.login, size: 14, color: Colors.green.shade400),
                                     const SizedBox(width: 2),
-                                    Text(admDate, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                                    Text(admDate, style: TextStyle(fontSize: 13, color: Colors.green.shade400)),
                                   ],
                                   if (item.fastingDate != null) ...[
                                     const SizedBox(width: 10),
