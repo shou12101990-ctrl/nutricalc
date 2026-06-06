@@ -5161,6 +5161,33 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       1: IntrinsicColumnWidth(), // 値列
                     },
                     children: [
+                      // 行0: 絶食日（患者情報から表示のみ）
+                      if (widget.current.fastingDate != null)
+                        TableRow(children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8, bottom: 6),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.no_meals, size: 13, color: Colors.red.shade400),
+                                const SizedBox(width: 4),
+                                Text('絶食日:',
+                                    style: TextStyle(fontSize: 13, color: Colors.red.shade400)),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Builder(builder: (_) {
+                              final p = DateTime.tryParse(widget.current.fastingDate!);
+                              final label = p == null
+                                  ? widget.current.fastingDate!
+                                  : '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}';
+                              return Text(label,
+                                  style: TextStyle(fontSize: 13, color: Colors.red.shade400));
+                            }),
+                          ),
+                        ]),
                       // 行1: 栄養開始日
                       TableRow(children: [
                         const Padding(
@@ -5398,12 +5425,17 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       designPlans.add(p);
     }
 
-    // 栄養開始日が未来の場合、今日から開始日前日まで空白(0)を先頭に追加
+    // 絶食日が設定されていればそこから起算、なければ今日から
     final today = DateTime.now();
-    final startNorm =
-        DateTime(_startDate.year, _startDate.month, _startDate.day);
     final todayNorm = DateTime(today.year, today.month, today.day);
-    final preDays = startNorm.difference(todayNorm).inDays.clamp(0, 60);
+    final startNorm = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final fastingRaw = widget.current.fastingDate != null
+        ? DateTime.tryParse(widget.current.fastingDate!)
+        : null;
+    final chartOrigin = fastingRaw != null
+        ? DateTime(fastingRaw.year, fastingRaw.month, fastingRaw.day)
+        : todayNorm;
+    final preDays = startNorm.difference(chartOrigin).inDays.clamp(0, 60);
     final emptyPlan = DesignPlan(label: 'Day', items: const []);
     final plans = [
       ...List.filled(preDays, emptyPlan),
@@ -5416,7 +5448,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final n = plans.length;
 
     // 日付ラベル: 同月内は日のみ, 月が変わる初日はmm/dd
-    final dates = List.generate(n, (i) => todayNorm.add(Duration(days: i)));
+    final dates = List.generate(n, (i) => chartOrigin.add(Duration(days: i)));
     String dateLabel(int i) {
       if (i == 0) return '${dates[i].month}/${dates[i].day}';
       if (dates[i].month != dates[i - 1].month) {
