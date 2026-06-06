@@ -5521,21 +5521,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final topDateTitles = AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 34, // 日付(12px) + アイコン(10px) + 余白
+        reservedSize: 38, // 日付(12px) + アイコン(14px) + 余白
         getTitlesWidget: (v, m) {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
 
           // 枠線付きテキストボックス
           Widget boxLabel(String text, Color color) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.5),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 decoration: BoxDecoration(
                   border: Border.all(color: color, width: 0.9),
                   borderRadius: BorderRadius.circular(2),
                 ),
                 child: Text(text,
                     style: TextStyle(
-                        fontSize: 6.5,
+                        fontSize: 10.5,
                         color: color,
                         fontWeight: FontWeight.bold,
                         height: 1.2)),
@@ -5544,9 +5544,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           // アイコンの優先順: 絶食日 > 栄養開始日 > Full > EN開始
           Widget? icon;
           if (i == fastingIdx) {
-            icon = Icon(Icons.no_meals, size: 10, color: Colors.red.shade400);
+            icon = Icon(Icons.no_meals, size: 14, color: Colors.red.shade400);
           } else if (i == nutritionIdx) {
-            icon = Icon(Icons.restaurant, size: 10, color: Colors.blue.shade600);
+            icon = Icon(Icons.restaurant, size: 14, color: Colors.blue.shade600);
           } else if (i == fullIdx && i >= preDays) {
             icon = boxLabel('full', Colors.green.shade700);
           } else if (i == enIdx && i >= preDays && i != nutritionIdx && i != fullIdx) {
