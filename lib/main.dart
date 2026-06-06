@@ -539,7 +539,7 @@ class CasesPage extends StatelessWidget {
                 // 入室日時
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.calendar_today),
+                  leading: const Icon(Icons.bed),
                   title: Text(
                     '入室日: ${admissionDate.year}/${admissionDate.month.toString().padLeft(2, '0')}/${admissionDate.day.toString().padLeft(2, '0')}',
                   ),
