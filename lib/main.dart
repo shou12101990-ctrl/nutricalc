@@ -927,6 +927,7 @@ class _BuilderPageState extends State<BuilderPage>
   // ゼロmenu: 2サブタブ (0:本体, 1:加注) と加注製剤リスト(複数可)
   int _zeroSubTab = 0;
   final List<String> _zeroAdditives = [];
+  bool _zeroAddExpanded = false; // 加注: 製剤追加リストの展開状態
   final Set<String> expandedProducts = {};
   double _enRateMlPerHour = 0;
   double _tpnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
@@ -1182,64 +1183,103 @@ class _BuilderPageState extends State<BuilderPage>
   }
 
   // 加注製剤(電解質/微量元素/ビタミン)を複数追加するピッカー。
-  // ゼロmenu・個別選択 双方で共有 (_zeroAdditives)。
+  // 「加注製剤を追加」ボタン → カテゴリ見出し付きの1リストが展開し、
+  // 各行のステッパーで選ぶ。ゼロmenu・個別選択 双方で共有 (_zeroAdditives)。
   Widget _additivePicker() {
-    final addProds = [
-      for (final c in ['電解質', '微量元素', 'ビタミン'])
-        ...widget.state.catalog.byCategory(c)
+    const cats = [
+      ('電解質', '電解質補正'),
+      ('微量元素', '微量元素製剤'),
+      ('ビタミン', 'ビタミン製剤'),
     ];
+    int countOf(String name) => _zeroAdditives.where((x) => x == name).length;
+
+    Widget header(String label) => Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 6, bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          color: Colors.blueGrey.shade50,
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueGrey.shade600)),
+        );
+
+    Widget prodRow(Product p) {
+      final cnt = countOf(p.name);
+      final vol = p.volumeMl != null ? '${p.volumeMl!.round()}ml' : '';
+      final sub = [if (p.content.isNotEmpty) p.content, if (vol.isNotEmpty) vol]
+          .join(' / ');
+      return Container(
+        color: cnt > 0 ? Colors.blue.shade50 : null,
+        padding: const EdgeInsets.only(left: 6),
+        child: Row(children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(p.name,
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                if (sub.isNotEmpty)
+                  Text(sub,
+                      style:
+                          TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, size: 18),
+            visualDensity: VisualDensity.compact,
+            onPressed:
+                cnt > 0 ? () => setState(() => _zeroAdditives.remove(p.name)) : null,
+          ),
+          SizedBox(
+              width: 16,
+              child: Text('$cnt',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: cnt > 0 ? Colors.blue.shade700 : Colors.grey))),
+          IconButton(
+            icon: const Icon(Icons.add_circle, size: 18),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() => _zeroAdditives.add(p.name)),
+          ),
+        ]),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          isExpanded: true,
-          value: null,
-          decoration: const InputDecoration(
-              labelText: '＋ 加注製剤を追加',
-              isDense: true,
-              contentPadding:
-                  EdgeInsets.symmetric(vertical: 6, horizontal: 4)),
-          items: addProds
-              .map((p) => DropdownMenuItem<String>(
-                  value: p.name,
-                  child: Text('${p.name}  (${p.category})',
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                      style: const TextStyle(fontSize: 13))))
-              .toList(),
-          onChanged: (v) {
-            if (v != null) setState(() => _zeroAdditives.add(v));
-          },
+        InkWell(
+          onTap: () => setState(() => _zeroAddExpanded = !_zeroAddExpanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(children: [
+              Icon(Icons.add, size: 18, color: Colors.blue.shade700),
+              const SizedBox(width: 4),
+              Text('加注製剤を追加',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Icon(_zeroAddExpanded ? Icons.expand_less : Icons.expand_more,
+                  size: 20, color: Colors.grey.shade600),
+            ]),
+          ),
         ),
-        const SizedBox(height: 4),
-        if (_zeroAdditives.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('加注なし',
-                style:
-                    TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-          )
-        else
-          ..._zeroAdditives.asMap().entries.map((e) {
-            final v = widget.state.catalog.byName(e.value)?.volumeMl;
-            return SizedBox(
-              height: 36,
-              child: Row(children: [
-                Expanded(
-                    child: Text(e.value,
-                        style: const TextStyle(fontSize: 13),
-                        overflow: TextOverflow.ellipsis)),
-                Text(v != null ? '${v.round()} ml' : '1管',
-                    style: const TextStyle(fontSize: 13)),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () =>
-                      setState(() => _zeroAdditives.removeAt(e.key)),
-                ),
-              ]),
-            );
-          }),
+        if (_zeroAddExpanded)
+          for (final (cat, label) in cats) ...[
+            header(label),
+            ...widget.state.catalog.byCategory(cat).map(prodRow),
+          ],
       ],
     );
   }
@@ -1670,12 +1710,7 @@ class _BuilderPageState extends State<BuilderPage>
                           ),
                         );
 
-                        // ── 加注タブ: 製剤を複数追加 ──
-                        final addCats = ['電解質', '微量元素', 'ビタミン'];
-                        final addProds = [
-                          for (final c in addCats)
-                            ...widget.state.catalog.byCategory(c)
-                        ];
+                        // ── 加注タブ: 製剤を1リストから選んで追加 ──
                         final addCard = Card(
                           margin: EdgeInsets.zero,
                           child: Padding(
@@ -1687,69 +1722,7 @@ class _BuilderPageState extends State<BuilderPage>
                                     style:
                                         Theme.of(context).textTheme.titleSmall),
                                 const Divider(),
-                                // 追加ドロップダウン (選択で即追加・複数可)
-                                DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: null,
-                                  decoration: const InputDecoration(
-                                      labelText: '＋ 製剤を追加',
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(
-                                          vertical: 6, horizontal: 4)),
-                                  items: addProds
-                                      .map((p) => DropdownMenuItem<String>(
-                                          value: p.name,
-                                          child: Text(
-                                              '${p.name}  (${p.category})',
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
-                                              style: const TextStyle(
-                                                  fontSize: 13))))
-                                      .toList(),
-                                  onChanged: (v) {
-                                    if (v != null) {
-                                      setState(() => _zeroAdditives.add(v));
-                                    }
-                                  },
-                                ),
-                                const SizedBox(height: 8),
-                                if (_zeroAdditives.isEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 8),
-                                    child: Text('加注なし',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade500)),
-                                  )
-                                else
-                                  ..._zeroAdditives.asMap().entries.map((e) {
-                                    final vol = prod(e.value)?.volumeMl;
-                                    return SizedBox(
-                                      height: 34,
-                                      child: Row(children: [
-                                        Expanded(
-                                            child: Text(e.value,
-                                                style: const TextStyle(
-                                                    fontSize: 13),
-                                                overflow:
-                                                    TextOverflow.ellipsis)),
-                                        Text(
-                                            vol != null
-                                                ? '${vol.round()} ml'
-                                                : '1管',
-                                            style: const TextStyle(
-                                                fontSize: 13)),
-                                        IconButton(
-                                          icon: const Icon(Icons.close,
-                                              size: 16),
-                                          visualDensity: VisualDensity.compact,
-                                          onPressed: () => setState(() =>
-                                              _zeroAdditives.removeAt(e.key)),
-                                        ),
-                                      ]),
-                                    );
-                                  }),
+                                _additivePicker(),
                               ],
                             ),
                           ),
