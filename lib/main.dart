@@ -5485,6 +5485,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           final i = v.round();
           if (i < 0 || i >= n) return const SizedBox.shrink();
 
+          // 枠線付きテキストボックス
+          Widget boxLabel(String text, Color color) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.5),
+                decoration: BoxDecoration(
+                  border: Border.all(color: color, width: 0.9),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(text,
+                    style: TextStyle(
+                        fontSize: 6.5,
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2)),
+              );
+
           // アイコンの優先順: 絶食日 > 栄養開始日 > Full > EN開始
           Widget? icon;
           if (i == fastingIdx) {
@@ -5492,9 +5507,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           } else if (i == nutritionIdx) {
             icon = Icon(Icons.restaurant, size: 10, color: Colors.blue.shade600);
           } else if (i == fullIdx && i >= preDays) {
-            icon = Icon(Icons.check_circle, size: 10, color: Colors.green.shade700);
+            icon = boxLabel('full', Colors.green.shade700);
           } else if (i == enIdx && i >= preDays && i != nutritionIdx && i != fullIdx) {
-            icon = Icon(Icons.water_drop, size: 10, color: Colors.yellow.shade700);
+            icon = boxLabel('EN', Colors.yellow.shade700);
           }
 
           return Column(
