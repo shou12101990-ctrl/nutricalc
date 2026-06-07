@@ -6334,27 +6334,30 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           child: Text('EN導入:',
                               style: TextStyle(fontSize: 13)),
                         ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('Day ', style: TextStyle(fontSize: 13)),
-                            SizedBox(
-                              width: _dayDropW,
-                              child: DropdownButton<int>(
-                                value: _enStartDay.clamp(1, 21),
-                                isDense: true,
-                                isExpanded: true,
-                                items: List.generate(21, (i) => i + 1)
-                                    .map((d) => DropdownMenuItem(
-                                        value: d, child: Text('$d')))
-                                    .toList(),
-                                onChanged: (v) => setState(() {
-                                  _enStartDay = v ?? _enStartDay;
-                                  _rebuildDays();
-                                }),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Day ', style: TextStyle(fontSize: 13)),
+                              SizedBox(
+                                width: _dayDropW,
+                                child: DropdownButton<int>(
+                                  value: _enStartDay.clamp(1, 21),
+                                  isDense: true,
+                                  isExpanded: true,
+                                  items: List.generate(21, (i) => i + 1)
+                                      .map((d) => DropdownMenuItem(
+                                          value: d, child: Text('$d')))
+                                      .toList(),
+                                  onChanged: (v) => setState(() {
+                                    _enStartDay = v ?? _enStartDay;
+                                    _rebuildDays();
+                                  }),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ]),
                       // 行4: 経口リハ導入 (EN導入行と同一レイアウト)
