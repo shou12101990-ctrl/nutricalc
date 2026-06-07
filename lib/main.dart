@@ -1864,10 +1864,10 @@ class _BuilderPageState extends State<BuilderPage>
                     // タブごとの説明書き
                     Text(
                       _builderTabIndex == 0
-                          ? '製剤を個別に選択して合計を算出します'
+                          ? '複数製剤を組み合わせ, 処方・カルテ記載に向けてサマライズします.'
                           : _builderTabIndex == 1
-                              ? 'PNのみで最小のINにする逆引き計算'
-                              : 'フェーズに応じた処方設計を提案します',
+                              ? '静脈栄養のみで最小のINにする際の逆引き計算を行います.'
+                              : 'フェーズに応じた処方設計を提案し, トレンドを可視化します.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade600),
@@ -7243,9 +7243,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                         // 下: 食事(橙) — 淡め
                                         BarChartRodStackItem(0, mealK,
                                             Colors.deepOrange.shade200),
-                                        // 中: EN(黄) — 淡め
+                                        // 中: EN(黄) — 暗めのアンバー(白背景との視認性確保)
                                         BarChartRodStackItem(mealK, mealK + enK,
-                                            Colors.yellow.shade400),
+                                            Colors.amber.shade600),
                                         // 上: PN(緑) — 淡め
                                         BarChartRodStackItem(mealK + enK, total,
                                             Colors.green.shade200),
@@ -7374,7 +7374,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       children: [
                                         _legItem(Colors.deepOrange.shade200,
                                             '食事 (kcal)', false),
-                                        _legItem(Colors.yellow.shade400,
+                                        _legItem(Colors.amber.shade600,
                                             'EN (kcal)', false),
                                         _legItem(Colors.green.shade200,
                                             'PN (kcal)', false),
