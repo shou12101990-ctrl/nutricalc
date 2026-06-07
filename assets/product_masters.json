@@ -1745,6 +1745,74 @@
       "notes": "凝固因子(II・VII・IX・X)産生に必須.\n・長期絶食・広域抗菌薬・胆汁うっ滞で欠乏→PT延長・出血傾向.\n・補充でPT是正.",
       "sheet_row": 404,
       "product_type": "医薬品"
+    },
+    {
+      "id": "thick_501",
+      "category": "濃厚流動食",
+      "name": "エンシュア・H",
+      "content": "1.5kcal/mL 経口・経管",
+      "volume_ml": 250.0,
+      "kcal": 375.0,
+      "amino_acid_g": 13.2,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": 13.2,
+      "carb_g_or_kcal_basis": 51.7,
+      "notes": "経口・経管両用. 1.5kcal/mL.",
+      "sheet_row": 501,
+      "product_type": "医薬品",
+      "micro": null
+    },
+    {
+      "id": "thick_502",
+      "category": "濃厚流動食",
+      "name": "メイバランス1.5",
+      "content": "1.5kcal/mL 食品",
+      "volume_ml": 200.0,
+      "kcal": 300.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "notes": "経口ONS. 食事移行期の栄養補助.",
+      "sheet_row": 502,
+      "product_type": "食品",
+      "micro": null
+    },
+    {
+      "id": "support_601",
+      "category": "栄養サポート食品",
+      "name": "アイソカルゼリーHC",
+      "content": "高カロリーゼリー",
+      "volume_ml": 66.0,
+      "kcal": 150.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "notes": "小容量高カロリーゼリー. 嚥下調整・少量摂取向け.",
+      "sheet_row": 601,
+      "product_type": "食品",
+      "micro": null
+    },
+    {
+      "id": "support_602",
+      "category": "栄養サポート食品",
+      "name": "エンジョイクリミール",
+      "content": "ONS (経口補助)",
+      "volume_ml": 125.0,
+      "kcal": 200.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "notes": "経口栄養補助食品(ONS).",
+      "sheet_row": 602,
+      "product_type": "食品",
+      "micro": null
     }
   ],
   "counts": {
@@ -1754,6 +1822,8 @@
     "EN_AUX": 6,
     "電解質": 6,
     "微量元素": 3,
-    "ビタミン": 4
+    "ビタミン": 4,
+    "濃厚流動食": 2,
+    "栄養サポート食品": 2
   }
 }

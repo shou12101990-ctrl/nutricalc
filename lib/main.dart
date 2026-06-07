@@ -3364,6 +3364,8 @@ class _MasterPageState extends State<MasterPage> {
                 ButtonSegment(value: 'EN', label: Text('EN')),
                 ButtonSegment(value: 'TPN', label: Text('TPN')),
                 ButtonSegment(value: 'PPN', label: Text('PPN')),
+                ButtonSegment(value: '濃厚流動食', label: Text('濃厚流動食')),
+                ButtonSegment(value: '栄養サポート食品', label: Text('栄養サポート')),
                 ButtonSegment(value: '電解質', label: Text('電解質')),
                 ButtonSegment(value: '微量元素', label: Text('微量元素')),
                 ButtonSegment(value: 'ビタミン', label: Text('ビタミン')),
