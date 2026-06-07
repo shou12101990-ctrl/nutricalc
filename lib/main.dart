@@ -1558,6 +1558,18 @@ class _BuilderPageState extends State<BuilderPage>
     final maxSummaryH = (screenH - _mqPad.top - kToolbarHeight - _mqPad.bottom - 16.0)
         .clamp(200.0, screenH);
 
+    // 入室日・栄養開始日 (ヘッダー表示用)
+    String _mmdd(DateTime? d) => d == null ? '—' : '${d.month}/${d.day}';
+    final _admissionDate = (() {
+      final e =
+          current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
+      return e != null ? DateTime.tryParse(e.changedAt) : null;
+    })();
+    final _nutritionStart = (() {
+      final s = current.autoDesignConfig?['startDate'] as String?;
+      return (s != null ? DateTime.tryParse(s) : null) ?? _admissionDate;
+    })();
+
     return Scaffold(
           appBar: AppBar(
             leading: const BackButton(),
@@ -1591,6 +1603,13 @@ class _BuilderPageState extends State<BuilderPage>
                                 Text(current.currentBed,
                                     style: Theme.of(context).textTheme.titleLarge),
                               ],
+                            ),
+                            const SizedBox(height: 4),
+                            // 入室日 / 栄養開始日
+                            Text(
+                              '入室日 ${_mmdd(_admissionDate)}, '
+                              '栄養開始日 ${_mmdd(_nutritionStart)}',
+                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 4),
                             Text(
