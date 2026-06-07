@@ -63,9 +63,9 @@ class LocalStore {
   }
 
   Future<bool> loadDefaultsApplied() async =>
-      window.localStorage['nutrition_defaults_applied_v2'] == '1';
+      window.localStorage['nutrition_defaults_applied_v3'] == '1';
 
   Future<void> saveDefaultsApplied() async {
-    window.localStorage['nutrition_defaults_applied_v2'] = '1';
+    window.localStorage['nutrition_defaults_applied_v3'] = '1';
   }
 }

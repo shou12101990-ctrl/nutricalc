@@ -1107,7 +1107,6 @@ class _BuilderPageState extends State<BuilderPage>
   final npcnController = TextEditingController(text: '125');
   double _lipidGPerKg = 0.4;
   String glucoseSource = '70% グルコース';
-  String lipidSource = 'イントラリポス20%';
   // ゼロmenu: 2サブタブ (0:本体, 1:加注) と加注製剤リスト(複数可)
   int _zeroSubTab = 0;
   final List<String> _zeroAdditives = [];
@@ -1527,15 +1526,15 @@ class _BuilderPageState extends State<BuilderPage>
       lipidGramPerKg: _lipidGPerKg,
       weightKg: current.weightKg,
       glucoseProduct: widget.state.adoptedByBase(glucoseSource),
-      aminoProduct: widget.state.adoptedByBase('アミパレン'),
-      lipidProduct: widget.state.adoptedByBase(lipidSource),
+      aminoProduct: widget.state.adoptedAminoForZero(),
+      lipidProduct: widget.state.adoptedLipidForZero(),
     );
     // 製剤構成と一致させる: 本体は10ml単位に丸め、加注製剤も合算してサマリーへ反映
     double _round10(double v) => (v / 10).round() * 10.0;
     final scratchAggregate = _aggregateFromVolumes(
       [
-        widget.state.adoptedByBase('アミパレン'),
-        widget.state.adoptedByBase(lipidSource),
+        widget.state.adoptedAminoForZero(),
+        widget.state.adoptedLipidForZero(),
         widget.state.adoptedByBase(glucoseSource),
         ..._zeroAdditives.map((n) => widget.state.catalog.byName(n)),
       ],
@@ -1602,9 +1601,9 @@ class _BuilderPageState extends State<BuilderPage>
 
     final isScratchMode = _builderTabIndex == 1;
     final aggregate = isScratchMode ? scratchAggregate : actualAggregate;
-    final aminoProduct = widget.state.adoptedByBase('アミパレン');
+    final aminoProduct = widget.state.adoptedAminoForZero();
     final glucoseProduct = widget.state.adoptedByBase(glucoseSource);
-    final lipidProduct = widget.state.adoptedByBase(lipidSource);
+    final lipidProduct = widget.state.adoptedLipidForZero();
     final scratchTotalVolumeMl = scratchAggregate.totalVolumeMl;
     final scratchInfusionRateMlPerHour = scratchTotalVolumeMl / 24;
     String formatRequiredUnits(Product? product, double requiredMl) {
@@ -1965,22 +1964,36 @@ class _BuilderPageState extends State<BuilderPage>
                                   onChanged: (v) => setState(
                                       () => glucoseSource = v ?? glucoseSource),
                                 ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: lipidSource,
-                                  decoration: const InputDecoration(
-                                      labelText: '脂質', isDense: true),
-                                  items: const [
-                                    DropdownMenuItem(
-                                        value: 'イントラリポス10%',
-                                        child: Text('イントラリポス10%')),
-                                    DropdownMenuItem(
-                                        value: 'イントラリポス20%',
-                                        child: Text('イントラリポス20%')),
-                                  ],
-                                  onChanged: (v) => setState(
-                                      () => lipidSource = v ?? lipidSource),
+                                const SizedBox(height: 10),
+                                // タンパク質・脂質製剤は採用製剤から自動選択
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blueGrey.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('採用製剤を自動選択',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.blueGrey.shade500)),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                          'タンパク質: '
+                                          '${widget.state.adoptedAminoForZero()?.name ?? '未採用'}',
+                                          style: const TextStyle(fontSize: 12.5)),
+                                      Text(
+                                          '脂質: '
+                                          '${widget.state.adoptedLipidForZero()?.name ?? '未採用'}',
+                                          style: const TextStyle(fontSize: 12.5)),
+                                    ],
+                                  ),
                                 ),
                                 const SizedBox(height: 10),
                                 SizedBox(
@@ -2042,8 +2055,10 @@ class _BuilderPageState extends State<BuilderPage>
                                     style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey.shade600)),
-                                dataRow('アミパレン', '${aminoMl.round()} ml'),
-                                dataRow(lipidSource, '${lipMl.round()} ml'),
+                                dataRow(aminoProduct?.name ?? 'アミノ酸製剤',
+                                    '${aminoMl.round()} ml'),
+                                dataRow(lipidProduct?.name ?? '脂肪乳剤',
+                                    '${lipMl.round()} ml'),
                                 dataRow(glucoseSource, '${gluMl.round()} ml'),
                                 if (_zeroAdditives.isNotEmpty) ...[
                                   const SizedBox(height: 4),
@@ -5570,6 +5585,13 @@ class AppState {
     'エルネオパNF1号', 'エルネオパNF2号',
     'フルカリック1号', 'フルカリック2号', 'フルカリック3号',
     'ハイカリックRF', '70% グルコース',
+    // ── 加注(電解質/微量元素/ビタミン) プリセット ──
+    '1モル塩化ナトリウム注射液', 'KCL補正液1mEq/mL', 'カルチコール注射液8.5%',
+    '硫酸Mg補正液 1mEq/mL', 'リン酸Na補正液 0.5mmol/mL', 'メイロン静注8.4%',
+    'エレジェクト注シリンジ', '硫酸亜鉛', 'アセレンド注 (セレン)',
+    'オーツカMV注', 'ビタメジン静注用',
+    // ── EN/食事 プリセット追加 ──
+    'エンシュアリキッド', 'プルモケア-EX', 'ペプタメン スタンダード',
   ];
 
   final ProductCatalog catalog;
@@ -5676,6 +5698,34 @@ class AppState {
       if (isAdopted(p.id)) return p;
     }
     return matches.isEmpty ? null : matches.first;
+  }
+
+  /// ゼロmenu用: 採用中の純アミノ酸製剤(糖・脂質を含まない高濃度AA)を自動選択。
+  /// 採用が無ければアミパレンにフォールバック。
+  Product? adoptedAminoForZero() {
+    final c = catalog
+        .byCategory('PPN')
+        .where((p) =>
+            isAdopted(p.id) &&
+            (p.aminoAcidG ?? 0) > 0 &&
+            (p.fatBase ?? 0) <= 0 &&
+            (p.carbBase ?? 0) <= 0)
+        .toList()
+      ..sort((a, b) => ((b.aminoAcidG ?? 0) / (b.volumeMl ?? 1))
+          .compareTo((a.aminoAcidG ?? 0) / (a.volumeMl ?? 1)));
+    return c.isNotEmpty ? c.first : adoptedByBase('アミパレン');
+  }
+
+  /// ゼロmenu用: 採用中の脂肪乳剤(高濃度優先)を自動選択。
+  /// 採用が無ければイントラリポス20%にフォールバック。
+  Product? adoptedLipidForZero() {
+    final c = catalog
+        .byCategory('PPN')
+        .where((p) => isAdopted(p.id) && (p.fatBase ?? 0) > 0)
+        .toList()
+      ..sort((a, b) => ((b.fatBase ?? 0) / (b.volumeMl ?? 1))
+          .compareTo((a.fatBase ?? 0) / (a.volumeMl ?? 1)));
+    return c.isNotEmpty ? c.first : adoptedByBase('イントラリポス20%');
   }
 
   Future<void> toggleAdopted(String productId) async {
@@ -6302,8 +6352,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         tpnProducts: tpnList,
         ppnProducts: ppnList,
         glucoseProduct: widget.state.adoptedByBase('70% グルコース'),
-        aminoProduct: widget.state.adoptedByBase('アミパレン'),
-        lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
+        aminoProduct: widget.state.adoptedAminoForZero(),
+        lipidProduct: widget.state.adoptedLipidForZero(),
         minEnKcal: prevEnKcal,
         mealProducts: mealList,
         mealPac: _dayMealPac[i],
@@ -6715,8 +6765,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               tpnProducts: tpn,
               ppnProducts: ppn,
               glucoseProduct: widget.state.adoptedByBase('70% グルコース'),
-              aminoProduct: widget.state.adoptedByBase('アミパレン'),
-              lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
+              aminoProduct: widget.state.adoptedAminoForZero(),
+              lipidProduct: widget.state.adoptedLipidForZero(),
               minEnKcal: prevEnKcalChart,
               mealProducts: _adoptedMeals(),
               mealPac: _dayMealPac[i],
