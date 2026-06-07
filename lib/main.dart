@@ -1860,6 +1860,18 @@ class _BuilderPageState extends State<BuilderPage>
                         },
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    // タブごとの説明書き
+                    Text(
+                      _builderTabIndex == 0
+                          ? '製剤を個別に選択して合計を算出します'
+                          : _builderTabIndex == 1
+                              ? 'PNのみで最小のINにする逆引き計算'
+                              : 'フェーズに応じた処方設計を提案します',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade600),
+                    ),
                     const SizedBox(height: 12),
                     // ゼロmenu タブ
                     Visibility(
@@ -1983,37 +1995,6 @@ class _BuilderPageState extends State<BuilderPage>
                                   ],
                                   onChanged: (v) => setState(
                                       () => glucoseSource = v ?? glucoseSource),
-                                ),
-                                const SizedBox(height: 10),
-                                // タンパク質・脂質製剤は採用製剤から自動選択
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blueGrey.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text('採用製剤を自動選択',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.blueGrey.shade500)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                          'タンパク質: '
-                                          '${widget.state.adoptedAminoForZero()?.name ?? '未採用'}',
-                                          style: const TextStyle(fontSize: 12.5)),
-                                      Text(
-                                          '脂質: '
-                                          '${widget.state.adoptedLipidForZero()?.name ?? '未採用'}',
-                                          style: const TextStyle(fontSize: 12.5)),
-                                    ],
-                                  ),
                                 ),
                                 const SizedBox(height: 10),
                                 SizedBox(
@@ -2936,7 +2917,11 @@ class _BuilderPageState extends State<BuilderPage>
       builder: (context) => StatefulBuilder(
         builder: (context, setLocal) => AlertDialog(
           title: const Text('パラメータ編集'),
-          content: SingleChildScrollView(
+          content: SizedBox(
+            // ダイアログ幅を固定し、病態チップが横に広がらず縦に折り返すように
+            width: (MediaQuery.of(context).size.width - 80)
+                .clamp(280.0, 400.0),
+            child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3104,6 +3089,7 @@ class _BuilderPageState extends State<BuilderPage>
                 ),
               ],
             ),
+          ),
           ),
           actions: [
             TextButton(
