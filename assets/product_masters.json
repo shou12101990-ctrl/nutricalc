@@ -253,7 +253,10 @@
      "葉酸": 0.1,
      "ビオチン": 15.4
     }
-   }
+   },
+   "condition_tags": [
+    "malabsorption"
+   ]
   },
   {
    "id": "en_43",
@@ -301,7 +304,10 @@
      "葉酸": 0.2,
      "ビオチン": 50.0
     }
-   }
+   },
+   "condition_tags": [
+    "malabsorption"
+   ]
   },
   {
    "id": "en_44",
@@ -443,7 +449,10 @@
      "葉酸": 0.044,
      "ビオチン": 39.0
     }
-   }
+   },
+   "condition_tags": [
+    "malabsorption"
+   ]
   },
   {
    "id": "en_47",
@@ -1072,10 +1081,7 @@
     "trace": {
      "Zn": 10.0
     }
-   },
-   "condition_tags": [
-    "renal"
-   ]
+   }
   },
   {
    "id": "tpn_70",
@@ -1327,10 +1333,7 @@
     "elec": {
      "Na": 0.4
     }
-   },
-   "condition_tags": [
-    "renal"
-   ]
+   }
   },
   {
    "id": "ppn_83",
@@ -1351,10 +1354,7 @@
     "elec": {
      "Na": 0.4
     }
-   },
-   "condition_tags": [
-    "renal"
-   ]
+   }
   },
   {
    "id": "ppn_84",
@@ -1376,10 +1376,7 @@
      "Na": 7.0,
      "Cl": 47.0
     }
-   },
-   "condition_tags": [
-    "liver"
-   ]
+   }
   },
   {
    "id": "ppn_86",
@@ -1875,10 +1872,7 @@
     "elec": {
      "Na": 0.6
     }
-   },
-   "condition_tags": [
-    "renal"
-   ]
+   }
   },
   {
    "id": "ppn_716",
@@ -1899,10 +1893,7 @@
     "elec": {
      "Na": 0.6
     }
-   },
-   "condition_tags": [
-    "liver"
-   ]
+   }
   },
   {
    "id": "ppn_717",
@@ -1923,10 +1914,7 @@
     "elec": {
      "Na": 0.9
     }
-   },
-   "condition_tags": [
-    "liver"
-   ]
+   }
   },
   {
    "id": "ppn_718",
@@ -1947,10 +1935,7 @@
     "elec": {
      "Na": 1.5
     }
-   },
-   "condition_tags": [
-    "liver"
-   ]
+   }
   },
   {
    "id": "ppn_719",
@@ -1972,10 +1957,7 @@
      "Na": 3.0,
      "Cl": 19.0
     }
-   },
-   "condition_tags": [
-    "liver"
-   ]
+   }
   },
   {
    "id": "ppn_720",
@@ -1997,10 +1979,7 @@
      "Na": 3.0,
      "Cl": 19.0
     }
-   },
-   "condition_tags": [
-    "liver"
-   ]
+   }
   },
   {
    "id": "ppn_721",
@@ -2022,10 +2001,7 @@
      "Na": 7.0,
      "Cl": 47.0
     }
-   },
-   "condition_tags": [
-    "liver"
-   ]
+   }
   },
   {
    "id": "ppn_722",
@@ -2128,10 +2104,7 @@
     "trace": {
      "Zn": 5.0
     }
-   },
-   "condition_tags": [
-    "renal"
-   ]
+   }
   },
   {
    "id": "tpn_707",
@@ -2724,10 +2697,7 @@
      "K": 0.15,
      "葉酸": 0.6
     }
-   },
-   "condition_tags": [
-    "renal"
-   ]
+   }
   },
   {
    "id": "en_701",
@@ -2812,7 +2782,10 @@
      "葉酸": 0.074,
      "ビオチン": 66.0
     }
-   }
+   },
+   "condition_tags": [
+    "malabsorption"
+   ]
   },
   {
    "id": "en_703",
@@ -2962,7 +2935,10 @@
      "K": 0.025,
      "葉酸": 0.1
     }
-   }
+   },
+   "condition_tags": [
+    "malabsorption"
+   ]
   },
   {
    "id": "en_706",
@@ -3592,7 +3568,10 @@
    "sheet_row": 14,
    "product_type": "食品",
    "micro": null,
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "critical"
+   ]
   },
   {
    "id": "thick_523",
@@ -3722,7 +3701,10 @@
      "C": 107.0
     }
    },
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "malabsorption"
+   ]
   },
   {
    "id": "thick_528",
@@ -3787,7 +3769,11 @@
      "ビオチン": 32.0,
      "C": 80.0
     }
-   }
+   },
+   "condition_tags": [
+    "critical",
+    "malabsorption"
+   ]
   },
   {
    "id": "thick_530",
@@ -3833,10 +3819,7 @@
      "Fe": 53.7
     }
    },
-   "also_en": true,
-   "condition_tags": [
-    "heart"
-   ]
+   "also_en": true
   },
   {
    "id": "thick_532",
@@ -3938,7 +3921,7 @@
    },
    "also_en": true,
    "condition_tags": [
-    "diabetes"
+    "glucose_intolerance"
    ]
   },
   {
@@ -3988,7 +3971,7 @@
    },
    "also_en": true,
    "condition_tags": [
-    "diabetes"
+    "glucose_intolerance"
    ]
   },
   {
@@ -4016,7 +3999,7 @@
     }
    },
    "condition_tags": [
-    "diabetes"
+    "glucose_intolerance"
    ]
   },
   {
@@ -4048,7 +4031,7 @@
    },
    "also_en": true,
    "condition_tags": [
-    "diabetes"
+    "glucose_intolerance"
    ]
   },
   {
@@ -4069,7 +4052,7 @@
    "micro": null,
    "also_en": true,
    "condition_tags": [
-    "diabetes"
+    "glucose_intolerance"
    ]
   },
   {
@@ -4090,7 +4073,7 @@
    "micro": null,
    "also_en": true,
    "condition_tags": [
-    "diabetes"
+    "glucose_intolerance"
    ]
   },
   {
@@ -4126,8 +4109,7 @@
     }
    },
    "condition_tags": [
-    "renal",
-    "dialysis"
+    "renal"
    ]
   },
   {
@@ -4174,8 +4156,7 @@
    "micro": null,
    "also_en": true,
    "condition_tags": [
-    "renal",
-    "dialysis"
+    "renal"
    ]
   },
   {
@@ -4193,11 +4174,7 @@
    "notes": "クリニコ / 液体. 腎不全用・コンパクト1.5kcal/mL",
    "sheet_row": 36,
    "product_type": "食品",
-   "micro": null,
-   "condition_tags": [
-    "renal",
-    "dialysis"
-   ]
+   "micro": null
   },
   {
    "id": "thick_545",
@@ -4331,7 +4308,7 @@
    "micro": null,
    "also_en": true,
    "condition_tags": [
-    "immune"
+    "critical"
    ]
   },
   {
@@ -4353,7 +4330,10 @@
     "elec": {
      "Ca": 9.0
     }
-   }
+   },
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_551",
@@ -4370,7 +4350,10 @@
    "notes": "ニュートリー / 半固形(EJ容器). 半固形1.5kcal/g / 食物繊維2.7g",
    "sheet_row": 43,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_552",
@@ -4387,7 +4370,10 @@
    "notes": "ニュートリー / 半固形(EJ容器). 高カロリー半固形1.5kcal/g / 食物繊維3.3g",
    "sheet_row": 44,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_553",
@@ -4434,7 +4420,10 @@
      "葉酸": 0.08,
      "C": 67.0
     }
-   }
+   },
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_554",
@@ -4463,7 +4452,10 @@
      "Zn": 56.1,
      "Fe": 65.7
     }
-   }
+   },
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_555",
@@ -4480,7 +4472,10 @@
    "notes": "ニュートリー / 半固形(バッグ). 水分・Na補給配慮型半固形 / 食物繊維3.0g",
    "sheet_row": 47,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_556",
@@ -4497,7 +4492,10 @@
    "notes": "ニュートリー / 半固形(バッグ). 水分配慮型半固形 / 食物繊維4.0g",
    "sheet_row": 48,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_557",
@@ -4514,7 +4512,10 @@
    "notes": "ニュートリー / 半固形(バッグ). 高カロリー半固形 / 食物繊維5.0g",
    "sheet_row": 49,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_558",
@@ -4606,7 +4607,10 @@
    "notes": "明治 / 半固形(EJ容器). 半固形・経胃瘻専用 / 食物繊維3.0g",
    "sheet_row": 54,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_563",
@@ -4623,7 +4627,10 @@
    "notes": "明治 / 半固形(EJ容器). 半固形400kcal / 食物繊維4.0g",
    "sheet_row": 55,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_564",
@@ -4708,7 +4715,10 @@
    "notes": "ネスレ / 半固形. 半固形・PHGG配合 / 食物繊維6.0g",
    "sheet_row": 60,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "dysphagia"
+   ]
   },
   {
    "id": "thick_569",
@@ -4927,7 +4937,10 @@
    "notes": "ネスレ / ゼリー(カップ). アルギニン2500mg/個・褥瘡対応ゼリー",
    "sheet_row": 73,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "wound"
+   ]
   },
   {
    "id": "support_622",
@@ -5035,7 +5048,10 @@
      "Na": 0.0,
      "Ca": 10.0
     }
-   }
+   },
+   "condition_tags": [
+    "wound"
+   ]
   },
   {
    "id": "support_627",
@@ -5052,7 +5068,10 @@
    "notes": "・1週間以上の絶食期間があった症例では腸管を動かす前に2日程度流すことがある.\n　→白湯100mlにGFOやサンファイバー1包で100ml/hで注入\n・グルタミン, 食物繊維 (ファイバー), オリゴ糖の3栄養素の粉末製剤\n　オリゴ糖は善玉菌 (生菌製剤に含まれる菌)の栄養源になる. 乳糖不耐症患者でもOK\n・小腸のエネルギー源であるグルタミンを3g配合\n大塚製薬工場 / 粉末(個包装). グルタミン3g + 食物繊維3g + フラクトオリゴ糖1.45g/包・腸管バリア機能保持 / 食物繊維3.0g",
    "sheet_row": 79,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "malabsorption"
+   ]
   },
   {
    "id": "support_628",
@@ -5082,7 +5101,10 @@
      "B12": 5.0,
      "C": 500.0
     }
-   }
+   },
+   "condition_tags": [
+    "wound"
+   ]
   },
   {
    "id": "support_629",
@@ -5120,7 +5142,10 @@
     "trace": {
      "Zn": 153.0
     }
-   }
+   },
+   "condition_tags": [
+    "wound"
+   ]
   },
   {
    "id": "support_631",
@@ -5955,10 +5980,7 @@
    "notes": "コラーゲン合成・創傷治癒・抗酸化.\n・欠乏で壊血病(出血・創傷治癒遅延). 侵襲・熱傷で需要増大.",
    "sheet_row": 403,
    "product_type": "医薬品",
-   "add_type": "単独",
-   "condition_tags": [
-    "immune"
-   ]
+   "add_type": "単独"
   },
   {
    "id": "vit_404",

@@ -4230,57 +4230,61 @@ class ConditionDef {
     this.proteinCapPerKg,
   });
 
-  final String id; // renal/dialysis/liver/diabetes/respiratory/immune/heart
+  final String id; // glucose_intolerance/renal/liver/respiratory/critical/wound/malabsorption/dysphagia
   final String label; // 表示名
   final String suggestion; // 💡 処方サジェスト本文
-  final double? proteinCapPerKg; // 蛋白の目安上限(g/kg/day)。超過時に控えめなテキスト
+  final double? proteinCapPerKg; // 蛋白の目安上限(g/kg/day)。超過時に控えめなテキスト(現状は未設定=オフ)
 }
 
-/// 病態カタログ(臨床フルセット)。値・文言は原案、現場でレビュー・調整して使う。
+/// 病態カタログ(選択アルゴリズム)。各病態の「考え方」と推奨製剤を紐づける。
+/// 文言・割り当ては現場でレビュー・調整して使う。
 class ConditionCatalog {
   static const List<ConditionDef> all = [
     ConditionDef(
-      id: 'renal',
-      label: '腎不全(非透析)',
-      proteinCapPerKg: 0.8,
-      suggestion: '蛋白 0.6–0.8 g/kg/day を目安。NPC/N 500–1000。'
-          '腎不全用EN(リーナレンLP/レナウェル等)・キドミンを検討。',
+      id: 'glucose_intolerance',
+      label: '耐糖能異常',
+      suggestion: '急な糖質負荷を避け、血糖変動を大きくしない。'
+          '必要なら食物繊維や低GI設計を用いる。',
     ),
     ConditionDef(
-      id: 'dialysis',
-      label: '透析',
-      suggestion: '蛋白 1.0–1.2 g/kg/day。透析で喪失するため制限しすぎない。'
-          'リーナレンMP・レナジー系を検討。',
+      id: 'renal',
+      label: '腎不全',
+      suggestion: '蛋白量の調整・K/P・水分負荷に注意。'
+          '保存期=低蛋白・低K・低P、透析期=必要蛋白を確保しつつK/Pに配慮。',
     ),
     ConditionDef(
       id: 'liver',
-      label: '肝不全',
-      proteinCapPerKg: 1.2,
-      suggestion: '肝硬変は蛋白 1.0–1.2 g/kg/day。肝性脳症ではBCAA製剤'
-          '(アミノレバン/ヘパンED/ヘパス)を検討。',
-    ),
-    ConditionDef(
-      id: 'diabetes',
-      label: '糖尿病',
-      suggestion: '血糖配慮。低糖質EN(グルセルナ/インスロー/タピオン等)・'
-          '糖負荷速度に注意。',
+      label: '肝不全/肝性脳症',
+      suggestion: '低栄養を避けつつBCAAを意識し、肝性脳症悪化リスクに配慮。',
     ),
     ConditionDef(
       id: 'respiratory',
-      label: '呼吸不全',
-      suggestion: '高脂質・低糖質(プルモケア)でCO2産生を抑制。'
-          '脂質投与速度 ≤0.1 g/kg/h。',
+      label: '呼吸器疾患/高CO2貯留',
+      suggestion: '糖質過多でCO2産生を増やしすぎない。',
     ),
     ConditionDef(
-      id: 'immune',
-      label: '免疫/侵襲',
-      suggestion: '侵襲時は蛋白 1.2–2.0 g/kg/day。'
-          '免疫調整(メイン)・ビタミンC等を考慮。',
+      id: 'critical',
+      label: '重症・周術期・高侵襲',
+      suggestion: '十分なエネルギーと蛋白を確保。'
+          '必要に応じEPA/DHA・アルギニン等の免疫栄養を補充。',
     ),
     ConditionDef(
-      id: 'heart',
-      label: '心不全',
-      suggestion: '水分制限。2 kcal/ml 等の高濃度EN(テルミール2.0α)を検討。',
+      id: 'wound',
+      label: '褥瘡・創傷治癒・サルコペニア',
+      suggestion: '総エネルギー・蛋白不足に注意。'
+          'アルギニン・HMB・微量元素の補充を検討。',
+    ),
+    ConditionDef(
+      id: 'malabsorption',
+      label: '消化吸収障害・短腸・下痢',
+      suggestion: '消化態/成分栄養の要否、脂肪・浸透圧耐性、'
+          '吸収のしやすさ・低残渣性に配慮。',
+    ),
+    ConditionDef(
+      id: 'dysphagia',
+      label: '嚥下障害・逆流・胃瘻',
+      suggestion: '誤嚥・逆流・注入時間・半固形化の要否に配慮。'
+          '液体で問題があれば半固形・とろみへの切替を検討。',
     ),
   ];
 
@@ -5877,6 +5881,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   // EN食上げ固定シーケンス(7日): 10→20→30→40ml/h → 1pac朝昼夕(3) → 2pac朝昼夕(6) → EN単独full
   static const _enRampSequence = ['r10', 'r20', 'r30', 'r40', 'p3', 'p6', 'p6'];
   static const _enRampDays = 7;
+  // 設定テーブルの Day ドロップダウン共通幅(full/EN/経口リハで揃える)
+  static const double _dayDropW = 52;
   // 経口リハ食上げ(開始日から+5日=計6日): 朝昼夕pacを1→2→3に漸増、不足はPPN補充
   static const _mealRampDays = 6;
 
@@ -6182,7 +6188,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             children: [
                               TextButton(
                                 style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    padding: EdgeInsets.zero,
                                     minimumSize: const Size(0, 0),
                                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                     foregroundColor: Colors.red.shade400),
@@ -6215,16 +6221,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                               : Colors.grey));
                                 }),
                               ),
-                              if (widget.current.fastingDate != null)
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() => widget.current.fastingDate = null);
-                                    widget.state.persist();
-                                    widget.onSettingsChanged?.call();
-                                  },
-                                  child: Icon(Icons.clear,
-                                      size: 14, color: Colors.grey.shade500),
-                                ),
                             ],
                           ),
                         ),
@@ -6244,7 +6240,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           padding: const EdgeInsets.only(bottom: 6),
                           child: TextButton(
                             style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                padding: EdgeInsets.zero,
                                 minimumSize: const Size(0, 0),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 foregroundColor: Colors.blue.shade600),
@@ -6274,20 +6270,24 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Text('Day ', style: TextStyle(fontSize: 13)),
-                              DropdownButton<int>(
-                                value: _rampDays,
-                                isDense: true,
-                                items: List.generate(5, (i) => i + 2)
-                                    .map((d) => DropdownMenuItem(
-                                        value: d, child: Text('$d')))
-                                    .toList(),
-                                onChanged: (v) => setState(() {
-                                  _rampDays = v ?? _rampDays;
-                                  // full達成の変更でEN導入日を強制的に動かさない
-                                  // (同じ日数に揃えられるようにするため)。
-                                  // 初期値の「full+1」はロード時/プロトコル選択時に設定済み。
-                                  _rebuildDays();
-                                }),
+                              SizedBox(
+                                width: _dayDropW,
+                                child: DropdownButton<int>(
+                                  value: _rampDays,
+                                  isDense: true,
+                                  isExpanded: true,
+                                  items: List.generate(5, (i) => i + 2)
+                                      .map((d) => DropdownMenuItem(
+                                          value: d, child: Text('$d')))
+                                      .toList(),
+                                  onChanged: (v) => setState(() {
+                                    _rampDays = v ?? _rampDays;
+                                    // full達成の変更でEN導入日を強制的に動かさない
+                                    // (同じ日数に揃えられるようにするため)。
+                                    // 初期値の「full+1」はロード時/プロトコル選択時に設定済み。
+                                    _rebuildDays();
+                                  }),
+                                ),
                               ),
                             ],
                           ),
@@ -6304,17 +6304,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text('Day ', style: TextStyle(fontSize: 13)),
-                            DropdownButton<int>(
-                              value: _enStartDay.clamp(1, 21),
-                              isDense: true,
-                              items: List.generate(21, (i) => i + 1)
-                                  .map((d) => DropdownMenuItem(
-                                      value: d, child: Text('$d')))
-                                  .toList(),
-                              onChanged: (v) => setState(() {
-                                _enStartDay = v ?? _enStartDay;
-                                _rebuildDays();
-                              }),
+                            SizedBox(
+                              width: _dayDropW,
+                              child: DropdownButton<int>(
+                                value: _enStartDay.clamp(1, 21),
+                                isDense: true,
+                                isExpanded: true,
+                                items: List.generate(21, (i) => i + 1)
+                                    .map((d) => DropdownMenuItem(
+                                        value: d, child: Text('$d')))
+                                    .toList(),
+                                onChanged: (v) => setState(() {
+                                  _enStartDay = v ?? _enStartDay;
+                                  _rebuildDays();
+                                }),
+                              ),
                             ),
                           ],
                         ),
@@ -6333,22 +6337,26 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Text('Day ', style: TextStyle(fontSize: 13)),
-                              DropdownButton<int?>(
-                                value: _oralRehabStartDay,
-                                isDense: true,
-                                hint: const Text('未設定',
-                                    style: TextStyle(fontSize: 13)),
-                                items: [
-                                  const DropdownMenuItem<int?>(
-                                      value: null, child: Text('未設定')),
-                                  ...List.generate(28, (i) => i + 1).map((d) =>
-                                      DropdownMenuItem<int?>(
-                                          value: d, child: Text('$d'))),
-                                ],
-                                onChanged: (v) => setState(() {
-                                  _oralRehabStartDay = v;
-                                  _rebuildDays(); // 食事フェーズを再生成
-                                }),
+                              SizedBox(
+                                width: _dayDropW,
+                                child: DropdownButton<int?>(
+                                  value: _oralRehabStartDay,
+                                  isDense: true,
+                                  isExpanded: true,
+                                  hint: const Text('—',
+                                      style: TextStyle(fontSize: 13)),
+                                  items: [
+                                    const DropdownMenuItem<int?>(
+                                        value: null, child: Text('—')),
+                                    ...List.generate(28, (i) => i + 1).map((d) =>
+                                        DropdownMenuItem<int?>(
+                                            value: d, child: Text('$d'))),
+                                  ],
+                                  onChanged: (v) => setState(() {
+                                    _oralRehabStartDay = v;
+                                    _rebuildDays(); // 食事フェーズを再生成
+                                  }),
+                                ),
                               ),
                             ],
                           ),
@@ -7064,11 +7072,18 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   Widget _legItem(Color c, String lbl, bool line) => Padding(
     padding: const EdgeInsets.only(bottom: 4),
     child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-        width: line ? 18 : 13,
-        height: line ? 3.5 : 13,
-        decoration: BoxDecoration(
-            color: c, borderRadius: BorderRadius.circular(2)),
+      // マーカーを固定幅スロットに収め、テキストの左位置を全項目で揃える
+      SizedBox(
+        width: 18,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: line ? 18 : 13,
+            height: line ? 3.5 : 13,
+            decoration: BoxDecoration(
+                color: c, borderRadius: BorderRadius.circular(2)),
+          ),
+        ),
       ),
       const SizedBox(width: 5),
       Text(lbl,
