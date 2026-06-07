@@ -451,18 +451,44 @@ class CasesPage extends StatelessWidget {
                     ),
                   ],
                 ),
-                TextField(
-                    controller: age,
-                    decoration: const InputDecoration(labelText: '年齢'),
-                    keyboardType: TextInputType.number),
-                TextField(
-                    controller: height,
-                    decoration: const InputDecoration(labelText: '身長 cm'),
-                    keyboardType: TextInputType.number),
-                TextField(
-                    controller: weight,
-                    decoration: const InputDecoration(labelText: '体重 kg'),
-                    keyboardType: TextInputType.number),
+                const SizedBox(height: 4),
+                // 年齢・身長・体重 (横並び)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                          controller: age,
+                          decoration: const InputDecoration(
+                              labelText: '年齢',
+                              suffixText: '歳',
+                              isDense: true),
+                          keyboardType: TextInputType.number),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                          controller: height,
+                          decoration: const InputDecoration(
+                              labelText: '身長',
+                              suffixText: 'cm',
+                              isDense: true),
+                          keyboardType: TextInputType.number),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                          controller: weight,
+                          decoration: const InputDecoration(
+                              labelText: '体重',
+                              suffixText: 'kg',
+                              isDense: true),
+                          keyboardType: TextInputType.number),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // 性別
                 Row(
                   children: [
                     ChoiceChip(
@@ -476,34 +502,68 @@ class CasesPage extends StatelessWidget {
                         onSelected: (_) => setLocal(() => sex = Sex.female)),
                   ],
                 ),
-                DropdownButtonFormField<double>(
-                  initialValue: activity,
-                  decoration: const InputDecoration(labelText: '活動係数'),
-                  items: [for (var i = 0; i < 7; i++) _factorItem(1.0 + i * 0.1, _afHints)],
-                  selectedItemBuilder: (context) => [
-                    for (var i = 0; i < 7; i++)
-                      Align(alignment: Alignment.centerLeft,
-                            child: Text((1.0 + i * 0.1).toStringAsFixed(1))),
+                const SizedBox(height: 8),
+                // 活動係数・侵害係数 (横並び)
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<double>(
+                        initialValue: activity,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: '活動係数', isDense: true),
+                        items: [
+                          for (var i = 0; i < 7; i++)
+                            _factorItem(1.0 + i * 0.1, _afHints)
+                        ],
+                        selectedItemBuilder: (context) => [
+                          for (var i = 0; i < 7; i++)
+                            Align(
+                                alignment: Alignment.centerLeft,
+                                child:
+                                    Text((1.0 + i * 0.1).toStringAsFixed(1))),
+                        ],
+                        onChanged: (v) =>
+                            setLocal(() => activity = v ?? activity),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<double>(
+                        initialValue: stress,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: '侵害係数', isDense: true),
+                        items: [
+                          for (var i = 0; i < 13; i++)
+                            _factorItem(0.9 + i * 0.1, _sfHints)
+                        ],
+                        selectedItemBuilder: (context) => [
+                          for (var i = 0; i < 13; i++)
+                            Align(
+                                alignment: Alignment.centerLeft,
+                                child:
+                                    Text((0.9 + i * 0.1).toStringAsFixed(1))),
+                        ],
+                        onChanged: (v) =>
+                            setLocal(() => stress = v ?? stress),
+                      ),
+                    ),
                   ],
-                  onChanged: (v) => setLocal(() => activity = v ?? activity),
                 ),
+                const SizedBox(height: 8),
+                // 目標タンパク (ドロップダウン)
                 DropdownButtonFormField<double>(
-                  initialValue: stress,
-                  decoration: const InputDecoration(labelText: '侵害係数'),
-                  items: [for (var i = 0; i < 13; i++) _factorItem(0.9 + i * 0.1, _sfHints)],
-                  selectedItemBuilder: (context) => [
-                    for (var i = 0; i < 13; i++)
-                      Align(alignment: Alignment.centerLeft,
-                            child: Text((0.9 + i * 0.1).toStringAsFixed(1))),
-                  ],
-                  onChanged: (v) => setLocal(() => stress = v ?? stress),
+                  initialValue: double.parse(protein.toStringAsFixed(1)),
+                  decoration: const InputDecoration(
+                      labelText: '目標タンパク (g/kg/day)', isDense: true),
+                  items: [for (var i = 6; i <= 20; i++) i * 0.1]
+                      .map((v) => DropdownMenuItem(
+                          value: double.parse(v.toStringAsFixed(1)),
+                          child: Text(v.toStringAsFixed(1))))
+                      .toList(),
+                  onChanged: (v) => setLocal(() => protein = v ?? protein),
                 ),
-                SliderWithLabel(
-                    label: '目標蛋白 g/kg/day',
-                    value: protein,
-                    min: 0.6,
-                    max: 2.0,
-                    onChanged: (v) => setLocal(() => protein = v)),
                 const SizedBox(height: 8),
                 // 病態追加 (目標タンパクの下)
                 Align(
