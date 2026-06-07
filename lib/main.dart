@@ -436,6 +436,144 @@ class _HomePageState extends State<HomePage> {
   void _refresh() => setState(() {});
 }
 
+/// TOP画面の患者カード（折りたたみトグル付き）
+class _CaseCard extends StatefulWidget {
+  const _CaseCard({
+    required this.item,
+    required this.state,
+    required this.refresh,
+    required this.onDischarge,
+  });
+  final PatientCase item;
+  final AppState state;
+  final VoidCallback refresh;
+  final VoidCallback onDischarge;
+
+  @override
+  State<_CaseCard> createState() => _CaseCardState();
+}
+
+class _CaseCardState extends State<_CaseCard> {
+  bool _collapsed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final state = widget.state;
+    final refresh = widget.refresh;
+    void openBuilder() {
+      state.selectedCaseId = item.id;
+      refresh();
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (c) => BuilderPage(state: state, refresh: refresh)));
+    }
+
+    final admission =
+        item.bedHistory.where((b) => b.fromBed == null).firstOrNull;
+    final admDate = admission == null
+        ? ''
+        : (() {
+            final p = DateTime.tryParse(admission.changedAt);
+            return p == null
+                ? admission.changedAt
+                : '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}';
+          })();
+
+    return GestureDetector(
+      onHorizontalDragEnd: (_) => openBuilder(),
+      child: Card(
+        child: InkWell(
+          onTap: openBuilder,
+          onLongPress: openBuilder,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => showPatientEditDialog(context, state, item,
+                        onSaved: refresh),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.person, size: 16),
+                            const SizedBox(width: 2),
+                            Text(item.caseCode,
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 10),
+                            const Icon(Icons.bed, size: 16, color: Colors.grey),
+                            const SizedBox(width: 2),
+                            Text(item.currentBed,
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.bold)),
+                            if (admDate.isNotEmpty) ...[
+                              const SizedBox(width: 10),
+                              Icon(Icons.login,
+                                  size: 14, color: Colors.green.shade400),
+                              const SizedBox(width: 2),
+                              Text(admDate,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.green.shade400)),
+                            ],
+                            if (item.fastingDate != null) ...[
+                              const SizedBox(width: 10),
+                              Icon(Icons.no_meals,
+                                  size: 14, color: Colors.red.shade300),
+                              const SizedBox(width: 2),
+                              Text(() {
+                                final p = DateTime.tryParse(item.fastingDate!);
+                                return p == null
+                                    ? item.fastingDate!
+                                    : '${p.month}/${p.day}';
+                              }(),
+                                  style: TextStyle(
+                                      fontSize: 13, color: Colors.red.shade300)),
+                            ],
+                          ],
+                        ),
+                        if (!_collapsed) ...[
+                          const SizedBox(height: 2),
+                          Text(item.patientInfoLine,
+                              style: const TextStyle(fontSize: 14)),
+                          if (item.memo.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(item.memo,
+                                style: const TextStyle(
+                                    fontSize: 13, color: Colors.grey),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                      _collapsed ? Icons.expand_more : Icons.expand_less,
+                      size: 22, color: Colors.grey),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _collapsed ? '展開' : '折りたたむ',
+                  onPressed: () => setState(() => _collapsed = !_collapsed),
+                ),
+                FilledButton.tonal(
+                    onPressed: openBuilder, child: const Text('計算')),
+                const SizedBox(width: 8),
+                FilledButton(
+                    onPressed: widget.onDischarge, child: const Text('退室')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class CasesPage extends StatelessWidget {
   const CasesPage({super.key, required this.state, required this.refresh});
   final AppState state;
@@ -479,114 +617,11 @@ class CasesPage extends StatelessWidget {
   }
 
   Widget _caseCard(PatientCase item, BuildContext context) {
-    return GestureDetector(
-      onHorizontalDragEnd: (_) {
-        state.selectedCaseId = item.id;
-        refresh();
-        Navigator.of(context).push(MaterialPageRoute(
-            builder: (c) => BuilderPage(state: state, refresh: refresh)));
-      },
-      child: Card(
-        child: InkWell(
-          onTap: () {
-            state.selectedCaseId = item.id;
-            refresh();
-            Navigator.of(context).push(MaterialPageRoute(
-                builder: (c) => BuilderPage(state: state, refresh: refresh)));
-          },
-          onLongPress: () {
-            state.selectedCaseId = item.id;
-            refresh();
-            Navigator.of(context).push(MaterialPageRoute(
-                builder: (c) => BuilderPage(state: state, refresh: refresh)));
-          },
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => showPatientEditDialog(
-                            context, state, item, onSaved: refresh),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 1行目: 患者No / ベッド / 入室日
-                            Builder(builder: (ctx) {
-                              final admission = item.bedHistory.where((b) => b.fromBed == null).firstOrNull;
-                              final admDate = admission == null ? '' : (() {
-                                final p = DateTime.tryParse(admission.changedAt);
-                                return p == null ? admission.changedAt
-                                    : '${p.year}/${p.month.toString().padLeft(2,'0')}/${p.day.toString().padLeft(2,'0')}';
-                              })();
-                              return Row(
-                                children: [
-                                  const Icon(Icons.person, size: 16),
-                                  const SizedBox(width: 2),
-                                  Text(item.caseCode,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                  const SizedBox(width: 10),
-                                  const Icon(Icons.bed, size: 16, color: Colors.grey),
-                                  const SizedBox(width: 2),
-                                  Text(item.currentBed,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                  if (admDate.isNotEmpty) ...[
-                                    const SizedBox(width: 10),
-                                    Icon(Icons.login, size: 14, color: Colors.green.shade400),
-                                    const SizedBox(width: 2),
-                                    Text(admDate, style: TextStyle(fontSize: 13, color: Colors.green.shade400)),
-                                  ],
-                                  if (item.fastingDate != null) ...[
-                                    const SizedBox(width: 10),
-                                    Icon(Icons.no_meals, size: 14, color: Colors.red.shade300),
-                                    const SizedBox(width: 2),
-                                    Text(() {
-                                      final p = DateTime.tryParse(item.fastingDate!);
-                                      return p == null ? item.fastingDate!
-                                          : '${p.month}/${p.day}';
-                                    }(), style: TextStyle(fontSize: 13, color: Colors.red.shade300)),
-                                  ],
-                                ],
-                              );
-                            }),
-                            const SizedBox(height: 2),
-                            Text(item.patientInfoLine,
-                                style: const TextStyle(fontSize: 14)),
-                            if (item.memo.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(item.memo,
-                                  style: const TextStyle(fontSize: 13, color: Colors.grey),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: () {
-                        state.selectedCaseId = item.id;
-                        refresh();
-                        Navigator.of(context).push(MaterialPageRoute(
-                            builder: (c) => BuilderPage(state: state, refresh: refresh)));
-                      },
-                      child: const Text('計算'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () => _dischargeCase(context, item),
-                      child: const Text('退室'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return _CaseCard(
+      item: item,
+      state: state,
+      refresh: refresh,
+      onDischarge: () => _dischargeCase(context, item),
     );
   }
 
