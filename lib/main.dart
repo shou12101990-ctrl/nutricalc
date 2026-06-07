@@ -127,6 +127,244 @@ Future<DateTime?> _quickPickDate(BuildContext context, DateTime initial) {
   );
 }
 
+/// 患者情報編集ダイアログ（TOP画面・ビルダー画面で共通利用）
+/// 患者/入室日は固定表示。絶食開始日・ベッド・AF/SF・目標タンパク・病態タグ・メモを編集。
+Future<void> showPatientEditDialog(
+    BuildContext context, AppState state, PatientCase current,
+    {VoidCallback? onSaved}) async {
+  double activity = current.activityFactor;
+  double stress = current.stressFactor;
+  double protein = current.proteinGoalPerKg;
+  final memoCtrl = TextEditingController(text: current.memo);
+  final selectedTags = current.conditionTags.toSet();
+  DateTime? fastingDate = current.fastingDate != null
+      ? DateTime.tryParse(current.fastingDate!)
+      : null;
+  int bedIdx =
+      (int.tryParse(current.currentBed.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1)
+          .clamp(1, 8);
+  final admEntry =
+      current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
+  final admDateStr = admEntry == null
+      ? '—'
+      : (() {
+          final p = DateTime.tryParse(admEntry.changedAt);
+          return p == null
+              ? admEntry.changedAt
+              : '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}';
+        })();
+
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setLocal) => AlertDialog(
+        title: const Text('患者情報編集'),
+        content: SizedBox(
+          width: (MediaQuery.of(context).size.width - 80).clamp(280.0, 400.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 患者 / 入室日 (固定表示)
+                Row(children: [
+                  const Icon(Icons.person, size: 16, color: Colors.black54),
+                  const SizedBox(width: 2),
+                  Text('患者${current.caseCode}',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 12),
+                  Icon(Icons.login, size: 14, color: Colors.green.shade500),
+                  const SizedBox(width: 2),
+                  Text('入室日 $admDateStr',
+                      style:
+                          TextStyle(fontSize: 13, color: Colors.green.shade600)),
+                ]),
+                const Divider(height: 16),
+                // 絶食開始日 (編集可)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(Icons.no_meals,
+                      size: 22,
+                      color: fastingDate == null
+                          ? Colors.grey.shade600
+                          : Colors.red.shade400),
+                  title: Text(
+                    fastingDate == null
+                        ? '絶食開始日: 未設定'
+                        : '絶食開始日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: fastingDate == null
+                            ? Colors.grey
+                            : Colors.red.shade400),
+                  ),
+                  trailing: fastingDate != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setLocal(() => fastingDate = null))
+                      : const Icon(Icons.calendar_today, size: 18),
+                  onTap: () async {
+                    final picked = await _quickPickDate(
+                        context, fastingDate ?? DateTime.now());
+                    if (picked != null) setLocal(() => fastingDate = picked);
+                  },
+                ),
+                // ベッド (編集可・移動を反映)
+                Row(children: [
+                  Icon(Icons.bed, size: 18, color: Colors.blueGrey.shade600),
+                  const SizedBox(width: 6),
+                  Text('ベッド ${bedIdx.toString().padLeft(2, '0')}',
+                      style: const TextStyle(fontSize: 14)),
+                ]),
+                Slider(
+                  value: bedIdx.toDouble(),
+                  min: 1,
+                  max: 8,
+                  divisions: 7,
+                  label: bedIdx.toString().padLeft(2, '0'),
+                  onChanged: (v) => setLocal(() => bedIdx = v.toInt()),
+                ),
+                // AF / SF (横並び)
+                Row(children: [
+                  Expanded(
+                    child: DropdownButtonFormField<double>(
+                      initialValue: activity,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                          labelText: '活動係数 (AF)', isDense: true),
+                      items: [
+                        for (var i = 0; i < 7; i++)
+                          _factorItem(1.0 + i * 0.1, _afHints)
+                      ],
+                      selectedItemBuilder: (context) => [
+                        for (var i = 0; i < 7; i++)
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text((1.0 + i * 0.1).toStringAsFixed(1))),
+                      ],
+                      onChanged: (v) =>
+                          setLocal(() => activity = v ?? activity),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<double>(
+                      initialValue: stress,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                          labelText: '侵害係数 (SF)', isDense: true),
+                      items: [
+                        for (var i = 0; i < 13; i++)
+                          _factorItem(0.9 + i * 0.1, _sfHints)
+                      ],
+                      selectedItemBuilder: (context) => [
+                        for (var i = 0; i < 13; i++)
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text((0.9 + i * 0.1).toStringAsFixed(1))),
+                      ],
+                      onChanged: (v) => setLocal(() => stress = v ?? stress),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                // 目標タンパク
+                DropdownButtonFormField<double>(
+                  initialValue: double.parse(protein.toStringAsFixed(1)),
+                  decoration: const InputDecoration(
+                      labelText: '目標タンパク (g/kg/day)', isDense: true),
+                  items: [for (var i = 6; i <= 20; i++) i * 0.1]
+                      .map((v) => DropdownMenuItem(
+                          value: double.parse(v.toStringAsFixed(1)),
+                          child: Text(v.toStringAsFixed(1))))
+                      .toList(),
+                  onChanged: (v) => setLocal(() => protein = v ?? protein),
+                ),
+                const SizedBox(height: 12),
+                // 病態タグ (常時展開)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('病態タグ',
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final c in ConditionCatalog.all)
+                      FilterChip(
+                        label: Text(c.label,
+                            style: const TextStyle(fontSize: 12)),
+                        selected: selectedTags.contains(c.id),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        onSelected: (sel) => setLocal(() {
+                          if (sel) {
+                            selectedTags.add(c.id);
+                          } else {
+                            selectedTags.remove(c.id);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: memoCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'メモ（合併症・コメントなど）',
+                      hintText: '例: 糖尿病、CKDステージ3'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('キャンセル')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('保存')),
+        ],
+      ),
+    ),
+  );
+  if (saved != true) return;
+  current.activityFactor = activity;
+  current.stressFactor = stress;
+  current.proteinGoalPerKg = protein;
+  current.memo = memoCtrl.text.trim();
+  current.conditionTags = ConditionCatalog.all
+      .map((c) => c.id)
+      .where(selectedTags.contains)
+      .toList();
+  current.fastingDate = fastingDate == null
+      ? null
+      : '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
+  final newBed = bedIdx.toString().padLeft(2, '0');
+  if (newBed != current.currentBed) {
+    current.bedHistory.insert(
+      0,
+      BedAssignment(
+        changedAt: DateTime.now().toIso8601String().split('T').first,
+        fromBed: current.currentBed,
+        toBed: newBed,
+        note: 'ベッド移動',
+      ),
+    );
+    current.currentBed = newBed;
+  }
+  await state.persist();
+  onSaved?.call();
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final catalog = await ProductCatalog.load();
@@ -271,7 +509,8 @@ class CasesPage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: InkWell(
-                        onTap: () => _editCaseCode(context, item),
+                        onTap: () => showPatientEditDialog(
+                            context, state, item, onSaved: refresh),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1725,6 +1964,9 @@ class _BuilderPageState extends State<BuilderPage>
       final s = current.autoDesignConfig?['startDate'] as String?;
       return (s != null ? DateTime.tryParse(s) : null) ?? _admissionDate;
     })();
+    final _fastingDate = current.fastingDate != null
+        ? DateTime.tryParse(current.fastingDate!)
+        : null;
 
     return Scaffold(
           appBar: AppBar(
@@ -1761,9 +2003,10 @@ class _BuilderPageState extends State<BuilderPage>
                               ],
                             ),
                             const SizedBox(height: 4),
-                            // 入室日 / 栄養開始日
+                            // 入室日 / 絶食開始日 / 栄養開始日
                             Text(
                               '入室日 ${_mmdd(_admissionDate)}, '
+                              '絶食開始日 ${_mmdd(_fastingDate)}, '
                               '栄養開始日 ${_mmdd(_nutritionStart)}',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
@@ -2888,249 +3131,11 @@ class _BuilderPageState extends State<BuilderPage>
 
   /// 患者パラメータをまとめて編集するダイアログ
   Future<void> _editPatientParams(
-      BuildContext context, PatientCase current) async {
-    double activity = current.activityFactor;
-    double stress = current.stressFactor;
-    double protein = current.proteinGoalPerKg;
-    final memoCtrl = TextEditingController(text: current.memo);
-    final selectedTags = current.conditionTags.toSet();
-    DateTime? fastingDate = current.fastingDate != null
-        ? DateTime.tryParse(current.fastingDate!)
-        : null;
-    int bedIdx =
-        int.tryParse(current.currentBed.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
-    bedIdx = bedIdx.clamp(1, 8);
-    // 患者・入室日（固定表示）
-    final admEntry =
-        current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
-    final admDateStr = admEntry == null
-        ? '—'
-        : (() {
-            final p = DateTime.tryParse(admEntry.changedAt);
-            return p == null
-                ? admEntry.changedAt
-                : '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}';
-          })();
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('パラメータ編集'),
-          content: SizedBox(
-            // ダイアログ幅を固定し、病態チップが横に広がらず縦に折り返すように
-            width: (MediaQuery.of(context).size.width - 80)
-                .clamp(280.0, 400.0),
-            child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── 患者 / 入室日 (固定表示) ──
-                Row(children: [
-                  const Icon(Icons.person, size: 16, color: Colors.black54),
-                  const SizedBox(width: 2),
-                  Text('患者${current.caseCode}',
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 12),
-                  Icon(Icons.login, size: 14, color: Colors.green.shade500),
-                  const SizedBox(width: 2),
-                  Text('入室日 $admDateStr',
-                      style: TextStyle(
-                          fontSize: 13, color: Colors.green.shade600)),
-                ]),
-                const Divider(height: 16),
-                // ── 絶食開始日 (編集可) ──
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  leading: Icon(Icons.no_meals,
-                      size: 22,
-                      color: fastingDate == null
-                          ? Colors.grey.shade600
-                          : Colors.red.shade400),
-                  title: Text(
-                    fastingDate == null
-                        ? '絶食開始日: 未設定'
-                        : '絶食開始日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                        fontSize: 14,
-                        color: fastingDate == null
-                            ? Colors.grey
-                            : Colors.red.shade400),
-                  ),
-                  trailing: fastingDate != null
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () => setLocal(() => fastingDate = null),
-                        )
-                      : const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
-                    final picked = await _quickPickDate(
-                        context, fastingDate ?? DateTime.now());
-                    if (picked != null) setLocal(() => fastingDate = picked);
-                  },
-                ),
-                // ── ベッド (編集可・移動を反映) ──
-                Row(children: [
-                  Icon(Icons.bed, size: 18, color: Colors.blueGrey.shade600),
-                  const SizedBox(width: 6),
-                  Text('ベッド ${bedIdx.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontSize: 14)),
-                ]),
-                Slider(
-                  value: bedIdx.toDouble(),
-                  min: 1,
-                  max: 8,
-                  divisions: 7,
-                  label: bedIdx.toString().padLeft(2, '0'),
-                  onChanged: (v) => setLocal(() => bedIdx = v.toInt()),
-                ),
-                // ── AF / SF (横並び) ──
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<double>(
-                        initialValue: activity,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            labelText: '活動係数 (AF)', isDense: true),
-                        items: [
-                          for (var i = 0; i < 7; i++)
-                            _factorItem(1.0 + i * 0.1, _afHints)
-                        ],
-                        selectedItemBuilder: (context) => [
-                          for (var i = 0; i < 7; i++)
-                            Align(
-                                alignment: Alignment.centerLeft,
-                                child:
-                                    Text((1.0 + i * 0.1).toStringAsFixed(1))),
-                        ],
-                        onChanged: (v) =>
-                            setLocal(() => activity = v ?? activity),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButtonFormField<double>(
-                        initialValue: stress,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            labelText: '侵害係数 (SF)', isDense: true),
-                        items: [
-                          for (var i = 0; i < 13; i++)
-                            _factorItem(0.9 + i * 0.1, _sfHints)
-                        ],
-                        selectedItemBuilder: (context) => [
-                          for (var i = 0; i < 13; i++)
-                            Align(
-                                alignment: Alignment.centerLeft,
-                                child:
-                                    Text((0.9 + i * 0.1).toStringAsFixed(1))),
-                        ],
-                        onChanged: (v) =>
-                            setLocal(() => stress = v ?? stress),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // ── 目標タンパク ──
-                DropdownButtonFormField<double>(
-                  initialValue: double.parse(protein.toStringAsFixed(1)),
-                  decoration: const InputDecoration(
-                      labelText: '目標タンパク (g/kg/day)', isDense: true),
-                  items: [for (var i = 6; i <= 20; i++) i * 0.1]
-                      .map((v) => DropdownMenuItem(
-                          value: double.parse(v.toStringAsFixed(1)),
-                          child: Text(v.toStringAsFixed(1))))
-                      .toList(),
-                  onChanged: (v) => setLocal(() => protein = v ?? protein),
-                ),
-                const SizedBox(height: 12),
-                // ── 病態タグ (編集画面では常時展開) ──
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('病態タグ',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade700)),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final c in ConditionCatalog.all)
-                      FilterChip(
-                        label: Text(c.label,
-                            style: const TextStyle(fontSize: 12)),
-                        selected: selectedTags.contains(c.id),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        onSelected: (sel) => setLocal(() {
-                          if (sel) {
-                            selectedTags.add(c.id);
-                          } else {
-                            selectedTags.remove(c.id);
-                          }
-                        }),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: memoCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'メモ（合併症・コメントなど）',
-                      hintText: '例: 糖尿病、CKDステージ3'),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('キャンセル')),
-            FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('保存')),
-          ],
-        ),
-      ),
-    );
-    if (saved != true) return;
-    current.activityFactor = activity;
-    current.stressFactor = stress;
-    current.proteinGoalPerKg = protein;
-    current.memo = memoCtrl.text.trim();
-    current.conditionTags = ConditionCatalog.all
-        .map((c) => c.id)
-        .where(selectedTags.contains)
-        .toList();
-    current.fastingDate = fastingDate == null ? null
-        : '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
-    // ベッド移動: 変更されていれば履歴に追加して currentBed を更新
-    final newBed = bedIdx.toString().padLeft(2, '0');
-    if (newBed != current.currentBed) {
-      current.bedHistory.insert(
-        0,
-        BedAssignment(
-          changedAt: DateTime.now().toIso8601String().split('T').first,
-          fromBed: current.currentBed,
-          toBed: newBed,
-          note: 'ベッド移動',
-        ),
-      );
-      current.currentBed = newBed;
-    }
-    await widget.state.persist();
-    setState(() {});
-    widget.refresh();
-  }
+          BuildContext context, PatientCase current) =>
+      showPatientEditDialog(context, widget.state, current, onSaved: () {
+        if (mounted) setState(() {});
+        widget.refresh();
+      });
 
   /// Phase 4-①: 個別パラメータの編集ヘルパー群
   Future<void> _editIntField(
