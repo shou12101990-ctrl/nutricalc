@@ -3431,15 +3431,29 @@ class _MasterPageState extends State<MasterPage> {
     );
   }
 
-  /// 製剤を同一ベース名(容量違い)でまとめてカード化
+  /// あいうえお順ソート用キー: ひらがな→カタカナに統一して五十音順に揃える
+  /// (英数字→かな→漢字 の順。かなは清濁・大小を概ね五十音順に整列)
+  String _kanaSortKey(String s) {
+    final buf = StringBuffer();
+    for (final r in s.runes) {
+      if (r >= 0x3041 && r <= 0x3096) {
+        buf.writeCharCode(r + 0x60); // ひらがな→カタカナ
+      } else {
+        buf.writeCharCode(r);
+      }
+    }
+    return buf.toString();
+  }
+
+  /// 製剤を同一ベース名(容量違い)でまとめ、あいうえお順にカード化
   List<Widget> _groupCards(List<Product> list) {
     final groups = <String, List<Product>>{};
     for (final p in list) {
       groups.putIfAbsent(productBaseName(p.name), () => []).add(p);
     }
-    return groups.entries
-        .map((e) => _productGroupCard(e.key, e.value))
-        .toList();
+    final keys = groups.keys.toList()
+      ..sort((a, b) => _kanaSortKey(a).compareTo(_kanaSortKey(b)));
+    return keys.map((k) => _productGroupCard(k, groups[k]!)).toList();
   }
 
   /// 「食事」タブのサブセクション見出し（----濃厚流動食---- 等）
