@@ -3375,12 +3375,12 @@ class _MasterPageState extends State<MasterPage> {
 
   @override
   Widget build(BuildContext context) {
-    // EN選択時はEN_AUXも含めて表示、JSON順を維持
+    // EN: EN本体/補助 + 両用food(alsoEn) を表示 / 食事: 濃厚流動食+栄養サポートを統合
     final items = category == 'EN'
-        ? widget.state.catalog.products
-            .where((p) => p.category == 'EN' || p.category == 'EN_AUX')
-            .toList()
-        : widget.state.catalog.byCategory(category);
+        ? widget.state.catalog.products.where((p) => p.inEnTab).toList()
+        : category == '食事'
+            ? widget.state.catalog.products.where((p) => p.isFood).toList()
+            : widget.state.catalog.byCategory(category);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -3393,8 +3393,7 @@ class _MasterPageState extends State<MasterPage> {
                 ButtonSegment(value: 'EN', label: Text('EN')),
                 ButtonSegment(value: 'TPN', label: Text('TPN')),
                 ButtonSegment(value: 'PPN', label: Text('PPN')),
-                ButtonSegment(value: '濃厚流動食', label: Text('濃厚流動食')),
-                ButtonSegment(value: '栄養サポート食品', label: Text('栄養サポート')),
+                ButtonSegment(value: '食事', label: Text('食事')),
                 ButtonSegment(value: '電解質', label: Text('電解質')),
                 ButtonSegment(value: '微量元素', label: Text('微量元素')),
                 ButtonSegment(value: 'ビタミン', label: Text('ビタミン')),
@@ -3407,22 +3406,60 @@ class _MasterPageState extends State<MasterPage> {
           ),
         ),
         const SizedBox(height: 8),
-        Text('院内採用薬を選択（容量はチップで選択）',
+        Text(
+            category == '食事'
+                ? '食事(経口リハ)期の製剤。EN印は経腸でも使用可'
+                : '院内採用薬を選択（容量はチップで選択）',
             style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 12),
-        // 同一ベース名(容量違い)を1項目に集約
-        ...(() {
-          final groups = <String, List<Product>>{};
-          for (final p in items) {
-            groups.putIfAbsent(productBaseName(p.name), () => []).add(p);
-          }
-          return groups.entries
-              .map((e) => _productGroupCard(e.key, e.value))
-              .toList();
-        })(),
+        // 「食事」タブは 濃厚流動食 / 栄養サポート食品 のサブセクションに分けて表示
+        if (category == '食事') ...[
+          for (final sub in const ['濃厚流動食', '栄養サポート食品'])
+            ...(() {
+              final subItems =
+                  items.where((p) => p.category == sub).toList();
+              if (subItems.isEmpty) return <Widget>[];
+              return [
+                _foodSectionHeader(sub),
+                ..._groupCards(subItems),
+              ];
+            })(),
+        ] else
+          // 同一ベース名(容量違い)を1項目に集約
+          ..._groupCards(items),
       ],
     );
   }
+
+  /// 製剤を同一ベース名(容量違い)でまとめてカード化
+  List<Widget> _groupCards(List<Product> list) {
+    final groups = <String, List<Product>>{};
+    for (final p in list) {
+      groups.putIfAbsent(productBaseName(p.name), () => []).add(p);
+    }
+    return groups.entries
+        .map((e) => _productGroupCard(e.key, e.value))
+        .toList();
+  }
+
+  /// 「食事」タブのサブセクション見出し（----濃厚流動食---- 等）
+  Widget _foodSectionHeader(String title) => Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 8),
+        child: Row(
+          children: [
+            const Expanded(child: Divider(thickness: 1)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(title,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700)),
+            ),
+            const Expanded(child: Divider(thickness: 1)),
+          ],
+        ),
+      );
 
   // ビタミンの単位 (1袋あたり)
   static const _vitUnits = {
@@ -3552,6 +3589,10 @@ class _MasterPageState extends State<MasterPage> {
             if (rep.content.isNotEmpty)
               _miniTag(rep.content,
                   bg: Colors.blueGrey.shade50, fg: Colors.blueGrey.shade900),
+            // 両用(食事⇔EN)製剤バッジ
+            if (rep.alsoEn)
+              _miniTag('EN両用',
+                  bg: Colors.green.shade50, fg: Colors.green.shade800),
           ],
         ),
         subtitle: Padding(
@@ -3910,6 +3951,7 @@ class Product {
     required this.carbBase,
     required this.notes,
     this.micro,
+    this.alsoEn = false,
   });
 
   final String id;
@@ -3928,6 +3970,18 @@ class Product {
   // 微量栄養素(1袋あたり): {elec:{Na,K,Cl,Ca,Mg,P}, trace:{Zn,Fe,Mn,Cu,I,Se}, vit:{...}}
   // elec: Na/K/Cl/Ca/Mg=mEq, P=mmol / trace=μmol / vit=各単位
   Map<String, dynamic>? micro;
+  // 両用フラグ: trueなら「食事」カテゴリの製剤をENマスタにも表示（同一製剤として採用共有）
+  bool alsoEn;
+
+  /// この製剤を「食事」タブに表示するか（濃厚流動食 or 栄養サポート食品）
+  bool get isFood =>
+      category == '濃厚流動食' || category == '栄養サポート食品';
+
+  /// 「食事」タブ内のサブセクション名（濃厚流動食 / 栄養サポート食品）
+  String? get foodClass => isFood ? category : null;
+
+  /// ENマスタ（タブ）に表示するか（EN本体/補助 or 両用food）
+  bool get inEnTab => category == 'EN' || category == 'EN_AUX' || alsoEn;
 
   /// カテゴリ表示名（EN_AUXは「EN補助」と表示）
   String get categoryLabel {
@@ -3961,6 +4015,7 @@ class Product {
       carbBase: toDouble(map['carb_g_or_kcal_basis']),
       notes: map['notes'] as String?,
       micro: (map['micro'] as Map?)?.cast<String, dynamic>(),
+      alsoEn: (map['also_en'] as bool?) ?? false,
     );
   }
 
@@ -3979,6 +4034,7 @@ class Product {
         'carb_g_or_kcal_basis': carbBase,
         'notes': notes,
         'micro': micro,
+        if (alsoEn) 'also_en': true,
       };
 
   String get volumeMlString => volumeMl == null
@@ -4908,9 +4964,9 @@ class AppState {
 
   /// 初回起動時にデフォルトで採用済みにする製剤名（院内採用の標準セット）
   static const List<String> _defaultAdoptedNames = [
-    // ── EN ──
-    'F2α', 'テルミール2.0α', 'グルセルナREX', 'リーナレンMP',
-    'ヘパス', 'ペプチーノ', 'ペプタメンAF', 'ペプタメンスタンダード',
+    // ── EN / 食事（再編後の名称に合わせる） ──
+    'F2α(エフツーアルファ)', 'テルミール2.0α', 'グルセルナ-REX', 'リーナレンMP',
+    'ヘパス', 'ペプチーノ', 'ペプタメン AF', 'ペプタメン スタンダード',
     'エネーボ', 'エレンタール', 'アミノレバン',
     // ── EN補助（6種すべて） ──
     'REF P1', 'GFO', 'サンファイバー', 'オルニュート', 'ブイ・クレスゼリー', '一挙千菜',
