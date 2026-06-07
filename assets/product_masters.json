@@ -1299,7 +1299,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "塩化カリウム. 低カリウム血症の補正.\n・原液の急速静注は心停止を起こすため【禁忌】. 必ず希釈.\n・濃度40mEq/L以下, 速度20mEq/h以下, 1日100mEq以下が目安.",
    "sheet_row": 201,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "K"
   },
   {
    "id": "elyte_202",
@@ -1315,7 +1316,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "リン酸ナトリウム. 低リン血症の補正.\n・リフィーディング症候群でPが低下した際に補充.\n・カルシウム製剤と混合すると沈殿するため別ルートで.",
    "sheet_row": 202,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "P"
   },
   {
    "id": "elyte_203",
@@ -1331,7 +1333,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "硫酸マグネシウム. 低マグネシウム血症の補正.\n・急速投与で血圧低下・呼吸抑制・腱反射消失.\n・腎不全では排泄低下し蓄積するため減量.",
    "sheet_row": 203,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "Mg"
   },
   {
    "id": "elyte_204",
@@ -1347,7 +1350,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "グルコン酸カルシウム. 低カルシウム血症の補正・高K血症時の心筋保護.\n・急速静注で徐脈・不整脈. ジギタリス使用中は特に注意.\n・リン酸/重炭酸製剤と混合で沈殿.",
    "sheet_row": 204,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "Ca"
   },
   {
    "id": "elyte_205",
@@ -1363,7 +1367,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "低ナトリウム血症の補正・希釈用の高張Na源.\n・急速補正は浸透圧性脱髄症候群(ODS)の危険.\n・補正速度は概ね10mEq/L/日以内に.",
    "sheet_row": 205,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "Na"
   },
   {
    "id": "elyte_206",
@@ -1379,7 +1384,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "炭酸水素ナトリウム. 代謝性アシドーシスの補正.\n・Ca含有製剤と混合で沈殿. 別ルートで投与.\n・過量でアルカローシス・低K血症・Na負荷.",
    "sheet_row": 206,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "HCO3"
   },
   {
    "id": "trace_301",
@@ -1395,7 +1401,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "混合微量元素製剤(Fe35・Mn1・Zn60・Cu5・I1 μmol/管).\n・高カロリー輸液(TPN)施行時に1日1管.\n・2週間以上のTPNで欠乏予防. 胆道閉塞時はMn・Cu蓄積に注意.",
    "sheet_row": 301,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "総合"
   },
   {
    "id": "trace_302",
@@ -1411,7 +1418,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "セレン製剤. 長期TPNでのセレン欠乏の補充.\n・欠乏で心筋症・筋症・爪白色化. 1日100μg.\n・標準の微量元素製剤(エレメンミック等)にはSeが含まれない.",
    "sheet_row": 302,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "Se"
   },
   {
    "id": "trace_303",
@@ -1427,7 +1435,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "亜鉛欠乏の補正.\n・欠乏で皮膚炎・脱毛・味覚障害・創傷治癒遅延・易感染.\n・長期TPN・下痢・熱傷で需要増大. 過剰投与でCu欠乏.",
    "sheet_row": 303,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "Zn"
   },
   {
    "id": "vit_401",
@@ -1443,7 +1452,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "高カロリー輸液用総合ビタミン剤. TPN時に1日1キット.\n・ビタミンB1を含み、糖質代謝・Wernicke脳症予防に重要.\n・光分解するため遮光して投与.",
    "sheet_row": 401,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "総合"
   },
   {
    "id": "vit_402",
@@ -1459,7 +1469,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "リフィーディング症候群・Wernicke脳症の予防/治療.\n・体内貯蔵は約30mgと少なく2〜3週で枯渇. 糖質投与で消費増大.\n・予防100〜300mg/日, 治療は500mg×3/日 点滴.",
    "sheet_row": 402,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "単独"
   },
   {
    "id": "vit_403",
@@ -1475,7 +1486,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "コラーゲン合成・創傷治癒・抗酸化.\n・欠乏で壊血病(出血・創傷治癒遅延). 侵襲・熱傷で需要増大.",
    "sheet_row": 403,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "単独"
   },
   {
    "id": "vit_404",
@@ -1491,7 +1503,8 @@
    "carb_g_or_kcal_basis": null,
    "notes": "凝固因子(II・VII・IX・X)産生に必須.\n・長期絶食・広域抗菌薬・胆汁うっ滞で欠乏→PT延長・出血傾向.\n・補充でPT是正.",
    "sheet_row": 404,
-   "product_type": "医薬品"
+   "product_type": "医薬品",
+   "add_type": "単独"
   },
   {
    "id": "thick_501",
@@ -3236,7 +3249,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "K"
   },
   {
    "id": "elyte_702",
@@ -3253,7 +3267,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "K"
   },
   {
    "id": "elyte_703",
@@ -3270,7 +3285,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "K"
   },
   {
    "id": "elyte_704",
@@ -3287,7 +3303,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "Na"
   },
   {
    "id": "elyte_705",
@@ -3304,7 +3321,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "Na"
   },
   {
    "id": "elyte_706",
@@ -3321,7 +3339,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "Mg"
   },
   {
    "id": "elyte_707",
@@ -3338,7 +3357,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "Mg"
   },
   {
    "id": "elyte_708",
@@ -3355,7 +3375,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "P"
   },
   {
    "id": "elyte_709",
@@ -3372,7 +3393,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "P"
   },
   {
    "id": "elyte_710",
@@ -3389,7 +3411,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "P"
   },
   {
    "id": "elyte_711",
@@ -3406,7 +3429,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "Ca"
   },
   {
    "id": "elyte_712",
@@ -3423,7 +3447,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "Ca"
   },
   {
    "id": "elyte_713",
@@ -3440,7 +3465,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "Ca"
   },
   {
    "id": "trace_701",
@@ -3465,7 +3491,8 @@
      "Mn": 1.0,
      "I": 1.0
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "trace_702",
@@ -3489,7 +3516,8 @@
      "Mn": 1.0,
      "I": 1.0
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "trace_703",
@@ -3514,7 +3542,8 @@
      "Mn": 1.0,
      "I": 1.0
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "trace_704",
@@ -3539,7 +3568,8 @@
      "Mn": 1.0,
      "I": 1.0
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "trace_705",
@@ -3564,7 +3594,8 @@
      "Mn": 1.0,
      "I": 1.0
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "trace_706",
@@ -3585,7 +3616,8 @@
     "trace": {
      "Se": 100.0
     }
-   }
+   },
+   "add_type": "Se"
   },
   {
    "id": "vit_701",
@@ -3618,7 +3650,8 @@
      "K": 2.0,
      "葉酸": 0.4
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "vit_702",
@@ -3651,7 +3684,8 @@
      "K": 2.0,
      "葉酸": 0.4
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "vit_703",
@@ -3684,7 +3718,8 @@
      "K": 2.0,
      "葉酸": 0.4
     }
-   }
+   },
+   "add_type": "総合"
   },
   {
    "id": "vit_704",
@@ -3701,7 +3736,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "総合"
   },
   {
    "id": "vit_705",
@@ -3728,7 +3764,8 @@
      "パントテン酸": 5.0,
      "C": 50.0
     }
-   }
+   },
+   "add_type": "B群"
   },
   {
    "id": "vit_706",
@@ -3751,7 +3788,8 @@
      "B6": 100.0,
      "B12": 1000.0
     }
-   }
+   },
+   "add_type": "B群"
   },
   {
    "id": "vit_707",
@@ -3774,7 +3812,8 @@
      "B6": 100.0,
      "B12": 1000.0
     }
-   }
+   },
+   "add_type": "B群"
   },
   {
    "id": "vit_708",
@@ -3791,7 +3830,8 @@
    "npc_n_ratio": null,
    "fat_g_or_kcal_basis": null,
    "carb_g_or_kcal_basis": null,
-   "micro": null
+   "micro": null,
+   "add_type": "総合"
   },
   {
    "id": "thick_510",
@@ -4655,7 +4695,7 @@
   {
    "id": "thick_538",
    "category": "濃厚流動食",
-   "name": "明治インスロー",
+   "name": "インスロー",
    "content": "糖尿病用",
    "volume_ml": 200.0,
    "kcal": 200.0,
@@ -4913,7 +4953,7 @@
   {
    "id": "thick_549",
    "category": "濃厚流動食",
-   "name": "明治メイン",
+   "name": "メイン",
    "content": "免疫調整",
    "volume_ml": 200.0,
    "kcal": 200.0,
@@ -5188,7 +5228,7 @@
   {
    "id": "thick_562",
    "category": "EN",
-   "name": "明治メイグット300K",
+   "name": "メイグット300K",
    "content": "半固形",
    "volume_ml": 200.0,
    "kcal": 300.0,
@@ -5205,7 +5245,7 @@
   {
    "id": "thick_563",
    "category": "EN",
-   "name": "明治メイグット400K",
+   "name": "メイグット400K",
    "content": "半固形",
    "volume_ml": 267.0,
    "kcal": 400.0,
@@ -5222,7 +5262,7 @@
   {
    "id": "thick_564",
    "category": "EN",
-   "name": "明治メイフロー300K",
+   "name": "メイフロー300K",
    "content": "半固形",
    "volume_ml": 300.0,
    "kcal": 300.0,
@@ -5239,7 +5279,7 @@
   {
    "id": "thick_565",
    "category": "濃厚流動食",
-   "name": "明治メイバランス ソフトJelly",
+   "name": "メイバランス ソフトJelly",
    "content": "ゼリー",
    "volume_ml": 125.0,
    "kcal": 200.0,

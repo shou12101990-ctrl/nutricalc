@@ -67,6 +67,47 @@ String productBaseName(String name) {
   return n.trim();
 }
 
+/// 加注製剤の「何製剤か」表示順（あいうえお順ではなく種別順）
+const _additiveTypeOrder = {
+  '電解質': ['Na', 'K', 'Cl', 'Ca', 'Mg', 'P', 'HCO3'],
+  '微量元素': ['総合', 'Zn', 'Fe', 'Se'],
+  'ビタミン': ['総合', 'B群', '単独'],
+};
+
+/// あいうえお順ソート用キー: ひらがな→カタカナに統一して五十音順に揃える
+/// (英数字→かな→漢字 の順)
+String kanaSortKey(String s) {
+  final buf = StringBuffer();
+  for (final r in s.runes) {
+    if (r >= 0x3041 && r <= 0x3096) {
+      buf.writeCharCode(r + 0x60); // ひらがな→カタカナ
+    } else {
+      buf.writeCharCode(r);
+    }
+  }
+  return buf.toString();
+}
+
+/// 製剤リストを表示用に整列したコピーを返す。
+/// 加注(電解質/微量元素/ビタミン)は種別順、それ以外はあいうえお順。
+List<Product> sortProductsForDisplay(List<Product> list, {String? additiveCat}) {
+  final sorted = [...list];
+  final order = additiveCat != null ? _additiveTypeOrder[additiveCat] : null;
+  if (order != null) {
+    sorted.sort((a, b) {
+      var ra = order.indexOf(a.addType ?? '');
+      if (ra < 0) ra = 999;
+      var rb = order.indexOf(b.addType ?? '');
+      if (rb < 0) rb = 999;
+      if (ra != rb) return ra.compareTo(rb);
+      return kanaSortKey(a.name).compareTo(kanaSortKey(b.name));
+    });
+  } else {
+    sorted.sort((a, b) => kanaSortKey(a.name).compareTo(kanaSortKey(b.name)));
+  }
+  return sorted;
+}
+
 /// 日付を1タップで選択して即閉じるカレンダーダイアログ
 Future<DateTime?> _quickPickDate(BuildContext context, DateTime initial) {
   return showDialog<DateTime>(
@@ -1297,7 +1338,9 @@ class _BuilderPageState extends State<BuilderPage>
         if (_zeroAddExpanded)
           for (final (cat, label) in cats) ...[
             header(label),
-            ...widget.state.catalog.byCategory(cat).map(prodRow),
+            ...sortProductsForDisplay(widget.state.catalog.byCategory(cat),
+                    additiveCat: cat)
+                .map(prodRow),
           ],
       ],
     );
@@ -3431,28 +3474,28 @@ class _MasterPageState extends State<MasterPage> {
     );
   }
 
-  /// あいうえお順ソート用キー: ひらがな→カタカナに統一して五十音順に揃える
-  /// (英数字→かな→漢字 の順。かなは清濁・大小を概ね五十音順に整列)
-  String _kanaSortKey(String s) {
-    final buf = StringBuffer();
-    for (final r in s.runes) {
-      if (r >= 0x3041 && r <= 0x3096) {
-        buf.writeCharCode(r + 0x60); // ひらがな→カタカナ
-      } else {
-        buf.writeCharCode(r);
-      }
-    }
-    return buf.toString();
-  }
-
-  /// 製剤を同一ベース名(容量違い)でまとめ、あいうえお順にカード化
+  /// 製剤を同一ベース名(容量違い)でまとめてカード化。
+  /// 加注(電解質/微量元素/ビタミン)は種別順、それ以外はあいうえお順。
   List<Widget> _groupCards(List<Product> list) {
     final groups = <String, List<Product>>{};
     for (final p in list) {
       groups.putIfAbsent(productBaseName(p.name), () => []).add(p);
     }
-    final keys = groups.keys.toList()
-      ..sort((a, b) => _kanaSortKey(a).compareTo(_kanaSortKey(b)));
+    final cat = list.isNotEmpty ? list.first.category : '';
+    final order = _additiveTypeOrder[cat];
+    final keys = groups.keys.toList();
+    if (order != null) {
+      int rank(String k) {
+        final i = order.indexOf(groups[k]!.first.addType ?? '');
+        return i < 0 ? 999 : i;
+      }
+      keys.sort((a, b) {
+        final r = rank(a).compareTo(rank(b));
+        return r != 0 ? r : kanaSortKey(a).compareTo(kanaSortKey(b));
+      });
+    } else {
+      keys.sort((a, b) => kanaSortKey(a).compareTo(kanaSortKey(b)));
+    }
     return keys.map((k) => _productGroupCard(k, groups[k]!)).toList();
   }
 
@@ -3966,6 +4009,7 @@ class Product {
     required this.notes,
     this.micro,
     this.alsoEn = false,
+    this.addType,
   });
 
   final String id;
@@ -3986,6 +4030,8 @@ class Product {
   Map<String, dynamic>? micro;
   // 両用フラグ: trueなら「食事」カテゴリの製剤をENマスタにも表示（同一製剤として採用共有）
   bool alsoEn;
+  // 加注製剤の種別 (電解質:Na/K/Ca/Mg/P/HCO3, 微量元素:総合/Zn/Se, ビタミン:総合/B群/単独)
+  String? addType;
 
   /// この製剤を「食事」タブに表示するか（濃厚流動食 or 栄養サポート食品）
   bool get isFood =>
@@ -4030,6 +4076,7 @@ class Product {
       notes: map['notes'] as String?,
       micro: (map['micro'] as Map?)?.cast<String, dynamic>(),
       alsoEn: (map['also_en'] as bool?) ?? false,
+      addType: map['add_type'] as String?,
     );
   }
 
@@ -4049,6 +4096,7 @@ class Product {
         'notes': notes,
         'micro': micro,
         if (alsoEn) 'also_en': true,
+        if (addType != null) 'add_type': addType,
       };
 
   String get volumeMlString => volumeMl == null
