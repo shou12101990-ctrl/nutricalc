@@ -1160,93 +1160,6 @@
       }
     },
     {
-      "id": "tpn_63",
-      "category": "TPN",
-      "name": "ビーエヌツイン1号 ",
-      "content": "P+C",
-      "volume_ml": 1000.0,
-      "kcal": 560.0,
-      "amino_acid_g": 20.0,
-      "nitrogen_g": 3.2,
-      "npc_n_ratio": 158.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 120.0,
-      "notes": null,
-      "sheet_row": 63,
-      "product_type": "医薬品",
-      "micro": {
-        "elec": {
-          "Na": 50,
-          "K": 30,
-          "Cl": 50,
-          "Ca": 8,
-          "Mg": 6,
-          "P": 8
-        },
-        "trace": {
-          "Zn": 20
-        }
-      }
-    },
-    {
-      "id": "tpn_64",
-      "category": "TPN",
-      "name": "ビーエヌツイン2号 ",
-      "content": "P+C",
-      "volume_ml": 1100.0,
-      "kcal": 840.0,
-      "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
-      "npc_n_ratio": 158.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 160.0,
-      "notes": null,
-      "sheet_row": 64,
-      "product_type": "医薬品",
-      "micro": {
-        "elec": {
-          "Na": 50,
-          "K": 30,
-          "Cl": 50,
-          "Ca": 8,
-          "Mg": 6,
-          "P": 8
-        },
-        "trace": {
-          "Zn": 20
-        }
-      }
-    },
-    {
-      "id": "tpn_65",
-      "category": "TPN",
-      "name": "ビーエヌツイン3号 ",
-      "content": "P+C",
-      "volume_ml": 1200.0,
-      "kcal": 1160.0,
-      "amino_acid_g": 40.0,
-      "nitrogen_g": 6.4,
-      "npc_n_ratio": 164.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 250.0,
-      "notes": null,
-      "sheet_row": 65,
-      "product_type": "医薬品",
-      "micro": {
-        "elec": {
-          "Na": 51,
-          "K": 30,
-          "Cl": 50,
-          "Ca": 8,
-          "Mg": 6,
-          "P": 8
-        },
-        "trace": {
-          "Zn": 20
-        }
-      }
-    },
-    {
       "id": "tpn_66",
       "category": "TPN",
       "name": "ハイカリック1号 ",
@@ -1646,27 +1559,6 @@
         "elec": {
           "Na": 7.0,
           "Cl": 47.0
-        }
-      }
-    },
-    {
-      "id": "ppn_85",
-      "category": "PPN",
-      "name": "モノヘパミン",
-      "content": "肝不全用AA",
-      "volume_ml": 200.0,
-      "kcal": 59.8,
-      "amino_acid_g": 14.94,
-      "nitrogen_g": 2.4,
-      "npc_n_ratio": null,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 0.0,
-      "notes": null,
-      "sheet_row": 85,
-      "product_type": "医薬品",
-      "micro": {
-        "elec": {
-          "Na": 3
         }
       }
     },
@@ -4605,13 +4497,13 @@
     }
   ],
   "counts": {
-    "EN": 25,
-    "TPN": 19,
-    "PPN": 16,
+    "EN": 42,
+    "TPN": 36,
+    "PPN": 37,
     "EN_AUX": 6,
-    "電解質": 6,
-    "微量元素": 3,
-    "ビタミン": 4,
+    "電解質": 19,
+    "微量元素": 9,
+    "ビタミン": 12,
     "濃厚流動食": 2,
     "栄養サポート食品": 2
   }
