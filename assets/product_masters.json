@@ -20,17 +20,29 @@
       "id": "en_19",
       "category": "EN",
       "name": "テルミール2.0α",
-      "content": "半消化態",
+      "content": "半消化態流動食(高栄養)",
       "volume_ml": 200.0,
       "kcal": 400.0,
       "amino_acid_g": 14.5,
-      "nitrogen_g": 2.3,
-      "npc_n_ratio": 150.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 147.0,
       "fat_g_or_kcal_basis": 15.0,
       "carb_g_or_kcal_basis": 52.0,
       "notes": "・少量高カロリー (2kcal/ml)\n　水分制限したいときに有用",
       "sheet_row": 19,
-      "product_type": "食品"
+      "product_type": "食品",
+      "micro": {
+        "elec": {
+          "Na": 8.7,
+          "K": 5.1,
+          "Ca": 10.0,
+          "Mg": 12.5,
+          "P": 6.46
+        },
+        "trace": {
+          "Fe": 53.7
+        }
+      }
     },
     {
       "id": "en_20",
@@ -100,33 +112,62 @@
       "id": "en_24",
       "category": "EN",
       "name": "リーナレンMP",
-      "content": "半消化態",
+      "content": "病態別(腎不全用)",
       "volume_ml": 125.0,
       "kcal": 200.0,
       "amino_acid_g": 7.0,
-      "nitrogen_g": 1.1,
+      "nitrogen_g": null,
       "npc_n_ratio": 157.0,
-      "fat_g_or_kcal_basis": 5.6,
+      "fat_g_or_kcal_basis": 5.6000000000000005,
       "carb_g_or_kcal_basis": 32.0,
       "notes": "・以下のような特徴がある.\n　. タンパク含量の異なるLP (low protein)とMP (medium)がある.\n　. 高エネルギー設計 1.6kcal/ml (水分を低減している)\n　. Na, K, Pを抑え腎負荷を低減している.\n　. n-3系脂肪酸  (DHA, EPA), カルニチン, 微量元素, Feを含む.\n・以上を踏まえて以下のような使い方をする.\n　水分過剰, 高K, 蛋白制限の必要性 のある腎不全患者にはよい適応\n　特に保存期腎不全の患者における蛋白制限として用いる.\n　→以上に該当しない患者 (下記)にはむしろ使わない方が良い.\n　　ex) ICUでCHDF中の患者, 維持透析で水分, 電解質に問題のない患者",
       "sheet_row": 24,
-      "product_type": "食品"
+      "product_type": "食品",
+      "micro": {
+        "elec": {
+          "Na": 5.2,
+          "K": 1.5,
+          "Ca": 3.0,
+          "Mg": 2.5,
+          "P": 2.26
+        },
+        "trace": {
+          "Zn": 45.9,
+          "Fe": 53.7,
+          "Cu": 2.4
+        }
+      }
     },
     {
       "id": "en_25",
       "category": "EN",
       "name": "ヘパス",
-      "content": "半消化態",
+      "content": "病態別(肝栄養)",
       "volume_ml": 125.0,
       "kcal": 200.0,
       "amino_acid_g": 6.5,
-      "nitrogen_g": 1.0,
+      "nitrogen_g": null,
       "npc_n_ratio": 167.0,
       "fat_g_or_kcal_basis": 6.7,
       "carb_g_or_kcal_basis": 33.2,
       "notes": "・Zn含有量が多く1日2本まで.\n　ベースの栄養に追加してBCAAを付加するための製剤",
       "sheet_row": 25,
-      "product_type": "食品"
+      "product_type": "食品",
+      "micro": {
+        "elec": {
+          "Na": 6.0,
+          "K": 1.4,
+          "Ca": 3.8,
+          "Mg": 3.3,
+          "P": 2.1
+        },
+        "trace": {
+          "Zn": 114.7,
+          "Fe": 5.4,
+          "I": 0.01,
+          "Se": 75.0
+        }
+      }
     },
     {
       "id": "en_26",
@@ -164,17 +205,46 @@
       "id": "en_28",
       "category": "EN",
       "name": "ペプチーノ",
-      "content": "消化態",
+      "content": "消化態栄養剤(無脂肪)",
       "volume_ml": 200.0,
       "kcal": 200.0,
       "amino_acid_g": 7.2,
-      "nitrogen_g": 1.2,
-      "npc_n_ratio": 152.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 149.0,
       "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 42.8,
+      "carb_g_or_kcal_basis": 42.800000000000004,
       "notes": "・無脂肪なので脂肪の消化吸収障害があっても使える.\n　2週間程度で必須脂肪酸投与を考慮する.",
       "sheet_row": 28,
-      "product_type": "食品"
+      "product_type": "食品",
+      "micro": {
+        "elec": {
+          "Na": 6.1,
+          "K": 3.9,
+          "Ca": 7.5,
+          "Mg": 3.0,
+          "P": 2.58
+        },
+        "trace": {
+          "Zn": 36.7,
+          "Fe": 25.1,
+          "Cu": 3.1,
+          "I": 0.02,
+          "Se": 2.0
+        },
+        "vit": {
+          "D": 1.1,
+          "E": 1.4,
+          "B1": 1.0,
+          "B2": 0.5,
+          "B6": 0.5,
+          "B12": 1.2,
+          "ナイアシン": 5.0,
+          "パントテン酸": 2.4,
+          "C": 100.0,
+          "K": 0.015,
+          "葉酸": 0.1
+        }
+      }
     },
     {
       "id": "en_29",
@@ -196,33 +266,95 @@
       "id": "en_30",
       "category": "EN",
       "name": "ペプタメンAF",
-      "content": "消化態",
+      "content": "消化態栄養剤(重症用)",
       "volume_ml": 200.0,
       "kcal": 300.0,
       "amino_acid_g": 19.0,
-      "nitrogen_g": 3.0,
+      "nitrogen_g": null,
       "npc_n_ratio": 74.0,
-      "fat_g_or_kcal_basis": 13.2,
-      "carb_g_or_kcal_basis": 26.4,
+      "fat_g_or_kcal_basis": 13.200000000000001,
+      "carb_g_or_kcal_basis": 26.400000000000002,
       "notes": "・脂質の50%が中鎖脂肪酸 (MCT)\n　システイン (抗酸化作用)とω3系脂肪酸 (抗炎症作用)も多い.\n・早期集中的栄養管理に向けた消化態栄養剤",
       "sheet_row": 30,
-      "product_type": "食品"
+      "product_type": "食品",
+      "micro": {
+        "elec": {
+          "Na": 22.9,
+          "K": 11.9,
+          "Cl": 4.6,
+          "Ca": 10.1,
+          "Mg": 5.3,
+          "P": 5.49
+        },
+        "trace": {
+          "Zn": 67.3,
+          "Fe": 57.3,
+          "Cu": 4.7,
+          "Mn": 27.3
+        },
+        "vit": {
+          "D": 4.6,
+          "E": 3.4,
+          "B1": 0.76,
+          "B2": 1.0,
+          "B6": 1.3,
+          "B12": 2.8,
+          "ナイアシン": 16.0,
+          "パントテン酸": 6.0,
+          "ビオチン": 32.0,
+          "C": 80.0,
+          "K": 0.026,
+          "葉酸": 0.092
+        }
+      }
     },
     {
       "id": "en_31",
       "category": "EN",
       "name": "ペプタメンスタンダード",
-      "content": "消化態",
+      "content": "消化態栄養剤",
       "volume_ml": 200.0,
       "kcal": 300.0,
       "amino_acid_g": 10.5,
-      "nitrogen_g": 1.7,
+      "nitrogen_g": null,
       "npc_n_ratio": 150.0,
       "fat_g_or_kcal_basis": 12.0,
       "carb_g_or_kcal_basis": 37.5,
       "notes": "・脂質のうち60%が中鎖脂肪酸 (MCT)",
       "sheet_row": 31,
-      "product_type": "食品"
+      "product_type": "食品",
+      "micro": {
+        "elec": {
+          "Na": 18.7,
+          "K": 8.2,
+          "Cl": 8.5,
+          "Ca": 10.5,
+          "Mg": 8.0,
+          "P": 5.49
+        },
+        "trace": {
+          "Zn": 67.3,
+          "Fe": 57.3,
+          "Cu": 4.7,
+          "Mn": 20.0,
+          "I": 0.35,
+          "Se": 16.0
+        },
+        "vit": {
+          "D": 4.2,
+          "E": 3.0,
+          "B1": 0.76,
+          "B2": 1.0,
+          "B6": 1.3,
+          "B12": 2.4,
+          "ナイアシン": 16.0,
+          "パントテン酸": 6.0,
+          "ビオチン": 70.0,
+          "C": 107.0,
+          "K": 0.025,
+          "葉酸": 0.092
+        }
+      }
     },
     {
       "id": "en_32",
@@ -419,33 +551,95 @@
       "id": "en_44",
       "category": "EN",
       "name": "エンシュアリキッド",
-      "content": "半消化態",
+      "content": "半消化態栄養剤",
       "volume_ml": 250.0,
       "kcal": 250.0,
       "amino_acid_g": 8.8,
-      "nitrogen_g": 1.4,
+      "nitrogen_g": null,
       "npc_n_ratio": 157.0,
       "fat_g_or_kcal_basis": 8.8,
-      "carb_g_or_kcal_basis": 34.3,
+      "carb_g_or_kcal_basis": 34.300000000000004,
       "notes": "37℃のときの1日量が15 x体重ml\n→1℃体温上昇で15%上昇する.",
       "sheet_row": 44,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 8.7,
+          "K": 9.5,
+          "Cl": 9.6,
+          "Ca": 6.5,
+          "Mg": 4.2,
+          "P": 4.2
+        },
+        "trace": {
+          "Zn": 57.4,
+          "Fe": 40.3,
+          "Cu": 3.9,
+          "Mn": 9.1
+        },
+        "vit": {
+          "A": 625.0,
+          "D": 1.25,
+          "E": 7.5,
+          "B1": 0.375,
+          "B2": 0.425,
+          "B6": 0.5,
+          "B12": 1.5,
+          "ナイアシン": 5.0,
+          "パントテン酸": 1.25,
+          "C": 38.0,
+          "K": 0.0175,
+          "葉酸": 0.05
+        }
+      }
     },
     {
       "id": "en_45",
       "category": "EN",
       "name": "エネーボ",
-      "content": "半消化態",
+      "content": "半消化態栄養剤",
       "volume_ml": 250.0,
-      "kcal": 250.0,
+      "kcal": 300.0,
       "amino_acid_g": 13.5,
-      "nitrogen_g": 2.2,
+      "nitrogen_g": null,
       "npc_n_ratio": 116.0,
-      "fat_g_or_kcal_basis": 9.6,
+      "fat_g_or_kcal_basis": 9.600000000000001,
       "carb_g_or_kcal_basis": 39.6,
       "notes": "13ml/100kcalとして計算",
       "sheet_row": 45,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": {
+        "elec": {
+          "Na": 10.0,
+          "K": 7.7,
+          "Cl": 5.7,
+          "Ca": 14.5,
+          "Mg": 4.3,
+          "P": 8.07
+        },
+        "trace": {
+          "Zn": 68.8,
+          "Fe": 78.8,
+          "Cu": 7.6,
+          "Mn": 25.5,
+          "I": 0.24,
+          "Se": 34.0
+        },
+        "vit": {
+          "A": 190.0,
+          "D": 2.79,
+          "E": 11.1,
+          "B1": 0.51,
+          "B2": 0.81,
+          "B6": 0.78,
+          "B12": 0.87,
+          "ナイアシン": 4.5,
+          "パントテン酸": 1.5,
+          "C": 63.0,
+          "K": 0.0291,
+          "葉酸": 0.069
+        }
+      }
     },
     {
       "id": "en_46",
@@ -499,47 +693,47 @@
       "id": "tpn_52",
       "category": "TPN",
       "name": "エルネオパNF1号 ",
-      "content": "P+C, vit, 微量元素",
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
       "volume_ml": 1500.0,
       "kcal": 840.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 153.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 180.0,
       "notes": null,
       "sheet_row": 52,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 75,
-          "K": 33,
-          "Cl": 75,
-          "Ca": 6,
-          "Mg": 6,
+          "Na": 75.0,
+          "K": 33.0,
+          "Cl": 75.0,
+          "Ca": 6.0,
+          "Mg": 6.0,
           "P": 7.6
         },
         "trace": {
-          "Zn": 45,
-          "Fe": 15,
-          "Mn": 0.75,
+          "Zn": 45.0,
+          "Fe": 15.0,
           "Cu": 3.75,
+          "Mn": 0.75,
           "I": 0.75
         },
         "vit": {
+          "A": 2475.0,
+          "D": 3.75,
+          "E": 7.5,
           "B1": 5.76,
           "B2": 3.45,
           "B6": 5.5125,
           "B12": 3.75,
-          "ナイアシン": 30,
+          "ナイアシン": 30.0,
           "パントテン酸": 10.5,
-          "葉酸": 0.45,
-          "ビオチン": 45,
-          "C": 150,
-          "A": 2475,
-          "D": 3.75,
-          "E": 7.5,
-          "K": 0.1125
+          "ビオチン": 45.0,
+          "C": 150.0,
+          "K": 0.112,
+          "葉酸": 0.45
         }
       }
     },
@@ -547,47 +741,47 @@
       "id": "tpn_53",
       "category": "TPN",
       "name": "エルネオパNF2号 ",
-      "content": "P+C, vit, 微量元素",
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
       "volume_ml": 1500.0,
       "kcal": 1230.0,
       "amino_acid_g": 45.0,
-      "nitrogen_g": 7.2,
+      "nitrogen_g": null,
       "npc_n_ratio": 149.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 262.5,
       "notes": null,
       "sheet_row": 53,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 75,
-          "K": 41,
-          "Cl": 75,
+          "Na": 75.0,
+          "K": 41.0,
+          "Cl": 75.0,
           "Ca": 7.6,
           "Mg": 7.5,
-          "P": 9
+          "P": 9.0
         },
         "trace": {
-          "Zn": 45,
-          "Fe": 15,
-          "Mn": 0.75,
+          "Zn": 45.0,
+          "Fe": 15.0,
           "Cu": 3.75,
+          "Mn": 0.75,
           "I": 0.75
         },
         "vit": {
+          "A": 2475.0,
+          "D": 3.75,
+          "E": 7.5,
           "B1": 5.76,
           "B2": 3.45,
           "B6": 5.5125,
           "B12": 3.75,
-          "ナイアシン": 30,
+          "ナイアシン": 30.0,
           "パントテン酸": 10.5,
-          "葉酸": 0.45,
-          "ビオチン": 45,
-          "C": 150,
-          "A": 2475,
-          "D": 3.75,
-          "E": 7.5,
-          "K": 0.1125
+          "ビオチン": 45.0,
+          "C": 150.0,
+          "K": 0.112,
+          "葉酸": 0.45
         }
       }
     },
@@ -595,47 +789,47 @@
       "id": "tpn_54",
       "category": "TPN",
       "name": "ワンパル1号 ",
-      "content": "P+C, vit, 微量元素",
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
       "volume_ml": 800.0,
       "kcal": 560.0,
       "amino_acid_g": 20.0,
-      "nitrogen_g": 3.2,
+      "nitrogen_g": null,
       "npc_n_ratio": 158.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 120.0,
       "notes": null,
       "sheet_row": 54,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 50,
-          "K": 25,
-          "Cl": 50,
-          "Ca": 8,
-          "Mg": 6,
-          "P": 8
+          "Na": 50.0,
+          "K": 25.0,
+          "Cl": 50.0,
+          "Ca": 8.0,
+          "Mg": 6.0,
+          "P": 8.0
         },
         "trace": {
-          "Zn": 50,
+          "Zn": 50.0,
           "Fe": 8.75,
-          "Mn": 0.5,
           "Cu": 2.5,
+          "Mn": 0.5,
           "I": 0.5
         },
         "vit": {
-          "B1": 4,
-          "B2": 2.5,
-          "B6": 4,
-          "B12": 5,
-          "ナイアシン": 20,
-          "パントテン酸": 7.5,
-          "葉酸": 0.3,
-          "ビオチン": 50,
-          "C": 100,
-          "A": 1650,
+          "A": 1650.0,
           "D": 2.5,
-          "E": 5,
-          "K": 0.075
+          "E": 5.0,
+          "B1": 4.0,
+          "B2": 2.5,
+          "B6": 4.0,
+          "B12": 5.0,
+          "ナイアシン": 20.0,
+          "パントテン酸": 7.5,
+          "ビオチン": 50.0,
+          "C": 100.0,
+          "K": 0.075,
+          "葉酸": 0.3
         }
       }
     },
@@ -643,47 +837,47 @@
       "id": "tpn_55",
       "category": "TPN",
       "name": "ワンパル2号 ",
-      "content": "P+C, vit, 微量元素",
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
       "volume_ml": 800.0,
       "kcal": 840.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 158.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 180.0,
       "notes": null,
       "sheet_row": 55,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 50,
-          "K": 30,
-          "Cl": 50,
-          "Ca": 8,
-          "Mg": 6,
-          "P": 8
+          "Na": 50.0,
+          "K": 30.0,
+          "Cl": 50.0,
+          "Ca": 8.0,
+          "Mg": 6.0,
+          "P": 8.0
         },
         "trace": {
-          "Zn": 50,
+          "Zn": 50.0,
           "Fe": 8.75,
-          "Mn": 0.5,
           "Cu": 2.5,
+          "Mn": 0.5,
           "I": 0.5
         },
         "vit": {
-          "B1": 4,
-          "B2": 2.5,
-          "B6": 4,
-          "B12": 5,
-          "ナイアシン": 20,
-          "パントテン酸": 7.5,
-          "葉酸": 0.3,
-          "ビオチン": 50,
-          "C": 100,
-          "A": 1650,
+          "A": 1650.0,
           "D": 2.5,
-          "E": 5,
-          "K": 0.075
+          "E": 5.0,
+          "B1": 4.0,
+          "B2": 2.5,
+          "B6": 4.0,
+          "B12": 5.0,
+          "ナイアシン": 20.0,
+          "パントテン酸": 7.5,
+          "ビオチン": 50.0,
+          "C": 100.0,
+          "K": 0.075,
+          "葉酸": 0.3
         }
       }
     },
@@ -691,43 +885,43 @@
       "id": "tpn_56",
       "category": "TPN",
       "name": "ネオパレン1号 ",
-      "content": "P+C, vit",
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
       "volume_ml": 1000.0,
       "kcal": 560.0,
       "amino_acid_g": 20.0,
-      "nitrogen_g": 3.2,
+      "nitrogen_g": null,
       "npc_n_ratio": 153.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 150.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 120.0,
       "notes": null,
       "sheet_row": 56,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 50,
-          "K": 22,
-          "Cl": 50,
-          "Ca": 4,
-          "Mg": 4,
-          "P": 5
+          "Na": 50.0,
+          "K": 22.0,
+          "Cl": 50.0,
+          "Ca": 4.0,
+          "Mg": 4.0,
+          "P": 5.0
         },
         "trace": {
-          "Zn": 20
+          "Zn": 20.0
         },
         "vit": {
+          "A": 1650.0,
+          "D": 2.5,
+          "E": 5.0,
           "B1": 1.95,
           "B2": 2.3,
           "B6": 2.45,
           "B12": 2.5,
-          "ナイアシン": 20,
-          "パントテン酸": 7,
-          "葉酸": 0.2,
-          "ビオチン": 30,
-          "C": 50,
-          "A": 1650,
-          "D": 2.5,
-          "E": 5,
-          "K": 1
+          "ナイアシン": 20.0,
+          "パントテン酸": 7.0,
+          "ビオチン": 30.0,
+          "C": 50.0,
+          "K": 1.0,
+          "葉酸": 0.2
         }
       }
     },
@@ -735,43 +929,43 @@
       "id": "tpn_57",
       "category": "TPN",
       "name": "ネオパレン2号 ",
-      "content": "P+C, vit",
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
       "volume_ml": 1000.0,
       "kcal": 820.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 149.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 175.0,
       "notes": null,
       "sheet_row": 57,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 50,
-          "K": 27,
-          "Cl": 50,
-          "Ca": 5,
-          "Mg": 5,
-          "P": 6
+          "Na": 50.0,
+          "K": 27.0,
+          "Cl": 50.0,
+          "Ca": 5.0,
+          "Mg": 5.0,
+          "P": 6.0
         },
         "trace": {
-          "Zn": 20
+          "Zn": 20.0
         },
         "vit": {
+          "A": 1650.0,
+          "D": 2.5,
+          "E": 5.0,
           "B1": 1.95,
           "B2": 2.3,
           "B6": 2.45,
           "B12": 2.5,
-          "ナイアシン": 20,
-          "パントテン酸": 7,
-          "葉酸": 0.2,
-          "ビオチン": 30,
-          "C": 50,
-          "A": 1650,
-          "D": 2.5,
-          "E": 5,
-          "K": 1
+          "ナイアシン": 20.0,
+          "パントテン酸": 7.0,
+          "ビオチン": 30.0,
+          "C": 50.0,
+          "K": 1.0,
+          "葉酸": 0.2
         }
       }
     },
@@ -779,43 +973,43 @@
       "id": "tpn_58",
       "category": "TPN",
       "name": "フルカリック1号 ",
-      "content": "P+C, vit",
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
       "volume_ml": 903.0,
       "kcal": 560.0,
       "amino_acid_g": 20.0,
-      "nitrogen_g": 3.2,
+      "nitrogen_g": null,
       "npc_n_ratio": 154.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 120.0,
       "notes": null,
       "sheet_row": 58,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 50,
-          "K": 30,
-          "Cl": 49,
+          "Na": 50.0,
+          "K": 30.0,
+          "Cl": 49.0,
           "Ca": 8.5,
-          "Mg": 10,
-          "P": 8.1
+          "Mg": 10.0,
+          "P": 8.07
         },
         "trace": {
-          "Zn": 20
+          "Zn": 20.0
         },
         "vit": {
+          "A": 1650.0,
+          "D": 5.0,
+          "E": 7.5,
           "B1": 1.5,
           "B2": 2.54,
-          "B6": 2,
-          "B12": 5,
-          "ナイアシン": 20,
+          "B6": 2.0,
+          "B12": 5.0,
+          "ナイアシン": 20.0,
           "パントテン酸": 7.02,
-          "葉酸": 0.2,
-          "ビオチン": 50,
-          "C": 50,
-          "A": 1650,
-          "D": 5,
-          "E": 7.5,
-          "K": 1
+          "ビオチン": 50.0,
+          "C": 50.0,
+          "K": 1.0,
+          "葉酸": 0.2
         }
       }
     },
@@ -823,43 +1017,43 @@
       "id": "tpn_59",
       "category": "TPN",
       "name": "フルカリック2号 ",
-      "content": "P+C, vit",
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
       "volume_ml": 1003.0,
       "kcal": 820.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 150.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 175.0,
       "notes": null,
       "sheet_row": 59,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 50,
-          "K": 30,
-          "Cl": 49,
+          "Na": 50.0,
+          "K": 30.0,
+          "Cl": 49.0,
           "Ca": 8.5,
-          "Mg": 10,
-          "P": 8.1
+          "Mg": 10.0,
+          "P": 8.07
         },
         "trace": {
-          "Zn": 20
+          "Zn": 20.0
         },
         "vit": {
+          "A": 1650.0,
+          "D": 5.0,
+          "E": 7.5,
           "B1": 1.5,
           "B2": 2.54,
-          "B6": 2,
-          "B12": 5,
-          "ナイアシン": 20,
+          "B6": 2.0,
+          "B12": 5.0,
+          "ナイアシン": 20.0,
           "パントテン酸": 7.02,
-          "葉酸": 0.2,
-          "ビオチン": 50,
-          "C": 50,
-          "A": 1650,
-          "D": 5,
-          "E": 7.5,
-          "K": 1
+          "ビオチン": 50.0,
+          "C": 50.0,
+          "K": 1.0,
+          "葉酸": 0.2
         }
       }
     },
@@ -867,43 +1061,43 @@
       "id": "tpn_60",
       "category": "TPN",
       "name": "フルカリック3号 ",
-      "content": "P+C, vit",
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
       "volume_ml": 1103.0,
       "kcal": 1160.0,
       "amino_acid_g": 40.0,
-      "nitrogen_g": 6.4,
+      "nitrogen_g": null,
       "npc_n_ratio": 160.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 250.0,
       "notes": null,
       "sheet_row": 60,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 50,
-          "K": 30,
-          "Cl": 49,
+          "Na": 50.0,
+          "K": 30.0,
+          "Cl": 49.0,
           "Ca": 8.5,
-          "Mg": 10,
-          "P": 8.1
+          "Mg": 10.0,
+          "P": 8.07
         },
         "trace": {
-          "Zn": 20
+          "Zn": 20.0
         },
         "vit": {
+          "A": 1650.0,
+          "D": 5.0,
+          "E": 7.5,
           "B1": 1.5,
           "B2": 2.54,
-          "B6": 2,
-          "B12": 5,
-          "ナイアシン": 20,
+          "B6": 2.0,
+          "B12": 5.0,
+          "ナイアシン": 20.0,
           "パントテン酸": 7.02,
-          "葉酸": 0.2,
-          "ビオチン": 50,
-          "C": 50,
-          "A": 1650,
-          "D": 5,
-          "E": 7.5,
-          "K": 1
+          "ビオチン": 50.0,
+          "C": 50.0,
+          "K": 1.0,
+          "葉酸": 0.2
         }
       }
     },
@@ -911,28 +1105,28 @@
       "id": "tpn_61",
       "category": "TPN",
       "name": "ミキシッドL",
-      "content": "PFC",
+      "content": "糖・電解質・アミノ酸・脂肪乳剤",
       "volume_ml": 900.0,
       "kcal": 700.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 126.0,
-      "fat_g_or_kcal_basis": 15.6,
+      "fat_g_or_kcal_basis": 15.600000000000001,
       "carb_g_or_kcal_basis": 110.0,
       "notes": null,
       "sheet_row": 61,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 35,
-          "K": 27,
-          "Cl": 44,
+          "Na": 35.0,
+          "K": 27.0,
+          "Cl": 44.0,
           "Ca": 8.5,
-          "Mg": 5,
-          "P": 4.8
+          "Mg": 5.0,
+          "P": 4.84
         },
         "trace": {
-          "Zn": 10
+          "Zn": 10.0
         }
       }
     },
@@ -940,11 +1134,11 @@
       "id": "tpn_62",
       "category": "TPN",
       "name": "ミキシッドH",
-      "content": "PFC",
+      "content": "糖・電解質・アミノ酸・脂肪乳剤",
       "volume_ml": 900.0,
       "kcal": 900.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 169.0,
       "fat_g_or_kcal_basis": 19.8,
       "carb_g_or_kcal_basis": 150.0,
@@ -953,15 +1147,15 @@
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 35,
-          "K": 27,
+          "Na": 35.0,
+          "K": 27.0,
           "Cl": 40.5,
           "Ca": 8.5,
-          "Mg": 5,
-          "P": 6.5
+          "Mg": 5.0,
+          "P": 6.46
         },
         "trace": {
-          "Zn": 10
+          "Zn": 10.0
         }
       }
     },
@@ -1137,7 +1331,7 @@
       "id": "tpn_69",
       "category": "TPN",
       "name": "ハイカリックRF",
-      "content": "Cのみ",
+      "content": "糖・電解質液",
       "volume_ml": 500.0,
       "kcal": 1000.0,
       "amino_acid_g": null,
@@ -1150,13 +1344,13 @@
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 25,
-          "Ca": 3,
-          "Mg": 3,
-          "Cl": 15
+          "Na": 25.0,
+          "Cl": 15.0,
+          "Ca": 3.0,
+          "Mg": 3.0
         },
         "trace": {
-          "Zn": 10
+          "Zn": 10.0
         }
       }
     },
@@ -1180,31 +1374,31 @@
       "id": "ppn_74",
       "category": "PPN",
       "name": "ビーフリード",
-      "content": "P+C, vitB1",
+      "content": "糖・電解質・アミノ酸液",
       "volume_ml": 500.0,
       "kcal": 210.0,
       "amino_acid_g": 15.0,
-      "nitrogen_g": 2.4,
+      "nitrogen_g": null,
       "npc_n_ratio": 64.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 37.5,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 37.499,
       "notes": "・アミノフリードをベースにvit Bを添加したもの.\n　三大栄養素＋vit B1\n・BCAA比率30%で E/N比 1.4としている (TEO基準)\n・8h毎に交換なので1000ml/dayいくときは\n　\"60ml/hで間4hあけて投与”とかにする.",
       "sheet_row": 74,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 35,
-          "K": 20,
-          "Cl": 35,
-          "Ca": 5,
-          "Mg": 5,
-          "P": 10
+          "Na": 17.5,
+          "K": 10.0,
+          "Cl": 17.5,
+          "Ca": 2.5,
+          "Mg": 2.5,
+          "P": 5.0
         },
         "trace": {
-          "Zn": 5
+          "Zn": 2.5
         },
         "vit": {
-          "B1": 1.92
+          "B1": 0.96
         }
       }
     },
@@ -1212,21 +1406,21 @@
       "id": "ppn_75",
       "category": "PPN",
       "name": "プラスアミノ",
-      "content": "P+C",
+      "content": "糖・電解質・アミノ酸液",
       "volume_ml": 500.0,
       "kcal": 204.0,
-      "amino_acid_g": 13.5,
-      "nitrogen_g": 2.2,
+      "amino_acid_g": 13.57,
+      "nitrogen_g": null,
       "npc_n_ratio": 71.0,
-      "fat_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
       "carb_g_or_kcal_basis": 37.5,
       "notes": null,
       "sheet_row": 75,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 34,
-          "Cl": 34
+          "Na": 17.0,
+          "Cl": 17.0
         }
       }
     },
@@ -1234,25 +1428,25 @@
       "id": "ppn_76",
       "category": "PPN",
       "name": "パレプラス",
-      "content": "P+C, vit",
+      "content": "糖・電解質・アミノ酸・水溶性ビタミン液",
       "volume_ml": 1000.0,
       "kcal": 420.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 64.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 75.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 74.998,
       "notes": null,
       "sheet_row": 76,
       "product_type": "医薬品",
       "micro": {
         "elec": {
           "Na": 34.2,
-          "K": 20,
+          "K": 20.0,
           "Cl": 35.2,
-          "Ca": 5,
+          "Ca": 5.0,
           "Mg": 5.1,
-          "P": 10
+          "P": 10.0
         },
         "trace": {
           "Zn": 4.9
@@ -1261,12 +1455,12 @@
           "B1": 3.81,
           "B2": 2.5,
           "B6": 2.5,
-          "B12": 5,
-          "ナイアシン": 20,
+          "B12": 5.0,
+          "ナイアシン": 20.0,
           "パントテン酸": 7.5,
-          "葉酸": 0.2,
-          "ビオチン": 50,
-          "C": 100
+          "ビオチン": 50.0,
+          "C": 100.0,
+          "葉酸": 0.2
         }
       }
     },
@@ -1274,31 +1468,31 @@
       "id": "ppn_77",
       "category": "PPN",
       "name": "パレセーフ",
-      "content": "P+C, vitB1",
+      "content": "糖・電解質・アミノ酸液",
       "volume_ml": 500.0,
       "kcal": 210.0,
       "amino_acid_g": 15.0,
-      "nitrogen_g": 2.4,
+      "nitrogen_g": null,
       "npc_n_ratio": 64.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 37.5,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 37.499,
       "notes": "・ツインパルをベースにvit Bを添加したもの.\n　三大栄養素＋vit B1\n・BCAA比率30%で E/N比 1.4としている (TEO基準)",
       "sheet_row": 77,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 34.2,
-          "K": 20,
-          "Cl": 35.2,
-          "Ca": 5,
-          "Mg": 5.1,
-          "P": 10
+          "Na": 17.1,
+          "K": 10.0,
+          "Cl": 17.6,
+          "Ca": 2.5,
+          "Mg": 2.5,
+          "P": 5.0
         },
         "trace": {
-          "Zn": 4.8
+          "Zn": 2.4
         },
         "vit": {
-          "B1": 2
+          "B1": 1.0
         }
       }
     },
@@ -1306,28 +1500,28 @@
       "id": "ppn_78",
       "category": "PPN",
       "name": "ツインパル",
-      "content": "P+C",
+      "content": "糖・電解質・アミノ酸液",
       "volume_ml": 1000.0,
       "kcal": 420.0,
       "amino_acid_g": 30.0,
-      "nitrogen_g": 4.8,
+      "nitrogen_g": null,
       "npc_n_ratio": 64.0,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 75.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 74.998,
       "notes": null,
       "sheet_row": 78,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 35,
-          "K": 20,
-          "Cl": 35,
-          "Ca": 5,
-          "Mg": 5,
-          "P": 10
+          "Na": 35.0,
+          "K": 20.0,
+          "Cl": 35.0,
+          "Ca": 5.0,
+          "Mg": 5.0,
+          "P": 10.0
         },
         "trace": {
-          "Zn": 5
+          "Zn": 5.0
         }
       }
     },
@@ -1356,36 +1550,38 @@
       "id": "ppn_80",
       "category": "PPN",
       "name": "アミゼットB",
-      "content": "高濃度AA",
+      "content": "高濃度アミノ酸液",
       "volume_ml": 200.0,
-      "kcal": 80.0,
+      "kcal": null,
       "amino_acid_g": 20.0,
-      "nitrogen_g": 3.2,
+      "nitrogen_g": null,
       "npc_n_ratio": null,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
       "notes": null,
       "sheet_row": 80,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": null
     },
     {
       "id": "ppn_81",
       "category": "PPN",
       "name": "プロテアミン12",
-      "content": "高濃度AA",
+      "content": "高濃度アミノ酸液",
       "volume_ml": 200.0,
-      "kcal": 90.8,
-      "amino_acid_g": 22.724,
-      "nitrogen_g": 3.6,
+      "kcal": null,
+      "amino_acid_g": 22.727,
+      "nitrogen_g": null,
       "npc_n_ratio": null,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
       "notes": null,
       "sheet_row": 81,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 150
+          "Na": 30.0,
+          "Cl": 30.0
         }
       }
     },
@@ -1393,20 +1589,20 @@
       "id": "ppn_82",
       "category": "PPN",
       "name": "キドミン",
-      "content": "腎不全用AA",
+      "content": "腎不全用アミノ酸液",
       "volume_ml": 200.0,
-      "kcal": 57.6,
+      "kcal": null,
       "amino_acid_g": 14.41,
-      "nitrogen_g": 2.3,
+      "nitrogen_g": null,
       "npc_n_ratio": null,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
       "notes": null,
       "sheet_row": 82,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 2
+          "Na": 0.4
         }
       }
     },
@@ -1414,20 +1610,20 @@
       "id": "ppn_83",
       "category": "PPN",
       "name": "ネオアミユー",
-      "content": "腎不全用AA",
+      "content": "腎不全用アミノ酸液",
       "volume_ml": 200.0,
-      "kcal": 47.2,
+      "kcal": null,
       "amino_acid_g": 11.8,
-      "nitrogen_g": 1.9,
+      "nitrogen_g": null,
       "npc_n_ratio": null,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
       "notes": null,
       "sheet_row": 83,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 2
+          "Na": 0.4
         }
       }
     },
@@ -1435,21 +1631,21 @@
       "id": "ppn_84",
       "category": "PPN",
       "name": "アミノレバン",
-      "content": "肝不全用AA",
+      "content": "肝性脳症改善アミノ酸注射液",
       "volume_ml": 500.0,
-      "kcal": 159.5,
+      "kcal": null,
       "amino_acid_g": 39.93,
-      "nitrogen_g": 6.4,
+      "nitrogen_g": null,
       "npc_n_ratio": null,
-      "fat_g_or_kcal_basis": 0.0,
-      "carb_g_or_kcal_basis": 0.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
       "notes": null,
       "sheet_row": 84,
       "product_type": "医薬品",
       "micro": {
         "elec": {
-          "Na": 14,
-          "Cl": 94
+          "Na": 7.0,
+          "Cl": 47.0
         }
       }
     },
@@ -1485,10 +1681,11 @@
       "nitrogen_g": null,
       "npc_n_ratio": null,
       "fat_g_or_kcal_basis": 25.0,
-      "carb_g_or_kcal_basis": 0.0,
+      "carb_g_or_kcal_basis": null,
       "notes": null,
       "sheet_row": 86,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": null
     },
     {
       "id": "ppn_87",
@@ -1501,10 +1698,11 @@
       "nitrogen_g": null,
       "npc_n_ratio": null,
       "fat_g_or_kcal_basis": 20.0,
-      "carb_g_or_kcal_basis": 0.0,
+      "carb_g_or_kcal_basis": null,
       "notes": "・10%は 1g/10ml, 20%は 2g/10mlの脂肪を含む.\n・2h以上かけて投与する. 至適投与速度は0.1g/kg/h\n・リノール酸 (n-6系), リノレン酸 (n-3系)を含み必須脂肪酸の供給ができる.\n・10%も20%も浸透圧比1であり静脈炎リスク減少させる.",
       "sheet_row": 87,
-      "product_type": "医薬品"
+      "product_type": "医薬品",
+      "micro": null
     },
     {
       "id": "ppn_88",
@@ -1750,18 +1948,46 @@
       "id": "thick_501",
       "category": "濃厚流動食",
       "name": "エンシュア・H",
-      "content": "1.5kcal/mL 経口・経管",
+      "content": "半消化態栄養剤",
       "volume_ml": 250.0,
       "kcal": 375.0,
-      "amino_acid_g": 13.2,
+      "amino_acid_g": 13.200000000000001,
       "nitrogen_g": null,
-      "npc_n_ratio": null,
-      "fat_g_or_kcal_basis": 13.2,
-      "carb_g_or_kcal_basis": 51.7,
+      "npc_n_ratio": 157.0,
+      "fat_g_or_kcal_basis": 13.200000000000001,
+      "carb_g_or_kcal_basis": 51.5,
       "notes": "経口・経管両用. 1.5kcal/mL.",
       "sheet_row": 501,
       "product_type": "医薬品",
-      "micro": null
+      "micro": {
+        "elec": {
+          "Na": 12.8,
+          "K": 14.2,
+          "Ca": 10.0,
+          "Mg": 6.2,
+          "P": 6.46
+        },
+        "trace": {
+          "Zn": 86.1,
+          "Fe": 60.5,
+          "Cu": 6.0,
+          "Mn": 13.7
+        },
+        "vit": {
+          "A": 938.0,
+          "D": 1.87,
+          "E": 11.3,
+          "B1": 0.56,
+          "B2": 0.64,
+          "B6": 0.64,
+          "B12": 2.25,
+          "ナイアシン": 7.5,
+          "パントテン酸": 1.88,
+          "C": 57.0,
+          "K": 0.0263,
+          "葉酸": 0.075
+        }
+      }
     },
     {
       "id": "thick_502",
@@ -1812,6 +2038,2569 @@
       "notes": "経口栄養補助食品(ONS).",
       "sheet_row": 602,
       "product_type": "食品",
+      "micro": null
+    },
+    {
+      "id": "ppn_701",
+      "category": "PPN",
+      "name": "ツインパル輸液(500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 701,
+      "content": "糖・電解質・アミノ酸液",
+      "volume_ml": 500.0,
+      "kcal": 210.0,
+      "amino_acid_g": 15.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 64.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 37.499,
+      "micro": {
+        "elec": {
+          "Na": 17.5,
+          "K": 10.0,
+          "Cl": 17.5,
+          "Ca": 2.5,
+          "Mg": 2.5,
+          "P": 5.0
+        },
+        "trace": {
+          "Zn": 2.5
+        }
+      }
+    },
+    {
+      "id": "ppn_702",
+      "category": "PPN",
+      "name": "プラスアミノ輸液(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 702,
+      "content": "糖・電解質・アミノ酸液",
+      "volume_ml": 200.0,
+      "kcal": 82.0,
+      "amino_acid_g": 5.43,
+      "nitrogen_g": null,
+      "npc_n_ratio": 71.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 15.0,
+      "micro": {
+        "elec": {
+          "Na": 7.0,
+          "Cl": 7.0
+        }
+      }
+    },
+    {
+      "id": "ppn_703",
+      "category": "PPN",
+      "name": "ビーフリード輸液(1000mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 703,
+      "content": "糖・電解質・アミノ酸液",
+      "volume_ml": 1000.0,
+      "kcal": 420.0,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 64.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 74.998,
+      "micro": {
+        "elec": {
+          "Na": 35.0,
+          "K": 20.0,
+          "Cl": 35.0,
+          "Ca": 5.0,
+          "Mg": 5.0,
+          "P": 10.0
+        },
+        "trace": {
+          "Zn": 5.0
+        },
+        "vit": {
+          "B1": 1.92
+        }
+      }
+    },
+    {
+      "id": "ppn_704",
+      "category": "PPN",
+      "name": "パレプラス輸液(500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 704,
+      "content": "糖・電解質・アミノ酸・水溶性ビタミン液",
+      "volume_ml": 500.0,
+      "kcal": 210.0,
+      "amino_acid_g": 15.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 64.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 37.499,
+      "micro": {
+        "elec": {
+          "Na": 17.1,
+          "K": 10.0,
+          "Cl": 17.6,
+          "Ca": 2.5,
+          "Mg": 2.5,
+          "P": 5.0
+        },
+        "trace": {
+          "Zn": 2.4
+        },
+        "vit": {
+          "B1": 1.91,
+          "B2": 1.25,
+          "B6": 1.25,
+          "B12": 2.5,
+          "ナイアシン": 10.0,
+          "パントテン酸": 3.75,
+          "ビオチン": 25.0,
+          "C": 50.0,
+          "葉酸": 0.1
+        }
+      }
+    },
+    {
+      "id": "ppn_705",
+      "category": "PPN",
+      "name": "エネフリード輸液(550mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 705,
+      "content": "アミノ酸・糖・電解質・脂肪・水溶性ビタミン液",
+      "volume_ml": 550.0,
+      "kcal": 310.0,
+      "amino_acid_g": 15.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 105.0,
+      "fat_g_or_kcal_basis": 10.0,
+      "carb_g_or_kcal_basis": 37.5,
+      "micro": {
+        "elec": {
+          "Na": 17.5,
+          "K": 10.0,
+          "Cl": 17.5,
+          "Ca": 2.5,
+          "Mg": 2.5,
+          "P": 5.0
+        },
+        "trace": {
+          "Zn": 2.5
+        },
+        "vit": {
+          "B1": 1.91,
+          "B2": 1.15,
+          "B6": 1.83,
+          "B12": 1.25,
+          "ナイアシン": 10.0,
+          "パントテン酸": 3.52,
+          "ビオチン": 15.0,
+          "C": 50.0,
+          "葉酸": 0.15
+        }
+      }
+    },
+    {
+      "id": "ppn_706",
+      "category": "PPN",
+      "name": "エネフリード輸液(1100mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 706,
+      "content": "アミノ酸・糖・電解質・脂肪・水溶性ビタミン液",
+      "volume_ml": 1100.0,
+      "kcal": 620.0,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 105.0,
+      "fat_g_or_kcal_basis": 20.0,
+      "carb_g_or_kcal_basis": 75.0,
+      "micro": {
+        "elec": {
+          "Na": 35.0,
+          "K": 20.0,
+          "Cl": 35.0,
+          "Ca": 5.0,
+          "Mg": 5.0,
+          "P": 10.0
+        },
+        "trace": {
+          "Zn": 5.0
+        },
+        "vit": {
+          "B1": 3.82,
+          "B2": 2.3,
+          "B6": 3.66,
+          "B12": 2.5,
+          "ナイアシン": 20.0,
+          "パントテン酸": 7.04,
+          "ビオチン": 30.0,
+          "C": 100.0,
+          "葉酸": 0.3
+        }
+      }
+    },
+    {
+      "id": "ppn_707",
+      "category": "PPN",
+      "name": "イントラリポス輸液20%(50mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 707,
+      "content": "脂肪乳剤",
+      "volume_ml": 50.0,
+      "kcal": 100.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": 10.0,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "ppn_708",
+      "category": "PPN",
+      "name": "イントラリポス輸液20%(250mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 708,
+      "content": "脂肪乳剤",
+      "volume_ml": 250.0,
+      "kcal": 500.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": 50.0,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "ppn_709",
+      "category": "PPN",
+      "name": "モリプロンF輸液(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 709,
+      "content": "高濃度アミノ酸液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 20.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.3
+        }
+      }
+    },
+    {
+      "id": "ppn_710",
+      "category": "PPN",
+      "name": "アミニック輸液(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 710,
+      "content": "高濃度アミノ酸液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 20.07,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.58
+        }
+      }
+    },
+    {
+      "id": "ppn_711",
+      "category": "PPN",
+      "name": "モリアミンS注(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 711,
+      "content": "高濃度アミノ酸液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 16.864,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 3.6,
+          "Cl": 36.4
+        }
+      }
+    },
+    {
+      "id": "ppn_712",
+      "category": "PPN",
+      "name": "アミパレン輸液(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 712,
+      "content": "高濃度アミノ酸液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 20.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.4
+        }
+      }
+    },
+    {
+      "id": "ppn_713",
+      "category": "PPN",
+      "name": "アミパレン輸液(300mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 713,
+      "content": "高濃度アミノ酸液",
+      "volume_ml": 300.0,
+      "kcal": null,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.6
+        }
+      }
+    },
+    {
+      "id": "ppn_714",
+      "category": "PPN",
+      "name": "アミパレン輸液(400mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 714,
+      "content": "高濃度アミノ酸液",
+      "volume_ml": 400.0,
+      "kcal": null,
+      "amino_acid_g": 40.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.8
+        }
+      }
+    },
+    {
+      "id": "ppn_715",
+      "category": "PPN",
+      "name": "キドミン輸液(300mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 715,
+      "content": "腎不全用アミノ酸液",
+      "volume_ml": 300.0,
+      "kcal": null,
+      "amino_acid_g": 21.61,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.6
+        }
+      }
+    },
+    {
+      "id": "ppn_716",
+      "category": "PPN",
+      "name": "モリヘパミン点滴静注(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 716,
+      "content": "肝性脳症改善アミノ酸注射液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 14.94,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.6
+        }
+      }
+    },
+    {
+      "id": "ppn_717",
+      "category": "PPN",
+      "name": "モリヘパミン点滴静注(300mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 717,
+      "content": "肝性脳症改善アミノ酸注射液",
+      "volume_ml": 300.0,
+      "kcal": null,
+      "amino_acid_g": 22.41,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.9
+        }
+      }
+    },
+    {
+      "id": "ppn_718",
+      "category": "PPN",
+      "name": "モリヘパミン点滴静注(500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 718,
+      "content": "肝性脳症改善アミノ酸注射液",
+      "volume_ml": 500.0,
+      "kcal": null,
+      "amino_acid_g": 37.35,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 1.5
+        }
+      }
+    },
+    {
+      "id": "ppn_719",
+      "category": "PPN",
+      "name": "アミノレバン点滴静注(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 719,
+      "content": "肝性脳症改善アミノ酸注射液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 15.98,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 3.0,
+          "Cl": 19.0
+        }
+      }
+    },
+    {
+      "id": "ppn_720",
+      "category": "PPN",
+      "name": "テルフィス点滴静注(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 720,
+      "content": "肝性脳症改善アミノ酸注射液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 15.97,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 3.0,
+          "Cl": 19.0
+        }
+      }
+    },
+    {
+      "id": "ppn_721",
+      "category": "PPN",
+      "name": "テルフィス点滴静注(500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 721,
+      "content": "肝性脳症改善アミノ酸注射液",
+      "volume_ml": 500.0,
+      "kcal": null,
+      "amino_acid_g": 39.97,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 7.0,
+          "Cl": 47.0
+        }
+      }
+    },
+    {
+      "id": "ppn_722",
+      "category": "PPN",
+      "name": "プレアミン-P注射液(200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 722,
+      "content": "小児用アミノ酸液",
+      "volume_ml": 200.0,
+      "kcal": null,
+      "amino_acid_g": 15.200000000000001,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "elec": {
+          "Na": 0.6
+        }
+      }
+    },
+    {
+      "id": "tpn_701",
+      "category": "TPN",
+      "name": "リハビックス-K1号輸液(500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 701,
+      "content": "糖・電解質液",
+      "volume_ml": 500.0,
+      "kcal": 340.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 85.0,
+      "micro": {
+        "elec": {
+          "Na": 5.0,
+          "K": 10.0,
+          "Ca": 4.0,
+          "Mg": 1.0,
+          "P": 5.0
+        },
+        "trace": {
+          "Zn": 10.0
+        }
+      }
+    },
+    {
+      "id": "tpn_702",
+      "category": "TPN",
+      "name": "リハビックス-K2号輸液(500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 702,
+      "content": "糖・電解質液",
+      "volume_ml": 500.0,
+      "kcal": 420.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 105.0,
+      "micro": {
+        "elec": {
+          "K": 15.0,
+          "Ca": 7.5,
+          "Mg": 2.5,
+          "P": 10.0
+        },
+        "trace": {
+          "Zn": 10.0
+        }
+      }
+    },
+    {
+      "id": "tpn_703",
+      "category": "TPN",
+      "name": "ハイカリック液‐1号(700mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 703,
+      "content": "糖・電解質液",
+      "volume_ml": 700.0,
+      "kcal": 480.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 120.0,
+      "micro": {
+        "elec": {
+          "K": 30.0,
+          "Ca": 8.5,
+          "Mg": 10.0,
+          "P": 4.84
+        },
+        "trace": {
+          "Zn": 10.0
+        }
+      }
+    },
+    {
+      "id": "tpn_704",
+      "category": "TPN",
+      "name": "ハイカリック液‐2号(700mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 704,
+      "content": "糖・電解質液",
+      "volume_ml": 700.0,
+      "kcal": 700.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 175.0,
+      "micro": {
+        "elec": {
+          "K": 30.0,
+          "Ca": 8.5,
+          "Mg": 10.0,
+          "P": 4.84
+        },
+        "trace": {
+          "Zn": 10.0
+        }
+      }
+    },
+    {
+      "id": "tpn_705",
+      "category": "TPN",
+      "name": "ハイカリック液‐3号(700mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 705,
+      "content": "糖・電解質液",
+      "volume_ml": 700.0,
+      "kcal": 1000.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 250.0,
+      "micro": {
+        "elec": {
+          "K": 30.0,
+          "Ca": 8.5,
+          "Mg": 10.0,
+          "P": 8.07
+        },
+        "trace": {
+          "Zn": 20.0
+        }
+      }
+    },
+    {
+      "id": "tpn_706",
+      "category": "TPN",
+      "name": "ハイカリックRF輸液(250mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 706,
+      "content": "糖・電解質液",
+      "volume_ml": 250.0,
+      "kcal": 500.0,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 125.0,
+      "micro": {
+        "elec": {
+          "Na": 12.5,
+          "Cl": 7.5,
+          "Ca": 1.5,
+          "Mg": 1.5
+        },
+        "trace": {
+          "Zn": 5.0
+        }
+      }
+    },
+    {
+      "id": "tpn_707",
+      "category": "TPN",
+      "name": "ピーエヌツイン‐1号輸液(1000mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 707,
+      "content": "糖・電解質・アミノ酸液",
+      "volume_ml": 1000.0,
+      "kcal": 560.0,
+      "amino_acid_g": 20.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 158.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 120.0,
+      "micro": {
+        "elec": {
+          "Na": 50.0,
+          "K": 30.0,
+          "Cl": 50.0,
+          "Ca": 8.0,
+          "Mg": 6.0,
+          "P": 8.0
+        },
+        "trace": {
+          "Zn": 20.0
+        }
+      }
+    },
+    {
+      "id": "tpn_708",
+      "category": "TPN",
+      "name": "ピーエヌツイン‐2号輸液(1100mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 708,
+      "content": "糖・電解質・アミノ酸液",
+      "volume_ml": 1100.0,
+      "kcal": 840.0,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 158.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 180.0,
+      "micro": {
+        "elec": {
+          "Na": 50.0,
+          "K": 30.0,
+          "Cl": 50.0,
+          "Ca": 8.0,
+          "Mg": 6.0,
+          "P": 8.0
+        },
+        "trace": {
+          "Zn": 20.0
+        }
+      }
+    },
+    {
+      "id": "tpn_709",
+      "category": "TPN",
+      "name": "ピーエヌツイン‐3号輸液(1200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 709,
+      "content": "糖・電解質・アミノ酸液",
+      "volume_ml": 1200.0,
+      "kcal": 1160.0,
+      "amino_acid_g": 40.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 164.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 250.4,
+      "micro": {
+        "elec": {
+          "Na": 51.0,
+          "K": 30.0,
+          "Cl": 50.0,
+          "Ca": 8.0,
+          "Mg": 6.0,
+          "P": 8.0
+        },
+        "trace": {
+          "Zn": 20.0
+        }
+      }
+    },
+    {
+      "id": "tpn_710",
+      "category": "TPN",
+      "name": "ネオパレン1号輸液(1500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 710,
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
+      "volume_ml": 1500.0,
+      "kcal": 840.0,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 153.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 180.0,
+      "micro": {
+        "elec": {
+          "Na": 75.0,
+          "K": 33.0,
+          "Cl": 75.0,
+          "Ca": 6.0,
+          "Mg": 6.0,
+          "P": 7.6
+        },
+        "trace": {
+          "Zn": 30.0
+        },
+        "vit": {
+          "A": 2475.0,
+          "D": 3.75,
+          "E": 7.5,
+          "B1": 2.925,
+          "B2": 3.45,
+          "B6": 3.675,
+          "B12": 3.75,
+          "ナイアシン": 30.0,
+          "パントテン酸": 10.5,
+          "ビオチン": 45.0,
+          "C": 75.0,
+          "K": 1.5,
+          "葉酸": 0.3
+        }
+      }
+    },
+    {
+      "id": "tpn_711",
+      "category": "TPN",
+      "name": "ネオパレン2号輸液(1500mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 711,
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
+      "volume_ml": 1500.0,
+      "kcal": 1230.0,
+      "amino_acid_g": 45.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 149.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 262.5,
+      "micro": {
+        "elec": {
+          "Na": 75.0,
+          "K": 41.0,
+          "Cl": 75.0,
+          "Ca": 7.6,
+          "Mg": 7.5,
+          "P": 9.0
+        },
+        "trace": {
+          "Zn": 30.0
+        },
+        "vit": {
+          "A": 2475.0,
+          "D": 3.75,
+          "E": 7.5,
+          "B1": 2.925,
+          "B2": 3.45,
+          "B6": 3.675,
+          "B12": 3.75,
+          "ナイアシン": 30.0,
+          "パントテン酸": 10.5,
+          "ビオチン": 45.0,
+          "C": 75.0,
+          "K": 1.5,
+          "葉酸": 0.3
+        }
+      }
+    },
+    {
+      "id": "tpn_712",
+      "category": "TPN",
+      "name": "フルカリック1号輸液(1354.5mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 712,
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
+      "volume_ml": 1354.5,
+      "kcal": 840.0,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 154.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 180.0,
+      "micro": {
+        "elec": {
+          "Na": 75.0,
+          "K": 45.0,
+          "Cl": 73.5,
+          "Ca": 12.75,
+          "Mg": 15.0,
+          "P": 12.11
+        },
+        "trace": {
+          "Zn": 30.0
+        },
+        "vit": {
+          "A": 2475.0,
+          "D": 7.5,
+          "E": 11.25,
+          "B1": 2.25,
+          "B2": 3.81,
+          "B6": 3.0,
+          "B12": 7.5,
+          "ナイアシン": 30.0,
+          "パントテン酸": 10.53,
+          "ビオチン": 75.0,
+          "C": 75.0,
+          "K": 1.5,
+          "葉酸": 0.3
+        }
+      }
+    },
+    {
+      "id": "tpn_713",
+      "category": "TPN",
+      "name": "フルカリック2号輸液(1504.5mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 713,
+      "content": "糖・電解質・アミノ酸・総合ビタミン液",
+      "volume_ml": 1504.5,
+      "kcal": 1230.0,
+      "amino_acid_g": 45.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 150.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 262.5,
+      "micro": {
+        "elec": {
+          "Na": 75.0,
+          "K": 45.0,
+          "Cl": 73.5,
+          "Ca": 12.5,
+          "Mg": 15.0,
+          "P": 12.11
+        },
+        "trace": {
+          "Zn": 30.0
+        },
+        "vit": {
+          "A": 2475.0,
+          "D": 7.5,
+          "E": 11.25,
+          "B1": 2.25,
+          "B2": 3.81,
+          "B6": 3.0,
+          "B12": 7.5,
+          "ナイアシン": 30.0,
+          "パントテン酸": 10.53,
+          "ビオチン": 75.0,
+          "C": 75.0,
+          "K": 1.5,
+          "葉酸": 0.3
+        }
+      }
+    },
+    {
+      "id": "tpn_714",
+      "category": "TPN",
+      "name": "エルネオパNF1号輸液(1000mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 714,
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
+      "volume_ml": 1000.0,
+      "kcal": 560.0,
+      "amino_acid_g": 20.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 153.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 120.0,
+      "micro": {
+        "elec": {
+          "Na": 50.0,
+          "K": 22.0,
+          "Cl": 50.0,
+          "Ca": 4.0,
+          "Mg": 4.0,
+          "P": 5.0
+        },
+        "trace": {
+          "Zn": 30.0,
+          "Fe": 10.0,
+          "Cu": 2.5,
+          "Mn": 0.5,
+          "I": 0.5
+        },
+        "vit": {
+          "A": 1650.0,
+          "D": 2.5,
+          "E": 5.0,
+          "B1": 3.84,
+          "B2": 2.3,
+          "B6": 3.675,
+          "B12": 2.5,
+          "ナイアシン": 20.0,
+          "パントテン酸": 7.0,
+          "ビオチン": 30.0,
+          "C": 100.0,
+          "K": 0.075,
+          "葉酸": 0.3
+        }
+      }
+    },
+    {
+      "id": "tpn_715",
+      "category": "TPN",
+      "name": "エルネオパNF1号輸液(2000mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 715,
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
+      "volume_ml": 2000.0,
+      "kcal": 1120.0,
+      "amino_acid_g": 40.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 153.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 240.0,
+      "micro": {
+        "elec": {
+          "Na": 100.0,
+          "K": 44.0,
+          "Cl": 100.0,
+          "Ca": 8.0,
+          "Mg": 8.0,
+          "P": 10.0
+        },
+        "trace": {
+          "Zn": 60.0,
+          "Fe": 20.0,
+          "Cu": 5.0,
+          "Mn": 1.0,
+          "I": 1.0
+        },
+        "vit": {
+          "A": 3300.0,
+          "D": 5.0,
+          "E": 10.0,
+          "B1": 7.68,
+          "B2": 4.6,
+          "B6": 7.35,
+          "B12": 5.0,
+          "ナイアシン": 40.0,
+          "パントテン酸": 14.0,
+          "ビオチン": 60.0,
+          "C": 200.0,
+          "K": 0.15,
+          "葉酸": 0.6
+        }
+      }
+    },
+    {
+      "id": "tpn_716",
+      "category": "TPN",
+      "name": "エルネオパNF2号輸液(1000mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 716,
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
+      "volume_ml": 1000.0,
+      "kcal": 820.0,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 149.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 175.0,
+      "micro": {
+        "elec": {
+          "Na": 50.0,
+          "K": 27.0,
+          "Cl": 50.0,
+          "Ca": 5.0,
+          "Mg": 5.0,
+          "P": 6.0
+        },
+        "trace": {
+          "Zn": 30.0,
+          "Fe": 10.0,
+          "Cu": 2.5,
+          "Mn": 0.5,
+          "I": 0.5
+        },
+        "vit": {
+          "A": 1650.0,
+          "D": 2.5,
+          "E": 5.0,
+          "B1": 3.84,
+          "B2": 2.3,
+          "B6": 3.675,
+          "B12": 2.5,
+          "ナイアシン": 20.0,
+          "パントテン酸": 7.0,
+          "ビオチン": 30.0,
+          "C": 100.0,
+          "K": 0.075,
+          "葉酸": 0.3
+        }
+      }
+    },
+    {
+      "id": "tpn_717",
+      "category": "TPN",
+      "name": "エルネオパNF2号輸液(2000mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 717,
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
+      "volume_ml": 2000.0,
+      "kcal": 1640.0,
+      "amino_acid_g": 60.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 149.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 350.0,
+      "micro": {
+        "elec": {
+          "Na": 100.0,
+          "K": 54.0,
+          "Cl": 100.0,
+          "Ca": 10.0,
+          "Mg": 10.0,
+          "P": 12.0
+        },
+        "trace": {
+          "Zn": 60.0,
+          "Fe": 20.0,
+          "Cu": 5.0,
+          "Mn": 1.0,
+          "I": 1.0
+        },
+        "vit": {
+          "A": 3300.0,
+          "D": 5.0,
+          "E": 10.0,
+          "B1": 7.68,
+          "B2": 4.6,
+          "B6": 7.35,
+          "B12": 5.0,
+          "ナイアシン": 40.0,
+          "パントテン酸": 14.0,
+          "ビオチン": 60.0,
+          "C": 200.0,
+          "K": 0.15,
+          "葉酸": 0.6
+        }
+      }
+    },
+    {
+      "id": "tpn_718",
+      "category": "TPN",
+      "name": "ワンパル1号輸液(1200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 718,
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
+      "volume_ml": 1200.0,
+      "kcal": 840.0,
+      "amino_acid_g": 30.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 158.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 180.0,
+      "micro": {
+        "elec": {
+          "Na": 75.0,
+          "K": 37.5,
+          "Cl": 75.0,
+          "Ca": 12.0,
+          "Mg": 9.0,
+          "P": 12.0
+        },
+        "trace": {
+          "Zn": 75.0,
+          "Fe": 13.12,
+          "Cu": 3.75,
+          "Mn": 0.75,
+          "I": 0.75
+        },
+        "vit": {
+          "A": 2475.0,
+          "D": 3.75,
+          "E": 7.5,
+          "B1": 6.0,
+          "B2": 3.75,
+          "B6": 6.0,
+          "B12": 7.5,
+          "ナイアシン": 30.0,
+          "パントテン酸": 11.25,
+          "ビオチン": 75.0,
+          "C": 150.0,
+          "K": 0.112,
+          "葉酸": 0.45
+        }
+      }
+    },
+    {
+      "id": "tpn_719",
+      "category": "TPN",
+      "name": "ワンパル2号輸液(1200mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 719,
+      "content": "糖・電解質・アミノ酸・総合ビタミン・微量元素液",
+      "volume_ml": 1200.0,
+      "kcal": 1260.0,
+      "amino_acid_g": 45.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 158.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 270.0,
+      "micro": {
+        "elec": {
+          "Na": 75.0,
+          "K": 45.0,
+          "Cl": 75.0,
+          "Ca": 12.0,
+          "Mg": 9.0,
+          "P": 12.0
+        },
+        "trace": {
+          "Zn": 75.0,
+          "Fe": 13.12,
+          "Cu": 3.75,
+          "Mn": 0.75,
+          "I": 0.75
+        },
+        "vit": {
+          "A": 2475.0,
+          "D": 3.75,
+          "E": 7.5,
+          "B1": 6.0,
+          "B2": 3.75,
+          "B6": 6.0,
+          "B12": 7.5,
+          "ナイアシン": 30.0,
+          "パントテン酸": 11.25,
+          "ビオチン": 75.0,
+          "C": 150.0,
+          "K": 0.112,
+          "葉酸": 0.45
+        }
+      }
+    },
+    {
+      "id": "tpn_720",
+      "category": "TPN",
+      "name": "キドパレン輸液(1050mL)",
+      "product_type": "医薬品",
+      "notes": "輸液製剤協議会データ",
+      "sheet_row": 720,
+      "content": "慢性腎不全高カロリー輸液用アミノ酸・糖・電解質・総合ビタミン液",
+      "volume_ml": 1050.0,
+      "kcal": 1500.0,
+      "amino_acid_g": 32.847,
+      "nitrogen_g": null,
+      "npc_n_ratio": 300.0,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": 342.20000000000005,
+      "micro": {
+        "elec": {
+          "Na": 50.0,
+          "Cl": 40.0,
+          "Ca": 6.0,
+          "Mg": 6.0
+        },
+        "trace": {
+          "Zn": 20.0
+        },
+        "vit": {
+          "A": 3300.0,
+          "D": 5.0,
+          "E": 10.0,
+          "B1": 7.68,
+          "B2": 4.6,
+          "B6": 7.35,
+          "B12": 5.0,
+          "ナイアシン": 40.0,
+          "パントテン酸": 14.0,
+          "ビオチン": 60.0,
+          "C": 200.0,
+          "K": 0.15,
+          "葉酸": 0.6
+        }
+      }
+    },
+    {
+      "id": "en_701",
+      "category": "EN",
+      "name": "エレンタール配合内用剤",
+      "product_type": "医薬品",
+      "notes": "成分栄養剤・1包80g/300kcal",
+      "sheet_row": 701,
+      "content": "成分栄養剤",
+      "volume_ml": "80g (溶解後300mL)",
+      "kcal": 300.0,
+      "amino_acid_g": 14.100000000000001,
+      "nitrogen_g": null,
+      "npc_n_ratio": 128.0,
+      "fat_g_or_kcal_basis": 0.5,
+      "carb_g_or_kcal_basis": 63.300000000000004,
+      "micro": {
+        "elec": {
+          "Na": 11.3,
+          "K": 5.5,
+          "Ca": 7.9,
+          "Mg": 3.3,
+          "P": 3.92
+        },
+        "trace": {
+          "Zn": 27.5,
+          "Fe": 32.2,
+          "Cu": 3.3,
+          "Mn": 5.5,
+          "I": 0.12,
+          "Se": 0.0
+        },
+        "vit": {
+          "A": 648.0,
+          "D": 1.29,
+          "E": 3.3,
+          "B1": 0.15,
+          "B2": 0.24,
+          "B6": 0.21,
+          "B12": 0.7,
+          "ナイアシン": 2.19,
+          "パントテン酸": 1.11,
+          "ビオチン": 39.0,
+          "C": 7.8,
+          "K": 0.009,
+          "葉酸": 0.044
+        }
+      }
+    },
+    {
+      "id": "en_702",
+      "category": "EN",
+      "name": "エレンタールP配合内用剤",
+      "product_type": "医薬品",
+      "notes": "小児用成分栄養剤",
+      "sheet_row": 702,
+      "content": "成分栄養剤(小児用)",
+      "volume_ml": "40g (溶解後200mL)",
+      "kcal": 156.0,
+      "amino_acid_g": 4.84,
+      "nitrogen_g": null,
+      "npc_n_ratio": 176.0,
+      "fat_g_or_kcal_basis": 1.41,
+      "carb_g_or_kcal_basis": 30.84,
+      "micro": null
+    },
+    {
+      "id": "en_703",
+      "category": "EN",
+      "name": "ヘパンED配合内用剤",
+      "product_type": "医薬品",
+      "notes": "肝不全用成分栄養剤・BCAA強化",
+      "sheet_row": 703,
+      "content": "成分栄養剤(肝不全用)",
+      "volume_ml": "80g (溶解後300mL)",
+      "kcal": 310.0,
+      "amino_acid_g": 11.200000000000001,
+      "nitrogen_g": null,
+      "npc_n_ratio": 148.0,
+      "fat_g_or_kcal_basis": 2.8000000000000003,
+      "carb_g_or_kcal_basis": 61.7,
+      "micro": {
+        "elec": {
+          "Na": 9.2,
+          "K": 4.8,
+          "Cl": 4.8,
+          "Ca": 11.8,
+          "Mg": 3.3,
+          "P": 6.39
+        },
+        "trace": {
+          "Zn": 55.1,
+          "Fe": 19.7,
+          "Cu": 3.3,
+          "Mn": 5.3,
+          "I": 0.2
+        },
+        "vit": {
+          "A": 720.0,
+          "D": 3.8,
+          "E": 16.6,
+          "B1": 0.7,
+          "B2": 0.74,
+          "B6": 0.55,
+          "B12": 2.2,
+          "ナイアシン": 3.3,
+          "パントテン酸": 1.65,
+          "ビオチン": 39.0,
+          "C": 23.4,
+          "K": 0.044,
+          "葉酸": 0.132
+        }
+      }
+    },
+    {
+      "id": "en_704",
+      "category": "EN",
+      "name": "アミノレバンEN配合散",
+      "product_type": "医薬品",
+      "notes": "肝不全用成分栄養剤・BCAA 6.1g/包",
+      "sheet_row": 704,
+      "content": "成分栄養剤(肝不全用)",
+      "volume_ml": "50g (溶解後200mL)",
+      "kcal": 213.0,
+      "amino_acid_g": 13.5,
+      "nitrogen_g": null,
+      "npc_n_ratio": 72.0,
+      "fat_g_or_kcal_basis": 3.7,
+      "carb_g_or_kcal_basis": 31.5,
+      "micro": {
+        "elec": {
+          "Na": 1.7,
+          "K": 5.4,
+          "Cl": 6.2,
+          "Ca": 2.9,
+          "Mg": 1.7,
+          "P": 2.98
+        },
+        "trace": {
+          "Zn": 13.0,
+          "Fe": 23.8,
+          "Cu": 2.0,
+          "Mn": 3.5,
+          "I": 0.08
+        },
+        "vit": {
+          "A": 466.0,
+          "D": 1.165,
+          "E": 8.47,
+          "B1": 0.1,
+          "B2": 0.16,
+          "B6": 0.2,
+          "B12": 0.5,
+          "ナイアシン": 1.52,
+          "パントテン酸": 1.09,
+          "ビオチン": 25.0,
+          "C": 6.13,
+          "K": 0.0055,
+          "葉酸": 0.05
+        }
+      }
+    },
+    {
+      "id": "en_705",
+      "category": "EN",
+      "name": "ツインラインNF配合経腸用液",
+      "product_type": "医薬品",
+      "notes": "消化態栄養剤・A液B液混合",
+      "sheet_row": 705,
+      "content": "消化態栄養剤",
+      "volume_ml": "400 (A液200+B液200)",
+      "kcal": 400.0,
+      "amino_acid_g": 16.2,
+      "nitrogen_g": null,
+      "npc_n_ratio": 129.0,
+      "fat_g_or_kcal_basis": 11.120000000000001,
+      "carb_g_or_kcal_basis": 58.72,
+      "micro": {
+        "elec": {
+          "Na": 12.0,
+          "K": 12.1,
+          "Cl": 12.0,
+          "Ca": 8.8,
+          "Mg": 4.7,
+          "P": 6.85
+        },
+        "trace": {
+          "Zn": 57.8,
+          "Fe": 45.1,
+          "Cu": 1.4,
+          "Mn": 11.6
+        },
+        "vit": {
+          "A": 828.0,
+          "D": 1.35,
+          "E": 2.68,
+          "B1": 0.806,
+          "B2": 0.898,
+          "B6": 0.992,
+          "B12": 1.26,
+          "ナイアシン": 9.91,
+          "パントテン酸": 3.76,
+          "ビオチン": 15.4,
+          "C": 89.8,
+          "K": 0.025,
+          "葉酸": 0.1
+        }
+      }
+    },
+    {
+      "id": "en_706",
+      "category": "EN",
+      "name": "ラコールNF配合経腸用液",
+      "product_type": "医薬品",
+      "notes": "半消化態 1.0kcal/mL",
+      "sheet_row": 706,
+      "content": "半消化態栄養剤",
+      "volume_ml": 400.0,
+      "kcal": 400.0,
+      "amino_acid_g": 17.52,
+      "nitrogen_g": null,
+      "npc_n_ratio": 157.0,
+      "fat_g_or_kcal_basis": 8.92,
+      "carb_g_or_kcal_basis": 64.48,
+      "micro": {
+        "elec": {
+          "Na": 12.8,
+          "K": 14.2,
+          "Cl": 9.6,
+          "Ca": 8.8,
+          "Mg": 6.4,
+          "P": 5.68
+        },
+        "trace": {
+          "Zn": 39.2,
+          "Fe": 44.8,
+          "Cu": 7.9,
+          "Mn": 9.7
+        },
+        "vit": {
+          "A": 828.0,
+          "D": 1.36,
+          "E": 2.6,
+          "B1": 1.52,
+          "B2": 0.98,
+          "B6": 1.5,
+          "B12": 1.28,
+          "ナイアシン": 10.0,
+          "パントテン酸": 3.83,
+          "C": 112.4,
+          "K": 0.025,
+          "葉酸": 0.15
+        }
+      }
+    },
+    {
+      "id": "en_707",
+      "category": "EN",
+      "name": "CZ-Hi",
+      "product_type": "食品",
+      "notes": "食物繊維・オリゴ糖配合",
+      "sheet_row": 707,
+      "content": "半消化態流動食",
+      "volume_ml": 200.0,
+      "kcal": 200.0,
+      "amino_acid_g": 10.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 100.0,
+      "fat_g_or_kcal_basis": 4.4,
+      "carb_g_or_kcal_basis": 29.400000000000002,
+      "micro": {
+        "elec": {
+          "Na": 7.8,
+          "K": 7.7,
+          "Cl": 7.3,
+          "Ca": 7.5,
+          "Mg": 6.3,
+          "P": 4.84
+        },
+        "trace": {
+          "Zn": 33.6,
+          "Fe": 39.4,
+          "Cu": 3.1,
+          "Mn": 6.6,
+          "I": 0.24,
+          "Se": 8.0
+        },
+        "vit": {
+          "D": 1.0,
+          "E": 2.4,
+          "B1": 0.32,
+          "B2": 0.36,
+          "B6": 0.6,
+          "B12": 0.6,
+          "ナイアシン": 6.4,
+          "パントテン酸": 2.0,
+          "ビオチン": 10.0,
+          "C": 20.0,
+          "K": 0.016,
+          "葉酸": 0.06
+        }
+      }
+    },
+    {
+      "id": "en_708",
+      "category": "EN",
+      "name": "アイソカルRTU",
+      "product_type": "食品",
+      "notes": "アイソトニック1.0kcal/mL",
+      "sheet_row": 708,
+      "content": "半消化態流動食",
+      "volume_ml": 200.0,
+      "kcal": 200.0,
+      "amino_acid_g": 6.6000000000000005,
+      "nitrogen_g": null,
+      "npc_n_ratio": 160.0,
+      "fat_g_or_kcal_basis": 8.4,
+      "carb_g_or_kcal_basis": 24.0,
+      "micro": {
+        "elec": {
+          "Na": 4.8,
+          "K": 6.7,
+          "Cl": 5.6,
+          "Ca": 7.0,
+          "Mg": 5.3,
+          "P": 3.23
+        },
+        "trace": {
+          "Zn": 33.6,
+          "Fe": 25.1,
+          "Cu": 2.5,
+          "Mn": 0.4,
+          "I": 0.02,
+          "Se": 6.0
+        },
+        "vit": {
+          "D": 1.2,
+          "E": 1.8,
+          "B1": 0.4,
+          "B2": 0.46,
+          "B6": 0.5,
+          "B12": 0.48,
+          "ナイアシン": 6.0,
+          "パントテン酸": 2.6,
+          "ビオチン": 0.8,
+          "C": 36.0,
+          "K": 0.018,
+          "葉酸": 0.05
+        }
+      }
+    },
+    {
+      "id": "en_709",
+      "category": "EN",
+      "name": "アイソカル100",
+      "product_type": "食品",
+      "notes": "100mLで200kcal・高栄養タイプ",
+      "sheet_row": 709,
+      "content": "半消化態流動食(高栄養)",
+      "volume_ml": 100.0,
+      "kcal": 200.0,
+      "amino_acid_g": 8.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 131.0,
+      "fat_g_or_kcal_basis": 8.6,
+      "carb_g_or_kcal_basis": 22.0,
+      "micro": {
+        "elec": {
+          "Na": 4.8,
+          "K": 6.7,
+          "Ca": 7.0,
+          "Mg": 2.7,
+          "P": 3.23
+        },
+        "trace": {
+          "Zn": 30.6,
+          "Fe": 25.1,
+          "Cu": 2.5
+        }
+      }
+    },
+    {
+      "id": "en_710",
+      "category": "EN",
+      "name": "メイバランス1.0",
+      "product_type": "食品",
+      "notes": "1.0kcal/mL",
+      "sheet_row": 710,
+      "content": "半消化態流動食",
+      "volume_ml": 200.0,
+      "kcal": 200.0,
+      "amino_acid_g": 8.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 131.0,
+      "fat_g_or_kcal_basis": 5.6000000000000005,
+      "carb_g_or_kcal_basis": 31.400000000000002,
+      "micro": {
+        "elec": {
+          "Na": 9.6,
+          "K": 6.2,
+          "Ca": 12.0,
+          "Mg": 6.7,
+          "P": 7.75
+        },
+        "trace": {
+          "Zn": 24.5,
+          "Fe": 43.0,
+          "Cu": 2.5,
+          "Mn": 13.1
+        }
+      }
+    },
+    {
+      "id": "en_711",
+      "category": "EN",
+      "name": "メイバランス1.5",
+      "product_type": "食品",
+      "notes": "1.5kcal/mL",
+      "sheet_row": 711,
+      "content": "半消化態流動食(高栄養)",
+      "volume_ml": 333.0,
+      "kcal": 500.0,
+      "amino_acid_g": 20.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 131.0,
+      "fat_g_or_kcal_basis": 14.0,
+      "carb_g_or_kcal_basis": 78.5,
+      "micro": {
+        "elec": {
+          "Na": 23.9,
+          "K": 12.8,
+          "Ca": 15.0,
+          "Mg": 8.3,
+          "P": 9.69
+        },
+        "trace": {
+          "Zn": 61.2,
+          "Fe": 89.5,
+          "Cu": 6.3,
+          "Mn": 20.9,
+          "I": 0.59,
+          "Se": 17.5
+        },
+        "vit": {
+          "D": 2.5,
+          "E": 15.0,
+          "B1": 0.75,
+          "B2": 1.0,
+          "B6": 1.5,
+          "B12": 3.0,
+          "ナイアシン": 8.0,
+          "パントテン酸": 3.0,
+          "C": 80.0,
+          "K": 0.025,
+          "葉酸": 0.25
+        }
+      }
+    },
+    {
+      "id": "en_712",
+      "category": "EN",
+      "name": "ラクフィア1.0",
+      "product_type": "食品",
+      "notes": "シールド乳酸菌・PHGG配合",
+      "sheet_row": 712,
+      "content": "半消化態流動食",
+      "volume_ml": 400.0,
+      "kcal": 400.0,
+      "amino_acid_g": 16.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 131.0,
+      "fat_g_or_kcal_basis": 12.0,
+      "carb_g_or_kcal_basis": 60.0,
+      "micro": {
+        "elec": {
+          "Na": 34.3,
+          "K": 12.3,
+          "Ca": 12.0,
+          "Mg": 10.0,
+          "P": 7.75
+        },
+        "trace": {
+          "Zn": 61.2,
+          "Fe": 57.3,
+          "Cu": 4.4,
+          "Mn": 13.1,
+          "I": 0.41,
+          "Se": 12.0
+        },
+        "vit": {
+          "D": 4.0,
+          "E": 4.8,
+          "B1": 0.52,
+          "B2": 0.56,
+          "B6": 0.8,
+          "B12": 1.2,
+          "ナイアシン": 7.6,
+          "パントテン酸": 4.0,
+          "C": 100.0,
+          "K": 0.028,
+          "葉酸": 0.16
+        }
+      }
+    },
+    {
+      "id": "en_713",
+      "category": "EN",
+      "name": "ラクフィア1.5",
+      "product_type": "食品",
+      "notes": "1.5kcal/mL",
+      "sheet_row": 713,
+      "content": "半消化態流動食(高栄養)",
+      "volume_ml": 267.0,
+      "kcal": 400.0,
+      "amino_acid_g": 16.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 131.0,
+      "fat_g_or_kcal_basis": 12.0,
+      "carb_g_or_kcal_basis": 60.0,
+      "micro": {
+        "elec": {
+          "Na": 20.9,
+          "K": 12.3,
+          "Ca": 12.0,
+          "Mg": 10.0,
+          "P": 7.75
+        },
+        "trace": {
+          "Zn": 61.2,
+          "Fe": 57.3,
+          "Cu": 6.3,
+          "Mn": 13.1
+        }
+      }
+    },
+    {
+      "id": "en_714",
+      "category": "EN",
+      "name": "ハイネックスイーゲル",
+      "product_type": "食品",
+      "notes": "粘度可変・ペクチン配合",
+      "sheet_row": 714,
+      "content": "消化態栄養剤(粘度可変)",
+      "volume_ml": 375.0,
+      "kcal": 300.0,
+      "amino_acid_g": 12.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 131.0,
+      "fat_g_or_kcal_basis": 6.6000000000000005,
+      "carb_g_or_kcal_basis": 50.300000000000004,
+      "micro": {
+        "elec": {
+          "Na": 21.7,
+          "K": 12.0,
+          "Ca": 8.8,
+          "Mg": 5.7,
+          "P": 8.01
+        },
+        "trace": {
+          "Zn": 55.1,
+          "Fe": 31.5,
+          "Cu": 3.8,
+          "Mn": 17.8,
+          "I": 0.08,
+          "Se": 8.6
+        },
+        "vit": {
+          "D": 3.8,
+          "E": 7.1,
+          "B1": 0.68,
+          "B2": 0.71,
+          "B6": 0.9,
+          "B12": 0.9,
+          "ナイアシン": 6.8,
+          "パントテン酸": 3.8,
+          "C": 158.0,
+          "K": 0.0188,
+          "葉酸": 0.09
+        }
+      }
+    },
+    {
+      "id": "en_715",
+      "category": "EN",
+      "name": "リニュート",
+      "product_type": "食品",
+      "notes": "高蛋白・重症患者用",
+      "sheet_row": 715,
+      "content": "消化態栄養剤(高蛋白)",
+      "volume_ml": 400.0,
+      "kcal": 400.0,
+      "amino_acid_g": 24.0,
+      "nitrogen_g": null,
+      "npc_n_ratio": 80.0,
+      "fat_g_or_kcal_basis": 22.400000000000002,
+      "carb_g_or_kcal_basis": 28.400000000000002,
+      "micro": {
+        "elec": {
+          "Na": 27.7,
+          "K": 10.3,
+          "Ca": 8.4,
+          "Mg": 7.5,
+          "P": 10.66
+        },
+        "trace": {
+          "Zn": 110.1,
+          "Fe": 42.1,
+          "Cu": 11.3,
+          "Mn": 24.8,
+          "I": 0.16,
+          "Se": 11.5
+        },
+        "vit": {
+          "D": 10.0,
+          "E": 9.5,
+          "B1": 1.6,
+          "B2": 2.0,
+          "B6": 3.2,
+          "ナイアシン": 636.0,
+          "パントテン酸": 5.0,
+          "C": 210.0,
+          "K": 0.02,
+          "葉酸": 0.12
+        }
+      }
+    },
+    {
+      "id": "en_716",
+      "category": "EN",
+      "name": "グルセルナ-REX",
+      "product_type": "食品",
+      "notes": "糖尿病用・REXカーボシステム",
+      "sheet_row": 716,
+      "content": "病態別(糖尿病)",
+      "volume_ml": 400.0,
+      "kcal": 400.0,
+      "amino_acid_g": 16.7,
+      "nitrogen_g": null,
+      "npc_n_ratio": 128.0,
+      "fat_g_or_kcal_basis": 22.3,
+      "carb_g_or_kcal_basis": 38.800000000000004,
+      "micro": {
+        "elec": {
+          "Na": 16.3,
+          "K": 10.3,
+          "Ca": 14.0,
+          "Mg": 7.0,
+          "P": 8.4
+        },
+        "trace": {
+          "Zn": 73.4,
+          "Fe": 100.3,
+          "Cu": 10.1,
+          "I": 0.02,
+          "Se": 11.0
+        },
+        "vit": {
+          "D": 3.4,
+          "E": 10.8,
+          "B1": 0.5,
+          "B2": 0.72,
+          "B6": 0.84,
+          "B12": 1.2,
+          "ナイアシン": 6.8,
+          "パントテン酸": 2.8,
+          "C": 44.0,
+          "K": 0.012,
+          "葉酸": 0.08
+        }
+      }
+    },
+    {
+      "id": "en_717",
+      "category": "EN",
+      "name": "プルモケア-Ex",
+      "product_type": "食品",
+      "notes": "呼吸器疾患用・低糖質1.5kcal/mL・販売中止予定",
+      "sheet_row": 717,
+      "content": "病態別(呼吸器疾患)",
+      "volume_ml": 250.0,
+      "kcal": 375.0,
+      "amino_acid_g": 15.700000000000001,
+      "nitrogen_g": null,
+      "npc_n_ratio": 124.0,
+      "fat_g_or_kcal_basis": 22.8,
+      "carb_g_or_kcal_basis": 26.400000000000002,
+      "micro": {
+        "elec": {
+          "Na": 13.9,
+          "K": 12.1,
+          "Ca": 13.0,
+          "Mg": 8.8,
+          "P": 8.4
+        },
+        "trace": {
+          "Zn": 107.1,
+          "Fe": 75.2,
+          "Cu": 8.3
+        }
+      }
+    },
+    {
+      "id": "elyte_701",
+      "category": "電解質",
+      "name": "KCL補正液1mEq/mL",
+      "product_type": "医薬品",
+      "notes": "K+ 20mEq/管, Cl- 20mEq/管 (1モル液)",
+      "sheet_row": 701,
+      "content": "カリウム補正(1M KCl)",
+      "volume_ml": "20mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_702",
+      "category": "電解質",
+      "name": "塩化K注10mEqキット「テルモ」",
+      "product_type": "医薬品",
+      "notes": "K+ 10mEq, Cl- 10mEq",
+      "sheet_row": 702,
+      "content": "カリウム補正",
+      "volume_ml": "10mL/1筒",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_703",
+      "category": "電解質",
+      "name": "KCL注20mEqキット「テルモ」",
+      "product_type": "医薬品",
+      "notes": "K+ 20mEq/筒",
+      "sheet_row": 703,
+      "content": "カリウム補正",
+      "volume_ml": "20mL/1筒",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_704",
+      "category": "電解質",
+      "name": "1モル塩化ナトリウム注射液",
+      "product_type": "医薬品",
+      "notes": "Na+ 20mEq/管, Cl- 20mEq/管 (1モル液)",
+      "sheet_row": 704,
+      "content": "ナトリウム補正",
+      "volume_ml": "20mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_705",
+      "category": "電解質",
+      "name": "塩化ナトリウム注10%シリンジ",
+      "product_type": "医薬品",
+      "notes": "塩化Na 10% 2.0g/筒",
+      "sheet_row": 705,
+      "content": "ナトリウム補正",
+      "volume_ml": "20mL/1筒",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_706",
+      "category": "電解質",
+      "name": "硫酸Mg補正液1mEq/mL",
+      "product_type": "医薬品",
+      "notes": "Mg2+ 20mEq/管 (硫酸Mg 0.5モル液)",
+      "sheet_row": 706,
+      "content": "マグネシウム補正",
+      "volume_ml": "20mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_707",
+      "category": "電解質",
+      "name": "硫酸マグネシウム補正液1mEq/mLキット",
+      "product_type": "医薬品",
+      "notes": "Mg2+ 20mEq/筒",
+      "sheet_row": 707,
+      "content": "マグネシウム補正",
+      "volume_ml": "20mL/1筒",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_708",
+      "category": "電解質",
+      "name": "補正用0.5モル リン酸二カリウム液",
+      "product_type": "医薬品",
+      "notes": "K+ 20mEq, P 10mmol/管",
+      "sheet_row": 708,
+      "content": "リン補正 (K型)",
+      "volume_ml": "20mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_709",
+      "category": "電解質",
+      "name": "リン酸2カリウム注20mEqキット「テルモ」",
+      "product_type": "医薬品",
+      "notes": "K+ 20mEq, P 10mmol/筒",
+      "sheet_row": 709,
+      "content": "リン補正 (K型)",
+      "volume_ml": "20mL/1筒",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_710",
+      "category": "電解質",
+      "name": "リン酸Na補正液0.5mmol/mL",
+      "product_type": "医薬品",
+      "notes": "Na+ 15mEq, P 10mmol/管",
+      "sheet_row": 710,
+      "content": "リン補正 (Na型)",
+      "volume_ml": "20mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_711",
+      "category": "電解質",
+      "name": "カルチコール注射液8.5% 5mL",
+      "product_type": "医薬品",
+      "notes": "グルコン酸Ca水和物 425mg = Ca 1.93mEq/管",
+      "sheet_row": 711,
+      "content": "カルシウム補給",
+      "volume_ml": "5mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_712",
+      "category": "電解質",
+      "name": "カルチコール注射液8.5% 10mL",
+      "product_type": "医薬品",
+      "notes": "グルコン酸Ca水和物 850mg = Ca 3.85mEq/管",
+      "sheet_row": 712,
+      "content": "カルシウム補給",
+      "volume_ml": "10mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "elyte_713",
+      "category": "電解質",
+      "name": "8.5%カルチコール注",
+      "product_type": "医薬品",
+      "notes": "低Ca血症テタニー改善, Ca 0.39mEq/mL",
+      "sheet_row": 713,
+      "content": "カルシウム補給",
+      "volume_ml": "5mL/10mL",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "trace_701",
+      "category": "微量元素",
+      "name": "エレメンミック注",
+      "product_type": "医薬品",
+      "notes": "Zn/Fe/Cu/Mn/I含有(Mn減量品)",
+      "sheet_row": 701,
+      "content": "高カロリー輸液用微量元素製剤(5元素)",
+      "volume_ml": "2mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "trace": {
+          "Zn": 60.0,
+          "Fe": 35.0,
+          "Cu": 5.0,
+          "Mn": 1.0,
+          "I": 1.0
+        }
+      }
+    },
+    {
+      "id": "trace_702",
+      "category": "微量元素",
+      "name": "エレジェクト注シリンジ",
+      "product_type": "医薬品",
+      "notes": "Zn/Fe/Cu/Mn/I含有・キット製剤",
+      "sheet_row": 702,
+      "content": "高カロリー輸液用微量元素製剤",
+      "volume_ml": "2mL/1筒",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "trace": {
+          "Zn": 60.0,
+          "Cu": 5.0,
+          "Mn": 1.0,
+          "I": 1.0
+        }
+      }
+    },
+    {
+      "id": "trace_703",
+      "category": "微量元素",
+      "name": "ミネラミック注",
+      "product_type": "医薬品",
+      "notes": "エレメンミック後発品",
+      "sheet_row": 703,
+      "content": "高カロリー輸液用微量元素製剤(エレメンミックGE)",
+      "volume_ml": "2mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "trace": {
+          "Zn": 60.0,
+          "Fe": 35.0,
+          "Cu": 5.0,
+          "Mn": 1.0,
+          "I": 1.0
+        }
+      }
+    },
+    {
+      "id": "trace_704",
+      "category": "微量元素",
+      "name": "ミネリック-5配合点滴静注シリンジ",
+      "product_type": "医薬品",
+      "notes": "Mn 1μmol配合・シリンジ製剤",
+      "sheet_row": 704,
+      "content": "高カロリー輸液用微量元素製剤(5元素)",
+      "volume_ml": "2mL/1筒",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "trace": {
+          "Zn": 60.0,
+          "Fe": 35.0,
+          "Cu": 5.0,
+          "Mn": 1.0,
+          "I": 1.0
+        }
+      }
+    },
+    {
+      "id": "trace_705",
+      "category": "微量元素",
+      "name": "メドレニック注",
+      "product_type": "医薬品",
+      "notes": "エレメンミック後発品",
+      "sheet_row": 705,
+      "content": "高カロリー輸液用微量元素製剤",
+      "volume_ml": "2mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "trace": {
+          "Zn": 60.0,
+          "Fe": 35.0,
+          "Cu": 5.0,
+          "Mn": 1.0,
+          "I": 1.0
+        }
+      }
+    },
+    {
+      "id": "trace_706",
+      "category": "微量元素",
+      "name": "アセレンド注100μg",
+      "product_type": "医薬品",
+      "notes": "亜セレン酸Na 219μg = セレン100μg/バイアル",
+      "sheet_row": 706,
+      "content": "セレン補充",
+      "volume_ml": "2mL/1バイアル",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "trace": {
+          "Se": 100.0
+        }
+      }
+    },
+    {
+      "id": "vit_701",
+      "category": "ビタミン",
+      "name": "オーツカMV注",
+      "product_type": "医薬品",
+      "notes": "13種ビタミン含有・1日1組",
+      "sheet_row": 701,
+      "content": "高カロリー輸液用総合ビタミン剤",
+      "volume_ml": "1組(1号バイアル+2号アンプル4mL)",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "vit": {
+          "A": 3300.0,
+          "D": 5.0,
+          "E": 10.0,
+          "B1": 3.1,
+          "B2": 3.6,
+          "B6": 4.0,
+          "B12": 5.0,
+          "ナイアシン": 40.0,
+          "パントテン酸": 15.0,
+          "ビオチン": 60.0,
+          "C": 100.0,
+          "K": 2.0,
+          "葉酸": 0.4
+        }
+      }
+    },
+    {
+      "id": "vit_702",
+      "category": "ビタミン",
+      "name": "ビタジェクト注キット",
+      "product_type": "医薬品",
+      "notes": "13種ビタミン含有・1日1キット",
+      "sheet_row": 702,
+      "content": "高カロリー輸液用総合ビタミン剤",
+      "volume_ml": "2筒キット(A液5mL+B液5mL)",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "vit": {
+          "A": 3300.0,
+          "D": 10.0,
+          "E": 15.0,
+          "B1": 3.0,
+          "B2": 4.0,
+          "B6": 4.0,
+          "B12": 10.0,
+          "ナイアシン": 40.0,
+          "パントテン酸": 15.0,
+          "ビオチン": 100.0,
+          "C": 100.0,
+          "K": 2.0,
+          "葉酸": 0.4
+        }
+      }
+    },
+    {
+      "id": "vit_703",
+      "category": "ビタミン",
+      "name": "ダイメジン・マルチ注",
+      "product_type": "医薬品",
+      "notes": "13種ビタミン含有・1日1バイアル",
+      "sheet_row": 703,
+      "content": "高カロリー輸液用総合ビタミン剤",
+      "volume_ml": "1バイアル",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "vit": {
+          "A": 3300.0,
+          "D": 10.0,
+          "E": 15.0,
+          "B1": 3.0,
+          "B2": 4.0,
+          "B6": 4.0,
+          "B12": 10.0,
+          "ナイアシン": 40.0,
+          "パントテン酸": 15.0,
+          "ビオチン": 100.0,
+          "C": 100.0,
+          "K": 2.0,
+          "葉酸": 0.4
+        }
+      }
+    },
+    {
+      "id": "vit_704",
+      "category": "ビタミン",
+      "name": "マルタミン注射用",
+      "product_type": "医薬品",
+      "notes": "製造販売中止(経過措置〜2026年3月末)",
+      "sheet_row": 704,
+      "content": "高カロリー輸液用総合ビタミン剤",
+      "volume_ml": "1バイアル",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": null
+    },
+    {
+      "id": "vit_705",
+      "category": "ビタミン",
+      "name": "シーパラ注",
+      "product_type": "医薬品",
+      "notes": "B群・C混合ビタミン剤",
+      "sheet_row": 705,
+      "content": "混合ビタミンB群・C",
+      "volume_ml": "2mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "vit": {
+          "B1": 5.0,
+          "B2": 2.5,
+          "B6": 5.0,
+          "B12": 25.0,
+          "ナイアシン": 12.5,
+          "パントテン酸": 5.0,
+          "C": 50.0
+        }
+      }
+    },
+    {
+      "id": "vit_706",
+      "category": "ビタミン",
+      "name": "ネオラミン・スリービー液 (静注用)",
+      "product_type": "医薬品",
+      "notes": "B群複合・神経炎・末梢神経障害",
+      "sheet_row": 706,
+      "content": "ビタミンB1+B6+B12複合剤",
+      "volume_ml": "10mL/1管",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "vit": {
+          "B1": 100.0,
+          "B6": 100.0,
+          "B12": 1000.0
+        }
+      }
+    },
+    {
+      "id": "vit_707",
+      "category": "ビタミン",
+      "name": "ビタメジン静注用",
+      "product_type": "医薬品",
+      "notes": "注射用ビタメジン",
+      "sheet_row": 707,
+      "content": "複合ビタミンB製剤",
+      "volume_ml": "1バイアル",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
+      "micro": {
+        "vit": {
+          "B1": 100.0,
+          "B6": 100.0,
+          "B12": 1000.0
+        }
+      }
+    },
+    {
+      "id": "vit_708",
+      "category": "ビタミン",
+      "name": "ビタジェクト注キット 高カロリー輸液用",
+      "product_type": "医薬品",
+      "notes": "上記ビタジェクト注キットに同じ",
+      "sheet_row": 708,
+      "content": "高カロリー輸液用総合ビタミン剤(7)",
+      "volume_ml": "2筒キット",
+      "kcal": null,
+      "amino_acid_g": null,
+      "nitrogen_g": null,
+      "npc_n_ratio": null,
+      "fat_g_or_kcal_basis": null,
+      "carb_g_or_kcal_basis": null,
       "micro": null
     }
   ],

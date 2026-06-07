@@ -3436,10 +3436,15 @@ class _MasterPageState extends State<MasterPage> {
     final trace = (micro['trace'] as Map?)?.cast<String, dynamic>();
     if (trace != null && trace.isNotEmpty) {
       final parts = <String>[];
-      for (final k in ['Zn', 'Fe', 'Mn', 'Cu', 'I', 'Se']) {
+      for (final k in ['Zn', 'Fe', 'Mn', 'Cu', 'I']) {
         if (trace[k] != null) parts.add('$k ${_numFmt(trace[k])}');
       }
-      rows.add(line('微量元素', '${parts.join(' / ')} μmol$per', Colors.deepOrange.shade700));
+      var body = parts.isEmpty ? '' : '${parts.join(' / ')} μmol$per';
+      if (trace['Se'] != null) {
+        // Se は μg 表記
+        body += '${body.isEmpty ? '' : ', '}Se ${_numFmt(trace['Se'])} μg$per';
+      }
+      rows.add(line('微量元素', body, Colors.deepOrange.shade700));
     }
 
     final vit = (micro['vit'] as Map?)?.cast<String, dynamic>();
