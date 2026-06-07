@@ -4250,12 +4250,14 @@ class ConditionCatalog {
       id: 'renal',
       label: '腎不全',
       suggestion: '蛋白量の調整・K/P・水分負荷に注意。'
-          '保存期=低蛋白・低K・低P、透析期=必要蛋白を確保しつつK/Pに配慮。',
+          '保存期=低蛋白(0.6–0.8 g/kg/day)・低K・低P、'
+          '透析期=必要蛋白(1.0–1.2 g/kg/day)を確保しつつK/Pに配慮。',
     ),
     ConditionDef(
       id: 'liver',
       label: '肝不全/肝性脳症',
-      suggestion: '低栄養を避けつつBCAAを意識し、肝性脳症悪化リスクに配慮。',
+      suggestion: '蛋白 1.0–1.2 g/kg/day を目安に低栄養を避け、BCAAを意識。'
+          '肝性脳症悪化リスクに配慮(過度な蛋白制限は避ける)。',
     ),
     ConditionDef(
       id: 'respiratory',
@@ -4265,14 +4267,14 @@ class ConditionCatalog {
     ConditionDef(
       id: 'critical',
       label: '重症・周術期・高侵襲',
-      suggestion: '十分なエネルギーと蛋白を確保。'
+      suggestion: '蛋白 1.2–2.0 g/kg/day と十分なエネルギーを確保。'
           '必要に応じEPA/DHA・アルギニン等の免疫栄養を補充。',
     ),
     ConditionDef(
       id: 'wound',
       label: '褥瘡・創傷治癒・サルコペニア',
-      suggestion: '総エネルギー・蛋白不足に注意。'
-          'アルギニン・HMB・微量元素の補充を検討。',
+      suggestion: '蛋白 1.2–1.5 g/kg/day・十分なエネルギーを確保。'
+          'アルギニン・HMB・微量元素(Zn等)の補充を検討。',
     ),
     ConditionDef(
       id: 'malabsorption',
@@ -6027,7 +6029,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       'TPN' => Colors.blue,
       'TPN+EN' => Colors.teal,
       'EN' => Colors.yellow.shade700,
-      '食事' => Colors.orange.shade700,
+      '食事' => Colors.deepOrange.shade400,
       _ => Colors.grey,
     };
     return Container(
@@ -6446,7 +6448,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                 color: Colors.orange.shade100,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                    color: Colors.orange.shade400, width: 0.8),
+                                    color: Colors.deepOrange.shade400, width: 0.8),
                               ),
                               child: Text('朝昼夕 ${_dayMealPac[i]}pac',
                                   style: TextStyle(
@@ -6735,7 +6737,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
         if (flags[4]) mkBox('full', Colors.green.shade700),
         // 経口リハ開始(濃厚流動食・栄サポ食品・一般食)はフォーク&ナイフアイコン。
-        if (flags[5]) mkIconBox(Icons.restaurant,  Colors.orange.shade700),
+        if (flags[5]) mkIconBox(Icons.restaurant,  Colors.deepOrange.shade400),
       ];
 
       Widget? icon;
@@ -6895,7 +6897,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       rodStackItems: [
                                         // 下: 食事(橙)
                                         BarChartRodStackItem(0, mealK,
-                                            Colors.orange.shade400),
+                                            Colors.deepOrange.shade400),
                                         // 中: EN(黄)
                                         BarChartRodStackItem(mealK, mealK + enK,
                                             Colors.yellow.shade700),
@@ -6916,8 +6918,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                 borderData: FlBorderData(show: false),
                               )),
                               // ② 合計IN ③ AA — 棒と同じ箱に重ねる
-                              lineLayer(ins, maxIn, Colors.purple.shade200),
-                              lineLayer(prots, maxAA, Colors.pink.shade300),
+                              lineLayer(ins, maxIn, Colors.blue.shade600),
+                              lineLayer(prots, maxAA, Colors.red.shade400),
                               // フローター: タップ固定優先、次いでホバー
                               Builder(builder: (ctx) {
                                 final displayIdx = _selectedBarIdx >= 0
@@ -7025,15 +7027,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        _legItem(Colors.orange.shade700,
+                                        _legItem(Colors.deepOrange.shade400,
                                             '食事 (kcal)', false),
                                         _legItem(Colors.yellow.shade700,
                                             'EN (kcal)', false),
                                         _legItem(Colors.green.shade300,
                                             'PN (kcal)', false),
-                                        _legItem(Colors.purple.shade200,
+                                        _legItem(Colors.blue.shade600,
                                             'IN (ml)', true),
-                                        _legItem(Colors.pink.shade300,
+                                        _legItem(Colors.red.shade400,
                                             'AA (g)', true),
                                       ],
                                     ),
