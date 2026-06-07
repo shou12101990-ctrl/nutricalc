@@ -6079,6 +6079,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final nutritionIdx = preDays;
     final fullIdx      = (preDays + _rampDays - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
+    final oralIdx      = (_oralRehabStartDay != null &&
+            preDays + _oralRehabStartDay! - 1 < n)
+        ? preDays + _oralRehabStartDay! - 1
+        : -1;
 
     // 日付＋イベントアイコンのセル（グラフ下の独立Rowで使用）
     Widget dateCell(int i) {
@@ -6092,6 +6096,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         i == nutritionIdx,
         i == enIdx && i >= preDays,
         i == fullIdx && i >= preDays,
+        i == oralIdx && oralIdx >= 0,
       ];
       final bool hasEvent = flags.any((f) => f);
       final int evCount = flags.where((f) => f).length;
@@ -6142,11 +6147,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final evWidgets = [
         if (flags[0]) mkIconBox(Icons.no_meals,   Colors.red.shade400),
         if (flags[1]) mkIconBox(Icons.bed,         Colors.blueGrey.shade400),
-        // 栄養開始(=PN/輸液開始)は製剤バッグ(点滴)アイコン。
-        // フォーク&ナイフ(restaurant)は「食事開始(経口)」用に温存。
+        // 栄養開始(=PN/輸液開始)は点滴(water_drop)アイコン。
         if (flags[2]) mkIconBox(Icons.water_drop,  Colors.blue.shade600),
         if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
         if (flags[4]) mkBox('full', Colors.green.shade700),
+        // 経口リハ開始(濃厚流動食・栄サポ食品・一般食)はフォーク&ナイフアイコン。
+        if (flags[5]) mkIconBox(Icons.restaurant,  Colors.orange.shade700),
       ];
 
       Widget? icon;
@@ -6438,6 +6444,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                             'IN (ml)', true),
                                         _legItem(Colors.pink.shade300,
                                             'AA (g)', true),
+                                        _legItem(Colors.orange.shade700,
+                                            '食事', false),
                                       ],
                                     ),
                                   ),
