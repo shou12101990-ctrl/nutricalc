@@ -6656,9 +6656,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       TableRow(children: [
                         Padding(
                           padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Text('経口リハ導入:',
-                              style: TextStyle(
-                                  fontSize: 13, color: Colors.red.shade400)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.restaurant,
+                                size: 13, color: Colors.red.shade400),
+                            const SizedBox(width: 4),
+                            Text('経口リハ導入:',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.red.shade400)),
+                          ]),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
