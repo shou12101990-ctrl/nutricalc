@@ -379,7 +379,11 @@ class CasesPage extends StatelessWidget {
           final isConflict = state.cases.any((c) => c.currentBed == bedPad);
           return AlertDialog(
           title: const Text('新規入室'),
-          content: SingleChildScrollView(
+          content: SizedBox(
+            // ダイアログ幅を固定し、病態チップ展開時も横に広がらず縦に折り返す
+            width: (MediaQuery.of(context).size.width - 80)
+                .clamp(280.0, 400.0),
+            child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -617,6 +621,7 @@ class CasesPage extends StatelessWidget {
                 ],
               ],
             ),
+          ),
           ),
           actions: [
             TextButton(
@@ -7224,7 +7229,31 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                 alignment: BarChartAlignment.spaceAround,
                                 minY: 0,
                                 maxY: maxKcal,
-                                barTouchData: BarTouchData(enabled: false),
+                                // fl_chart本体のポインタ追跡でホバー検知（重ね描画でも確実に発火）
+                                barTouchData: BarTouchData(
+                                  enabled: true,
+                                  handleBuiltInTouches: false,
+                                  touchCallback: (event, resp) {
+                                    final idx =
+                                        resp?.spot?.touchedBarGroupIndex ?? -1;
+                                    if (event is FlPointerHoverEvent) {
+                                      // デスクトップ: カーソルオンで表示
+                                      if (idx != _hoveredBarIdx) {
+                                        setState(() => _hoveredBarIdx = idx);
+                                      }
+                                    } else if (event is FlPointerExitEvent) {
+                                      if (_hoveredBarIdx != -1) {
+                                        setState(() => _hoveredBarIdx = -1);
+                                      }
+                                    } else if (event is FlTapUpEvent ||
+                                        event is FlTapDownEvent) {
+                                      // タッチ端末: タップで固定表示
+                                      if (idx >= 0) {
+                                        setState(() => _selectedBarIdx = idx);
+                                      }
+                                    }
+                                  },
+                                ),
                                 barGroups: List.generate(n, (i) {
                                   final enK = enKcals[i];
                                   final mealK = mealKcals[i];
