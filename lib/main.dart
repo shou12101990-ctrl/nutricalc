@@ -5606,7 +5606,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         Padding(
                           padding: const EdgeInsets.only(right: 8, bottom: 6),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.restaurant, size: 13, color: Colors.blue.shade600),
+                            Icon(Icons.water_drop, size: 13, color: Colors.blue.shade600),
                             const SizedBox(width: 4),
                             Text('栄養開始日:',
                                 style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
@@ -6018,7 +6018,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final evWidgets = [
         if (flags[0]) mkIconBox(Icons.no_meals,   Colors.red.shade400),
         if (flags[1]) mkIconBox(Icons.bed,         Colors.blueGrey.shade400),
-        if (flags[2]) mkIconBox(Icons.restaurant,  Colors.blue.shade600),
+        // 栄養開始(=PN/輸液開始)は製剤バッグ(点滴)アイコン。
+        // フォーク&ナイフ(restaurant)は「食事開始(経口)」用に温存。
+        if (flags[2]) mkIconBox(Icons.water_drop,  Colors.blue.shade600),
         if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
         if (flags[4]) mkBox('full', Colors.green.shade700),
       ];
