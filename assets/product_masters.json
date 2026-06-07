@@ -4109,7 +4109,7 @@
     }
    },
    "condition_tags": [
-    "renal"
+    "renal_dialysis"
    ]
   },
   {
@@ -4156,7 +4156,7 @@
    "micro": null,
    "also_en": true,
    "condition_tags": [
-    "renal"
+    "renal_dialysis"
    ]
   },
   {
@@ -5239,87 +5239,6 @@
    "sheet_row": 87,
    "product_type": "食品",
    "micro": null
-  },
-  {
-   "id": "tpn_703",
-   "category": "TPN",
-   "name": "ハイカリック液‐1号(700mL)",
-   "product_type": "医薬品",
-   "notes": "輸液製剤協議会データ",
-   "sheet_row": 703,
-   "content": "糖・電解質液",
-   "volume_ml": 700.0,
-   "kcal": 480.0,
-   "amino_acid_g": null,
-   "nitrogen_g": null,
-   "npc_n_ratio": null,
-   "fat_g_or_kcal_basis": null,
-   "carb_g_or_kcal_basis": 120.0,
-   "micro": {
-    "elec": {
-     "K": 30.0,
-     "Ca": 8.5,
-     "Mg": 10.0,
-     "P": 4.84
-    },
-    "trace": {
-     "Zn": 10.0
-    }
-   }
-  },
-  {
-   "id": "tpn_704",
-   "category": "TPN",
-   "name": "ハイカリック液‐2号(700mL)",
-   "product_type": "医薬品",
-   "notes": "輸液製剤協議会データ",
-   "sheet_row": 704,
-   "content": "糖・電解質液",
-   "volume_ml": 700.0,
-   "kcal": 700.0,
-   "amino_acid_g": null,
-   "nitrogen_g": null,
-   "npc_n_ratio": null,
-   "fat_g_or_kcal_basis": null,
-   "carb_g_or_kcal_basis": 175.0,
-   "micro": {
-    "elec": {
-     "K": 30.0,
-     "Ca": 8.5,
-     "Mg": 10.0,
-     "P": 4.84
-    },
-    "trace": {
-     "Zn": 10.0
-    }
-   }
-  },
-  {
-   "id": "tpn_705",
-   "category": "TPN",
-   "name": "ハイカリック液‐3号(700mL)",
-   "product_type": "医薬品",
-   "notes": "輸液製剤協議会データ",
-   "sheet_row": 705,
-   "content": "糖・電解質液",
-   "volume_ml": 700.0,
-   "kcal": 1000.0,
-   "amino_acid_g": null,
-   "nitrogen_g": null,
-   "npc_n_ratio": null,
-   "fat_g_or_kcal_basis": null,
-   "carb_g_or_kcal_basis": 250.0,
-   "micro": {
-    "elec": {
-     "K": 30.0,
-     "Ca": 8.5,
-     "Mg": 10.0,
-     "P": 8.07
-    },
-    "trace": {
-     "Zn": 20.0
-    }
-   }
   },
   {
    "id": "elyte_205",

@@ -367,8 +367,9 @@ class CasesPage extends StatelessWidget {
     double stress = 1.6;
     double protein = 1.5;
     Sex sex = Sex.male;
-    DateTime? fastingDate; // 絶食開始日
+    DateTime? fastingDate = DateTime.now(); // 絶食開始日(デフォルト=入室日)
     final List<String> selectedTags = []; // 病態タグ
+    bool showConditions = false; // 病態追加の展開状態
 
     await showDialog(
       context: context,
@@ -565,41 +566,55 @@ class CasesPage extends StatelessWidget {
                   onChanged: (v) => setLocal(() => protein = v ?? protein),
                 ),
                 const SizedBox(height: 8),
-                // 病態追加 (目標タンパクの下)
+                // 病態追加 (目標タンパクの下) — タップで展開
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.add_circle_outline,
-                        size: 16, color: Colors.teal.shade700),
-                    const SizedBox(width: 4),
-                    Text('病態を追加（該当をタップ）',
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        setLocal(() => showConditions = !showConditions),
+                    icon: Icon(
+                        showConditions
+                            ? Icons.expand_less
+                            : Icons.add_circle_outline,
+                        size: 18,
+                        color: Colors.teal.shade700),
+                    label: Text(
+                        selectedTags.isEmpty
+                            ? '病態を追加'
+                            : '病態 ${selectedTags.length}件選択中',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.teal.shade700)),
-                  ]),
+                            fontSize: 13, color: Colors.teal.shade700)),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      side: BorderSide(color: Colors.teal.shade200),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: -4,
-                  children: [
-                    for (final c in ConditionCatalog.all)
-                      FilterChip(
-                        label: Text(c.label,
-                            style: const TextStyle(fontSize: 12)),
-                        selected: selectedTags.contains(c.id),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        onSelected: (sel) => setLocal(() {
-                          if (sel) {
-                            selectedTags.add(c.id);
-                          } else {
-                            selectedTags.remove(c.id);
-                          }
-                        }),
-                      ),
-                  ],
-                ),
+                if (showConditions) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final c in ConditionCatalog.all)
+                        FilterChip(
+                          label: Text(c.label,
+                              style: const TextStyle(fontSize: 12)),
+                          selected: selectedTags.contains(c.id),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          onSelected: (sel) => setLocal(() {
+                            if (sel) {
+                              selectedTags.add(c.id);
+                            } else {
+                              selectedTags.remove(c.id);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -4427,10 +4442,15 @@ class ConditionCatalog {
     ),
     ConditionDef(
       id: 'renal',
-      label: '腎不全',
-      suggestion: '蛋白量の調整・K/P・水分負荷に注意。'
-          '保存期=低蛋白(0.6–0.8 g/kg/day)・低K・低P、'
-          '透析期=必要蛋白(1.0–1.2 g/kg/day)を確保しつつK/Pに配慮。',
+      label: '腎不全(保存期)',
+      suggestion: '保存期: 低蛋白(0.6–0.8 g/kg/day)・低K・低P で腎負荷を軽減。'
+          '十分なエネルギーを確保し異化を防ぐ。',
+    ),
+    ConditionDef(
+      id: 'renal_dialysis',
+      label: '腎不全(透析期)',
+      suggestion: '透析期: 必要蛋白(1.0–1.2 g/kg/day)を確保しつつ'
+          'K/P・水分負荷に配慮。',
     ),
     ConditionDef(
       id: 'liver',
@@ -5591,7 +5611,8 @@ class AppState {
     'エレジェクト注シリンジ', '硫酸亜鉛', 'アセレンド注 (セレン)',
     'オーツカMV注', 'ビタメジン静注用',
     // ── EN/食事 プリセット追加 ──
-    'エンシュアリキッド', 'プルモケア-EX', 'ペプタメン スタンダード',
+    'エンシュアリキッド', 'プルモケア-EX', 'ペプタメン スタンダード', 'ペプタメン AF',
+    'メイバランス1.5', 'メイバランス2.0',
   ];
 
   final ProductCatalog catalog;
@@ -6082,6 +6103,7 @@ class AutoDesignPage extends StatelessWidget {
 class _AutoDesignPageState extends State<AutoDesignInline> {
   int _hoveredBarIdx = -1;  // グラフホバー中のバーインデックス (-1=なし)
   int _selectedBarIdx = -1; // タップ固定のバーインデックス (-1=なし)
+  bool _alertsExpanded = false; // 栄養管理アラートの展開状態(既定=折り畳み)
   double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
@@ -7291,22 +7313,55 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               ), // GestureDetector
               ), // SizedBox
             ), // TapRegion
-            // === 栄養管理アラート（グラフの下に表示） ===
+            // === 栄養管理アラート（グラフの下・既定は折り畳み、タップで展開） ===
             if (efadRisk || thiamineRisk || pnMonitorRisk) ...[
               const SizedBox(height: 12),
-              const Row(children: [
-                Icon(Icons.notifications_active_outlined,
-                    size: 16, color: Colors.black54),
-                SizedBox(width: 4),
-                Text('リスクと補充サジェスト',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Colors.black54)),
-              ]),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () =>
+                    setState(() => _alertsExpanded = !_alertsExpanded),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(children: [
+                    const Icon(Icons.notifications_active_outlined,
+                        size: 16, color: Colors.deepOrange),
+                    const SizedBox(width: 4),
+                    const Text('リスクと補充サジェスト',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.black54)),
+                    const SizedBox(width: 6),
+                    // アラート件数バッジ
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border:
+                            Border.all(color: Colors.deepOrange.shade200),
+                      ),
+                      child: Text(
+                          '${(efadRisk ? 1 : 0) + (thiamineRisk ? 1 : 0) + (pnMonitorRisk ? 1 : 0)}件',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepOrange.shade700)),
+                    ),
+                    const Spacer(),
+                    Icon(
+                        _alertsExpanded
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 20,
+                        color: Colors.black45),
+                  ]),
+                ),
+              ),
               const SizedBox(height: 8),
             ],
-            if (efadRisk)
+            if (_alertsExpanded && efadRisk)
               _chartAlert(
                 color: Colors.orange.shade800,
                 title: '${_alertDate(14, dates, n)}以降　必須脂肪酸欠乏のリスク',
@@ -7316,7 +7371,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 suggest: 'イントラリポス20% 100mL/日（脂質20g）を補充'
                     '（または週2回100mL）',
               ),
-            if (thiamineRisk)
+            if (_alertsExpanded && thiamineRisk)
               _chartAlert(
                 color: Colors.red.shade700,
                 title: '${_alertDate(preDays + 1, dates, n)}以降（栄養再開・糖負荷時）'
@@ -7326,7 +7381,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     '（貯蔵は約2週間で枯渇）。糖負荷の前〜同時に補充してください。',
                 suggest: 'ビタミンB1（チアミン）100〜300mg/日を静注で補充',
               ),
-            if (pnMonitorRisk)
+            if (_alertsExpanded && pnMonitorRisk)
               _chartAlert(
                 color: Colors.teal.shade700,
                 title:
