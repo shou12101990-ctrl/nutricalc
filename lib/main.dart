@@ -981,7 +981,6 @@ class _BuilderPageState extends State<BuilderPage>
   // ゼロmenu: 2サブタブ (0:本体, 1:加注) と加注製剤リスト(複数可)
   int _zeroSubTab = 0;
   final List<String> _zeroAdditives = [];
-  bool _zeroAddExpanded = false; // 加注: 製剤追加リストの展開状態
   final Set<String> expandedProducts = {};
   double _enRateMlPerHour = 0;
   double _tpnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
@@ -1237,8 +1236,8 @@ class _BuilderPageState extends State<BuilderPage>
   }
 
   // 加注製剤(電解質/微量元素/ビタミン)を複数追加するピッカー。
-  // 「加注製剤を追加」ボタン → カテゴリ見出し付きの1リストが展開し、
-  // 各行のステッパーで選ぶ。ゼロmenu・個別選択 双方で共有 (_zeroAdditives)。
+  // カテゴリ見出し付きの1リストを最初から展開表示し、各行のステッパーで選ぶ。
+  // ゼロmenu・個別選択 双方で共有 (_zeroAdditives)。
   Widget _additivePicker() {
     const cats = [
       ('電解質', '電解質補正'),
@@ -1317,31 +1316,12 @@ class _BuilderPageState extends State<BuilderPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: () => setState(() => _zeroAddExpanded = !_zeroAddExpanded),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(children: [
-              Icon(Icons.add, size: 18, color: Colors.blue.shade700),
-              const SizedBox(width: 4),
-              Text('加注製剤を追加',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.blue.shade700,
-                      fontWeight: FontWeight.w600)),
-              const Spacer(),
-              Icon(_zeroAddExpanded ? Icons.expand_less : Icons.expand_more,
-                  size: 20, color: Colors.grey.shade600),
-            ]),
-          ),
-        ),
-        if (_zeroAddExpanded)
-          for (final (cat, label) in cats) ...[
-            header(label),
-            ...sortProductsForDisplay(widget.state.catalog.byCategory(cat),
-                    additiveCat: cat)
-                .map(prodRow),
-          ],
+        for (final (cat, label) in cats) ...[
+          header(label),
+          ...sortProductsForDisplay(widget.state.catalog.byCategory(cat),
+                  additiveCat: cat)
+              .map(prodRow),
+        ],
       ],
     );
   }
@@ -5897,7 +5877,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       // 保存済み設定を復元 (rampDays・開始日・PN製剤のみ。日別は固定シーケンスから再生成)
       _rampDays = ((cfg['rampDays'] as num?)?.toInt() ?? 5).clamp(2, 6);
       _enStartDay = (cfg['enStartDay'] as num?)?.toInt() ?? (_rampDays + 1);
-      _oralRehabStartDay = (cfg['oralRehabStartDay'] as num?)?.toInt();
+      // 経口リハ導入の既定値: EN導入＋7日(EN食上げ完了の翌日)。未保存/未設定でも選択済みにし、
+      // 「未選択(—)」でドロップダウンが横長になるのを防ぐ。
+      _oralRehabStartDay = (cfg['oralRehabStartDay'] as num?)?.toInt() ??
+          (_enStartDay + _enRampDays).clamp(1, 28);
       _startDate =
           DateTime.tryParse(cfg['startDate'] as String? ?? '') ?? DateTime.now();
       final pid = cfg['pnProductId'] as String?;
@@ -5908,6 +5891,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           orElse: () => widget.state.protocols.first);
       _rampDays = p.percentages.length;
       _enStartDay = _rampDays + 1;
+      // 経口リハ導入の既定値: EN導入＋7日(EN食上げ完了の翌日)
+      _oralRehabStartDay = (_enStartDay + _enRampDays).clamp(1, 28);
       _pnProduct = tpn.isNotEmpty ? tpn.first : null;
       _startDate = () {
         for (final b in widget.current.bedHistory) {
