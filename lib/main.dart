@@ -1346,6 +1346,57 @@ class _BuilderPageState extends State<BuilderPage>
     );
   }
 
+  /// 病態タグに応じた処方サジェスト(💡)。タグ0個なら非表示。
+  /// 蛋白の目安cap超過時は控えめなテキスト1行を添える(色強調・ダイアログなし)。
+  Widget _conditionSuggestionBanner(
+      PatientCase current, AggregateResult aggregate) {
+    final defs = current.conditionTags
+        .map(ConditionCatalog.byId)
+        .whereType<ConditionDef>()
+        .toList();
+    if (defs.isEmpty) return const SizedBox.shrink();
+
+    final w = current.weightKg;
+    final protPerKg = w > 0 ? aggregate.totalProteinG / w : 0.0;
+    // cap を持つタグのうち、現処方が超過しているもの
+    final overs = defs
+        .where((d) =>
+            d.proteinCapPerKg != null && protPerKg > d.proteinCapPerKg! + 1e-9)
+        .toList();
+
+    final textColor = Colors.brown.shade700;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final d in defs)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('💡 ${d.label}: ${d.suggestion}',
+                  style: TextStyle(fontSize: 12, color: textColor)),
+            ),
+          if (overs.isNotEmpty)
+            Text(
+              '現在 ${protPerKg.toStringAsFixed(1)} g/kg'
+              '（${overs.map((d) => '${d.label} 目安${d.proteinCapPerKg!.toStringAsFixed(1)}').join(' / ')} 超）',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: textColor,
+                  fontWeight: FontWeight.w600),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final current = widget.state.selectedCase;
@@ -1419,7 +1470,7 @@ class _BuilderPageState extends State<BuilderPage>
           if (item.evening > 0) return 2;
         }
         if ((productUnits[p.id] ?? 0) >= 1) return 3;
-        if (widget.state.isFavorite(p.id)) return 4;
+        if (widget.state.isEffectiveFavorite(p.id)) return 4;
         return 5;
       }
       return groupOf(a).compareTo(groupOf(b));
@@ -1586,11 +1637,40 @@ class _BuilderPageState extends State<BuilderPage>
                                       .bodySmall
                                       ?.copyWith(color: Colors.grey)),
                             ],
+                            if (current.conditionTags.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 4,
+                                runSpacing: 2,
+                                children: [
+                                  for (final id in current.conditionTags)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.shade50,
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                        border: Border.all(
+                                            color: Colors.teal.shade200),
+                                      ),
+                                      child: Text(
+                                        ConditionCatalog.labelOf(id),
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.teal.shade800),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
                       ),
                     ),
+                    // ── 病態タグ由来の処方サジェスト(💡, テキストのみ控えめ) ──
+                    _conditionSuggestionBanner(current, aggregate),
                     const SizedBox(height: 12),
                     // 3タブ切替 (個別選択 / ゼロmenu / 自動計算)
                     Center(
@@ -2017,6 +2097,8 @@ class _BuilderPageState extends State<BuilderPage>
                                 final units = existing?.units ?? 0;
                                 final isFavorite =
                                     widget.state.isFavorite(product.id);
+                                final isAutoFav = widget.state
+                                    .isAutoFavorite(product.id, current);
                                 final classification = product.productType;
                                 final attributes =
                                     product.content.trim().isNotEmpty
@@ -2029,18 +2111,23 @@ class _BuilderPageState extends State<BuilderPage>
                                       isThreeLine: true,
                                       contentPadding: EdgeInsets.zero,
                                       leading: IconButton(
+                                        tooltip: isAutoFav
+                                            ? '病態タグにより自動 (タップで固定)'
+                                            : null,
                                         onPressed: () async {
                                           await widget.state
                                               .toggleFavorite(product.id);
                                           setState(() {});
                                         },
                                         icon: Icon(
-                                            isFavorite
+                                            (isFavorite || isAutoFav)
                                                 ? Icons.star
                                                 : Icons.star_border,
                                             color: isFavorite
                                                 ? Colors.orange
-                                                : null),
+                                                : isAutoFav
+                                                    ? Colors.teal
+                                                    : null),
                                       ),
                                       title: Column(
                                         crossAxisAlignment:
@@ -2128,6 +2215,8 @@ class _BuilderPageState extends State<BuilderPage>
                                   final units = existing?.units ?? 0;
                                   final isFavorite =
                                       widget.state.isFavorite(product.id);
+                                  final isAutoFav = widget.state
+                                      .isAutoFavorite(product.id, current);
                                   final classification = product.productType;
                                   final attributes =
                                       product.content.trim().isNotEmpty
@@ -2141,18 +2230,23 @@ class _BuilderPageState extends State<BuilderPage>
                                         isThreeLine: true,
                                         contentPadding: EdgeInsets.zero,
                                         leading: IconButton(
+                                          tooltip: isAutoFav
+                                              ? '病態タグにより自動 (タップで固定)'
+                                              : null,
                                           onPressed: () async {
                                             await widget.state
                                                 .toggleFavorite(product.id);
                                             setState(() {});
                                           },
                                           icon: Icon(
-                                              isFavorite
+                                              (isFavorite || isAutoFav)
                                                   ? Icons.star
                                                   : Icons.star_border,
                                               color: isFavorite
                                                   ? Colors.orange
-                                                  : null),
+                                                  : isAutoFav
+                                                      ? Colors.teal
+                                                      : null),
                                         ),
                                         title: Column(
                                           crossAxisAlignment:
@@ -2612,6 +2706,7 @@ class _BuilderPageState extends State<BuilderPage>
     double stress = current.stressFactor;
     double protein = current.proteinGoalPerKg;
     final memoCtrl = TextEditingController(text: current.memo);
+    final selectedTags = current.conditionTags.toSet();
     DateTime? fastingDate = current.fastingDate != null
         ? DateTime.tryParse(current.fastingDate!)
         : null;
@@ -2657,6 +2752,37 @@ class _BuilderPageState extends State<BuilderPage>
                           child: Text(v.toStringAsFixed(1))))
                       .toList(),
                   onChanged: (v) => setLocal(() => protein = v ?? protein),
+                ),
+                const SizedBox(height: 12),
+                // ── 病態タグ: 選択すると病態別製剤が処方画面で上位(★)に出る ──
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('病態タグ',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade700)),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: -4,
+                  children: [
+                    for (final c in ConditionCatalog.all)
+                      FilterChip(
+                        label: Text(c.label,
+                            style: const TextStyle(fontSize: 12)),
+                        selected: selectedTags.contains(c.id),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        onSelected: (sel) => setLocal(() {
+                          if (sel) {
+                            selectedTags.add(c.id);
+                          } else {
+                            selectedTags.remove(c.id);
+                          }
+                        }),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -2719,6 +2845,10 @@ class _BuilderPageState extends State<BuilderPage>
     current.stressFactor = stress;
     current.proteinGoalPerKg = protein;
     current.memo = memoCtrl.text.trim();
+    current.conditionTags = ConditionCatalog.all
+        .map((c) => c.id)
+        .where(selectedTags.contains)
+        .toList();
     current.fastingDate = fastingDate == null ? null
         : '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
     await widget.state.persist();
@@ -5339,6 +5469,32 @@ class AppState {
     await store.saveFavorites(favoriteProductIds);
   }
 
+  /// 現在(または指定)患者の病態タグに対応する「採用済み病態別製剤」のid集合。
+  /// 手動★とは別に処方画面で上位(★)に浮かせるための動的算出（非永続）。
+  /// → タグOFFで自動的に消え、患者を切り替えても混入しない。
+  Set<String> autoFavoriteIds([PatientCase? forCase]) {
+    final c = forCase ?? selectedCase;
+    final tags = c?.conditionTags ?? const <String>[];
+    if (tags.isEmpty) return const <String>{};
+    final tagSet = tags.toSet();
+    final ids = <String>{};
+    for (final p in catalog.products) {
+      if (!isAdopted(p.id)) continue;
+      if (p.conditionTags.any(tagSet.contains)) ids.add(p.id);
+    }
+    return ids;
+  }
+
+  /// 病態タグ由来の自動★か（手動★は除く）。★アイコンの色分け用。
+  bool isAutoFavorite(String productId, [PatientCase? forCase]) =>
+      !favoriteProductIds.contains(productId) &&
+      autoFavoriteIds(forCase).contains(productId);
+
+  /// 手動★ ∪ 病態タグ由来の自動★。ソート/上位表示はこれを使う。
+  bool isEffectiveFavorite(String productId, [PatientCase? forCase]) =>
+      favoriteProductIds.contains(productId) ||
+      autoFavoriteIds(forCase).contains(productId);
+
   bool isAdopted(String productId) => adoptedProductIds.contains(productId);
 
   /// ベース名(容量違いを集約した名前)に対応する製剤を、採用容量を優先して返す。
@@ -5933,10 +6089,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final targetKcal = NutritionCalculator.targetEnergy(widget.current);
     final targetProt = NutritionCalculator.targetProtein(widget.current);
     final pcts = _dayPercents;
-    // お気に入り製剤を先頭に並べて優先選択させる
+    // お気に入り製剤(手動★＋病態タグ由来)を先頭に並べて優先選択させる
     List<Product> sortFav(List<Product> list) {
-      final fav = list.where((p) => widget.state.isFavorite(p.id)).toList();
-      final rest = list.where((p) => !widget.state.isFavorite(p.id)).toList();
+      final fav = list
+          .where((p) => widget.state.isEffectiveFavorite(p.id, widget.current))
+          .toList();
+      final rest = list
+          .where((p) => !widget.state.isEffectiveFavorite(p.id, widget.current))
+          .toList();
       return [...fav, ...rest];
     }
     final enList = sortFav(_adopted('EN'));
@@ -6318,8 +6478,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           .byCategory(cat)
           .where((p) => widget.state.isAdopted(p.id))
           .toList();
-      final fav = list.where((p) => widget.state.isFavorite(p.id)).toList();
-      final rest = list.where((p) => !widget.state.isFavorite(p.id)).toList();
+      final fav = list
+          .where((p) => widget.state.isEffectiveFavorite(p.id, widget.current))
+          .toList();
+      final rest = list
+          .where((p) => !widget.state.isEffectiveFavorite(p.id, widget.current))
+          .toList();
       return [...fav, ...rest];
     }
     return _buildBarCharts(
@@ -6715,23 +6879,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                   final enK = enKcals[i];
                                   final mealK = mealKcals[i];
                                   final total = plans[i].totalKcal;
-                                  final pnK = (total - enK - mealK)
-                                      .clamp(0.0, double.infinity);
                                   return BarChartGroupData(x: i, barRods: [
                                     BarChartRodData(
                                       toY: total,
                                       width: 16,
                                       borderRadius: BorderRadius.circular(2),
                                       rodStackItems: [
-                                        // 下: PN(緑)
-                                        BarChartRodStackItem(
-                                            0, pnK, Colors.green.shade300),
-                                        // 中: EN(黄)
-                                        BarChartRodStackItem(pnK, pnK + enK,
-                                            Colors.yellow.shade700),
-                                        // 上: 食事(橙)
-                                        BarChartRodStackItem(pnK + enK, total,
+                                        // 下: 食事(橙)
+                                        BarChartRodStackItem(0, mealK,
                                             Colors.orange.shade400),
+                                        // 中: EN(黄)
+                                        BarChartRodStackItem(mealK, mealK + enK,
+                                            Colors.yellow.shade700),
+                                        // 上: PN(緑)
+                                        BarChartRodStackItem(mealK + enK, total,
+                                            Colors.green.shade300),
                                       ],
                                     ),
                                   ]);

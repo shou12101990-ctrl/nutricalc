@@ -63,7 +63,10 @@
      "葉酸": 0.132,
      "ビオチン": 39.0
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "en_28",
@@ -488,7 +491,10 @@
      "葉酸": 0.05,
      "ビオチン": 25.0
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "tpn_52",
@@ -1066,7 +1072,10 @@
     "trace": {
      "Zn": 10.0
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "tpn_70",
@@ -1318,7 +1327,10 @@
     "elec": {
      "Na": 0.4
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "ppn_83",
@@ -1339,7 +1351,10 @@
     "elec": {
      "Na": 0.4
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "ppn_84",
@@ -1361,7 +1376,10 @@
      "Na": 7.0,
      "Cl": 47.0
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "ppn_86",
@@ -1857,7 +1875,10 @@
     "elec": {
      "Na": 0.6
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "ppn_716",
@@ -1878,7 +1899,10 @@
     "elec": {
      "Na": 0.6
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "ppn_717",
@@ -1899,7 +1923,10 @@
     "elec": {
      "Na": 0.9
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "ppn_718",
@@ -1920,7 +1947,10 @@
     "elec": {
      "Na": 1.5
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "ppn_719",
@@ -1942,7 +1972,10 @@
      "Na": 3.0,
      "Cl": 19.0
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "ppn_720",
@@ -1964,7 +1997,10 @@
      "Na": 3.0,
      "Cl": 19.0
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "ppn_721",
@@ -1986,7 +2022,10 @@
      "Na": 7.0,
      "Cl": 47.0
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "ppn_722",
@@ -2089,7 +2128,10 @@
     "trace": {
      "Zn": 5.0
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "tpn_707",
@@ -2682,7 +2724,10 @@
      "K": 0.15,
      "葉酸": 0.6
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "en_701",
@@ -2815,7 +2860,10 @@
      "K": 0.044,
      "葉酸": 0.132
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "en_704",
@@ -2863,7 +2911,10 @@
      "K": 0.0055,
      "葉酸": 0.05
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "en_705",
@@ -3782,7 +3833,10 @@
      "Fe": 53.7
     }
    },
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "heart"
+   ]
   },
   {
    "id": "thick_532",
@@ -3882,7 +3936,10 @@
      "C": 22.0
     }
    },
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "diabetes"
+   ]
   },
   {
    "id": "thick_536",
@@ -3929,7 +3986,10 @@
      "C": 44.0
     }
    },
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "diabetes"
+   ]
   },
   {
    "id": "thick_537",
@@ -3954,7 +4014,10 @@
      "Mg": 5.8,
      "P": 4.2
     }
-   }
+   },
+   "condition_tags": [
+    "diabetes"
+   ]
   },
   {
    "id": "thick_538",
@@ -3983,7 +4046,10 @@
      "ビオチン": 30.0
     }
    },
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "diabetes"
+   ]
   },
   {
    "id": "thick_539",
@@ -4001,7 +4067,10 @@
    "sheet_row": 31,
    "product_type": "食品",
    "micro": null,
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "diabetes"
+   ]
   },
   {
    "id": "thick_540",
@@ -4019,7 +4088,10 @@
    "sheet_row": 32,
    "product_type": "食品",
    "micro": null,
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "diabetes"
+   ]
   },
   {
    "id": "thick_541",
@@ -4052,7 +4124,11 @@
     "vit": {
      "ビオチン": 6.0
     }
-   }
+   },
+   "condition_tags": [
+    "renal",
+    "dialysis"
+   ]
   },
   {
    "id": "thick_542",
@@ -4075,7 +4151,10 @@
      "K": 1.0,
      "P": 1.0
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "thick_543",
@@ -4093,7 +4172,11 @@
    "sheet_row": 35,
    "product_type": "食品",
    "micro": null,
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "renal",
+    "dialysis"
+   ]
   },
   {
    "id": "thick_544",
@@ -4110,7 +4193,11 @@
    "notes": "クリニコ / 液体. 腎不全用・コンパクト1.5kcal/mL",
    "sheet_row": 36,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "renal",
+    "dialysis"
+   ]
   },
   {
    "id": "thick_545",
@@ -4133,7 +4220,10 @@
      "K": 1.2,
      "P": 1.2
     }
-   }
+   },
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "thick_546",
@@ -4150,7 +4240,10 @@
    "notes": "ニュートリー / 液体. 腎不全用・超低蛋白(0.3g/100kcal) / 食物繊維1.0g",
    "sheet_row": 38,
    "product_type": "食品",
-   "micro": null
+   "micro": null,
+   "condition_tags": [
+    "renal"
+   ]
   },
   {
    "id": "thick_547",
@@ -4181,7 +4274,10 @@
      "I": 0.01,
      "Se": 75.0
     }
-   }
+   },
+   "condition_tags": [
+    "liver"
+   ]
   },
   {
    "id": "thick_548",
@@ -4212,7 +4308,10 @@
      "Cu": 8.3
     }
    },
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "respiratory"
+   ]
   },
   {
    "id": "thick_549",
@@ -4230,7 +4329,10 @@
    "sheet_row": 41,
    "product_type": "食品",
    "micro": null,
-   "also_en": true
+   "also_en": true,
+   "condition_tags": [
+    "immune"
+   ]
   },
   {
    "id": "thick_550",
@@ -5853,7 +5955,10 @@
    "notes": "コラーゲン合成・創傷治癒・抗酸化.\n・欠乏で壊血病(出血・創傷治癒遅延). 侵襲・熱傷で需要増大.",
    "sheet_row": 403,
    "product_type": "医薬品",
-   "add_type": "単独"
+   "add_type": "単独",
+   "condition_tags": [
+    "immune"
+   ]
   },
   {
    "id": "vit_404",
