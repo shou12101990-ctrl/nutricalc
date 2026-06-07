@@ -54,6 +54,19 @@ DropdownMenuItem<double> _factorItem(double v, Map<String, String> hints) {
   );
 }
 
+/// 製品名から容量サフィックス・剤型語を除いた「ベース名」を返す。
+/// 例: "ツインパル輸液(500mL)" → "ツインパル", "エルネオパNF1号輸液(1500mL)" → "エルネオパNF1号"
+/// 同一ベース名＝同一製剤(容量違い)としてマスタで1項目に集約する。
+String productBaseName(String name) {
+  var n = name.trim();
+  n = n.replaceAll(RegExp(r'「[^」]*」'), ''); // メーカー注記
+  n = n.replaceAll(RegExp(r'[\(（][^\)）]*[\)）]'), ''); // (容量) 等
+  for (final s in ['配合経腸用液', '配合内用剤', '配合散', '経腸用液', '点滴静注', '注射液', '輸液']) {
+    n = n.replaceAll(s, '');
+  }
+  return n.trim();
+}
+
 /// 日付を1タップで選択して即閉じるカレンダーダイアログ
 Future<DateTime?> _quickPickDate(BuildContext context, DateTime initial) {
   return showDialog<DateTime>(
@@ -1306,17 +1319,17 @@ class _BuilderPageState extends State<BuilderPage>
       npcNRatio: double.tryParse(npcnController.text) ?? 125,
       lipidGramPerKg: _lipidGPerKg,
       weightKg: current.weightKg,
-      glucoseProduct: widget.state.catalog.byName(glucoseSource),
-      aminoProduct: widget.state.catalog.byName('アミパレン'),
-      lipidProduct: widget.state.catalog.byName(lipidSource),
+      glucoseProduct: widget.state.adoptedByBase(glucoseSource),
+      aminoProduct: widget.state.adoptedByBase('アミパレン'),
+      lipidProduct: widget.state.adoptedByBase(lipidSource),
     );
     // 製剤構成と一致させる: 本体は10ml単位に丸め、加注製剤も合算してサマリーへ反映
     double _round10(double v) => (v / 10).round() * 10.0;
     final scratchAggregate = _aggregateFromVolumes(
       [
-        widget.state.catalog.byName('アミパレン'),
-        widget.state.catalog.byName(lipidSource),
-        widget.state.catalog.byName(glucoseSource),
+        widget.state.adoptedByBase('アミパレン'),
+        widget.state.adoptedByBase(lipidSource),
+        widget.state.adoptedByBase(glucoseSource),
         ..._zeroAdditives.map((n) => widget.state.catalog.byName(n)),
       ],
       [
@@ -1378,9 +1391,9 @@ class _BuilderPageState extends State<BuilderPage>
 
     final isScratchMode = _builderTabIndex == 1;
     final aggregate = isScratchMode ? scratchAggregate : actualAggregate;
-    final aminoProduct = widget.state.catalog.byName('アミパレン');
-    final glucoseProduct = widget.state.catalog.byName(glucoseSource);
-    final lipidProduct = widget.state.catalog.byName(lipidSource);
+    final aminoProduct = widget.state.adoptedByBase('アミパレン');
+    final glucoseProduct = widget.state.adoptedByBase(glucoseSource);
+    final lipidProduct = widget.state.adoptedByBase(lipidSource);
     final scratchTotalVolumeMl = scratchAggregate.totalVolumeMl;
     final scratchInfusionRateMlPerHour = scratchTotalVolumeMl / 24;
     String formatRequiredUnits(Product? product, double requiredMl) {
@@ -3394,10 +3407,19 @@ class _MasterPageState extends State<MasterPage> {
           ),
         ),
         const SizedBox(height: 8),
-        Text('院内採用薬を選択してください',
+        Text('院内採用薬を選択（容量はチップで選択）',
             style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 12),
-        ...items.map((p) => _productCard(p)),
+        // 同一ベース名(容量違い)を1項目に集約
+        ...(() {
+          final groups = <String, List<Product>>{};
+          for (final p in items) {
+            groups.putIfAbsent(productBaseName(p.name), () => []).add(p);
+          }
+          return groups.entries
+              .map((e) => _productGroupCard(e.key, e.value))
+              .toList();
+        })(),
       ],
     );
   }
@@ -3496,107 +3518,139 @@ class _MasterPageState extends State<MasterPage> {
     );
   }
 
-  Widget _productCard(Product p) {
-    final isAdopted = widget.state.isAdopted(p.id);
+  String _volLabel(Product p) {
+    final v = p.volumeMl;
+    if (v == null) return '—';
+    final s = v % 1 == 0 ? v.toInt().toString() : v.toString();
+    return '${s}mL';
+  }
+
+  /// 同一ベース名(容量違い)を1項目に集約したカード。容量チップで採用を選択。
+  Widget _productGroupCard(String base, List<Product> variants) {
+    variants.sort((a, b) => (a.volumeMl ?? 0).compareTo(b.volumeMl ?? 0));
+    final adoptedAny = variants.any((p) => widget.state.isAdopted(p.id));
+    final rep = variants.firstWhere((p) => widget.state.isAdopted(p.id),
+        orElse: () => variants.first);
     final typeColor =
-        p.productType == '医薬品' ? Colors.red.shade100 : Colors.green.shade100;
+        rep.productType == '医薬品' ? Colors.red.shade100 : Colors.green.shade100;
     final typeTextColor =
-        p.productType == '医薬品' ? Colors.red.shade900 : Colors.green.shade900;
+        rep.productType == '医薬品' ? Colors.red.shade900 : Colors.green.shade900;
 
     return Card(
       child: ExpansionTile(
-        leading: IconButton(
-          onPressed: () async {
-            await widget.state.toggleAdopted(p.id);
-            setState(() {});
-          },
-          icon: Icon(isAdopted ? Icons.circle : Icons.circle_outlined,
-              color: isAdopted ? Colors.blue : null),
-        ),
+        leading: Icon(adoptedAny ? Icons.circle : Icons.circle_outlined,
+            color: adoptedAny ? Colors.blue : null),
         title: Wrap(
           spacing: 6,
           runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text(p.name,
+            Text(base,
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            _miniTag(p.productType, bg: typeColor, fg: typeTextColor),
-            if (p.content.isNotEmpty)
-              _miniTag(p.content,
+            _miniTag(rep.productType, bg: typeColor, fg: typeTextColor),
+            if (rep.content.isNotEmpty)
+              _miniTag(rep.content,
                   bg: Colors.blueGrey.shade50, fg: Colors.blueGrey.shade900),
           ],
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
+          padding: const EdgeInsets.only(top: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                    '${p.volumeMlString} / ${p.kcalString} / ${p.aminoString}'),
+              // 容量チップ (タップで採用ON/OFF・複数可)
+              Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                children: variants.map((p) {
+                  final on = widget.state.isAdopted(p.id);
+                  return FilterChip(
+                    label: Text(_volLabel(p),
+                        style: const TextStyle(fontSize: 12)),
+                    selected: on,
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onSelected: (_) async {
+                      await widget.state.toggleAdopted(p.id);
+                      setState(() {});
+                    },
+                  );
+                }).toList(),
               ),
-              IconButton(
-                tooltip: '容量を編集',
-                icon: const Icon(Icons.edit, size: 18),
-                onPressed: () => _editProductVolume(p),
-              ),
+              const SizedBox(height: 2),
+              Text('${rep.kcalString} / ${rep.aminoString}',
+                  style:
+                      const TextStyle(fontSize: 12.5, color: Colors.black54)),
             ],
           ),
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (p.category != 'TPN' && p.category != 'PPN')
-                InfoChip(
-                    label: '分類',
-                    value: p.productType,
-                    onTap: () => _editProductType(p)),
-              InfoChip(
-                  label: '要素',
-                  value: p.content.isEmpty ? '-' : p.content,
-                  onTap: () => _editContent(p)),
-              InfoChip(label: 'NPC/N', value: p.npcNRatio?.toString() ?? '-'),
-              InfoChip(
-                  label: '脂質',
-                  value: (p.fatBase == null || p.fatBase == 0)
-                      ? '-'
-                      : '${p.fatBase!.toStringAsFixed(p.fatBase! % 1 == 0 ? 0 : 1)}g'),
-              InfoChip(
-                  label: '糖質',
-                  value: (p.carbBase == null || p.carbBase == 0)
-                      ? '-'
-                      : '${p.carbBase!.toStringAsFixed(p.carbBase! % 1 == 0 ? 0 : 1)}g'),
-            ],
-          ),
-          // 微量栄養素 (電解質/微量元素/ビタミン) — micro データがある製剤のみ
-          if (p.micro != null) ...[
-            const SizedBox(height: 10),
-            _microSection(p.micro!, perL: p.category == 'PPN'),
-          ],
-          const SizedBox(height: 8),
-          // コメントと編集ボタン
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  p.notes?.trim().isNotEmpty == true ? p.notes! : 'コメントなし',
-                  style: const TextStyle(height: 1.5),
-                ),
-              ),
-              IconButton(
-                tooltip: 'コメントを編集',
-                icon: const Icon(Icons.edit_note),
-                onPressed: () => _editNotes(p),
-              ),
-            ],
-          ),
+          if (variants.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('▼ 組成は ${_volLabel(rep)} のもの',
+                  style:
+                      TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            ),
+          ..._productDetailChildren(rep),
         ],
       ),
     );
+  }
+
+  /// 製剤詳細(要素/NPC/脂質/糖質・含有量・コメント)を返す共通部品。
+  List<Widget> _productDetailChildren(Product p) {
+    return [
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          if (p.category != 'TPN' && p.category != 'PPN')
+            InfoChip(
+                label: '分類',
+                value: p.productType,
+                onTap: () => _editProductType(p)),
+          InfoChip(
+              label: '要素',
+              value: p.content.isEmpty ? '-' : p.content,
+              onTap: () => _editContent(p)),
+          InfoChip(label: 'NPC/N', value: p.npcNRatio?.toString() ?? '-'),
+          InfoChip(
+              label: '脂質',
+              value: (p.fatBase == null || p.fatBase == 0)
+                  ? '-'
+                  : '${p.fatBase!.toStringAsFixed(p.fatBase! % 1 == 0 ? 0 : 1)}g'),
+          InfoChip(
+              label: '糖質',
+              value: (p.carbBase == null || p.carbBase == 0)
+                  ? '-'
+                  : '${p.carbBase!.toStringAsFixed(p.carbBase! % 1 == 0 ? 0 : 1)}g'),
+        ],
+      ),
+      if (p.micro != null) ...[
+        const SizedBox(height: 10),
+        _microSection(p.micro!, perL: p.category == 'PPN'),
+      ],
+      const SizedBox(height: 8),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              p.notes?.trim().isNotEmpty == true ? p.notes! : 'コメントなし',
+              style: const TextStyle(height: 1.5),
+            ),
+          ),
+          IconButton(
+            tooltip: 'コメントを編集',
+            icon: const Icon(Icons.edit_note),
+            onPressed: () => _editNotes(p),
+          ),
+        ],
+      ),
+    ];
   }
 
   Widget _miniTag(String text, {required Color bg, required Color fg}) {
@@ -4938,6 +4992,17 @@ class AppState {
 
   bool isAdopted(String productId) => adoptedProductIds.contains(productId);
 
+  /// ベース名(容量違いを集約した名前)に対応する製剤を、採用容量を優先して返す。
+  /// 計算画面はこれを使い「マスタで選んだ容量」で計算する。
+  Product? adoptedByBase(String baseName) {
+    final matches =
+        catalog.products.where((p) => productBaseName(p.name) == baseName);
+    for (final p in matches) {
+      if (isAdopted(p.id)) return p;
+    }
+    return matches.isEmpty ? null : matches.first;
+  }
+
   Future<void> toggleAdopted(String productId) async {
     if (adoptedProductIds.contains(productId)) {
       adoptedProductIds.remove(productId);
@@ -5522,9 +5587,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         pnProduct: _pnProduct,
         tpnProducts: tpnList,
         ppnProducts: ppnList,
-        glucoseProduct: widget.state.catalog.byName('70% グルコース'),
-        aminoProduct: widget.state.catalog.byName('アミパレン'),
-        lipidProduct: widget.state.catalog.byName('イントラリポス20%'),
+        glucoseProduct: widget.state.adoptedByBase('70% グルコース'),
+        aminoProduct: widget.state.adoptedByBase('アミパレン'),
+        lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
         minEnKcal: prevEnKcal,
       );
       dayPlans.add(plan);
@@ -5895,9 +5960,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               pnProduct: _pnProduct,
               tpnProducts: tpn,
               ppnProducts: ppn,
-              glucoseProduct: widget.state.catalog.byName('70% グルコース'),
-              aminoProduct: widget.state.catalog.byName('アミパレン'),
-              lipidProduct: widget.state.catalog.byName('イントラリポス20%'),
+              glucoseProduct: widget.state.adoptedByBase('70% グルコース'),
+              aminoProduct: widget.state.adoptedByBase('アミパレン'),
+              lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
               minEnKcal: prevEnKcalChart,
             );
       if (p.enKcal > 0) prevEnKcalChart = p.enKcal;
