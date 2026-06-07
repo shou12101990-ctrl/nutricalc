@@ -4090,6 +4090,76 @@ class ResultLegend extends StatelessWidget {
 
 enum Sex { male, female }
 
+/// 病態タグの定義。患者に付けた病態タグに応じて、対応する病態別製剤を
+/// 処方画面で上位(お気に入り扱い)に浮かせ、処方サジェストを表示する。
+class ConditionDef {
+  const ConditionDef({
+    required this.id,
+    required this.label,
+    required this.suggestion,
+    this.proteinCapPerKg,
+  });
+
+  final String id; // renal/dialysis/liver/diabetes/respiratory/immune/heart
+  final String label; // 表示名
+  final String suggestion; // 💡 処方サジェスト本文
+  final double? proteinCapPerKg; // 蛋白の目安上限(g/kg/day)。超過時に控えめなテキスト
+}
+
+/// 病態カタログ(臨床フルセット)。値・文言は原案、現場でレビュー・調整して使う。
+class ConditionCatalog {
+  static const List<ConditionDef> all = [
+    ConditionDef(
+      id: 'renal',
+      label: '腎不全(非透析)',
+      proteinCapPerKg: 0.8,
+      suggestion: '蛋白 0.6–0.8 g/kg/day を目安。NPC/N 500–1000。'
+          '腎不全用EN(リーナレンLP/レナウェル等)・キドミンを検討。',
+    ),
+    ConditionDef(
+      id: 'dialysis',
+      label: '透析',
+      suggestion: '蛋白 1.0–1.2 g/kg/day。透析で喪失するため制限しすぎない。'
+          'リーナレンMP・レナジー系を検討。',
+    ),
+    ConditionDef(
+      id: 'liver',
+      label: '肝不全',
+      proteinCapPerKg: 1.2,
+      suggestion: '肝硬変は蛋白 1.0–1.2 g/kg/day。肝性脳症ではBCAA製剤'
+          '(アミノレバン/ヘパンED/ヘパス)を検討。',
+    ),
+    ConditionDef(
+      id: 'diabetes',
+      label: '糖尿病',
+      suggestion: '血糖配慮。低糖質EN(グルセルナ/インスロー/タピオン等)・'
+          '糖負荷速度に注意。',
+    ),
+    ConditionDef(
+      id: 'respiratory',
+      label: '呼吸不全',
+      suggestion: '高脂質・低糖質(プルモケア)でCO2産生を抑制。'
+          '脂質投与速度 ≤0.1 g/kg/h。',
+    ),
+    ConditionDef(
+      id: 'immune',
+      label: '免疫/侵襲',
+      suggestion: '侵襲時は蛋白 1.2–2.0 g/kg/day。'
+          '免疫調整(メイン)・ビタミンC等を考慮。',
+    ),
+    ConditionDef(
+      id: 'heart',
+      label: '心不全',
+      suggestion: '水分制限。2 kcal/ml 等の高濃度EN(テルミール2.0α)を検討。',
+    ),
+  ];
+
+  static ConditionDef? byId(String id) =>
+      all.where((c) => c.id == id).firstOrNull;
+
+  static String labelOf(String id) => byId(id)?.label ?? id;
+}
+
 class Product {
   Product({
     required this.id,
@@ -4108,6 +4178,7 @@ class Product {
     this.micro,
     this.alsoEn = false,
     this.addType,
+    this.conditionTags = const [],
   });
 
   final String id;
@@ -4130,6 +4201,8 @@ class Product {
   bool alsoEn;
   // 加注製剤の種別 (電解質:Na/K/Ca/Mg/P/HCO3, 微量元素:総合/Zn/Se, ビタミン:総合/B群/単独)
   String? addType;
+  // 病態タグ (病態別製剤): ConditionCatalog の id 群 (renal/dialysis/liver/diabetes/respiratory/immune/heart)
+  List<String> conditionTags;
 
   /// この製剤を「食事」タブに表示するか（濃厚流動食 or 栄養サポート食品）
   bool get isFood =>
@@ -4175,6 +4248,10 @@ class Product {
       micro: (map['micro'] as Map?)?.cast<String, dynamic>(),
       alsoEn: (map['also_en'] as bool?) ?? false,
       addType: map['add_type'] as String?,
+      conditionTags: (map['condition_tags'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 
@@ -4195,6 +4272,7 @@ class Product {
         'micro': micro,
         if (alsoEn) 'also_en': true,
         if (addType != null) 'add_type': addType,
+        if (conditionTags.isNotEmpty) 'condition_tags': conditionTags,
       };
 
   String get volumeMlString => volumeMl == null
@@ -4315,7 +4393,8 @@ class PatientCase {
     required this.zeroMenuConfig,
     this.autoDesignConfig,
     this.memo = '',
-  });
+    List<String>? conditionTags,
+  }) : conditionTags = conditionTags ?? [];
 
   final String id;
   String caseCode;
@@ -4335,6 +4414,7 @@ class PatientCase {
   Map<String, dynamic>? autoDesignConfig; // Day別投与設計の保存
   String memo; // 合併症・コメントなど
   String? fastingDate; // 絶食開始日 (ISO date string, null=未設定)
+  List<String> conditionTags; // 病態タグ (ConditionCatalog の id 群)
 
   String get displayLabel => '$caseCode / $currentBed';
 
@@ -4380,6 +4460,7 @@ class PatientCase {
         'autoDesignConfig': autoDesignConfig,
         'memo': memo,
         'fastingDate': fastingDate,
+        'conditionTags': conditionTags,
       };
 
   factory PatientCase.fromMap(Map<String, dynamic> map) => PatientCase(
@@ -4410,6 +4491,9 @@ class PatientCase {
             ? null
             : Map<String, dynamic>.from(map['autoDesignConfig']),
         memo: (map['memo'] as String?) ?? '',
+        conditionTags: (map['conditionTags'] as List?)
+            ?.map((e) => e.toString())
+            .toList(),
       )..fastingDate = map['fastingDate'] as String?;
 }
 
@@ -4766,7 +4850,7 @@ class NutritionCalculator {
     Product? lipidProduct,
     double minEnKcal = 0, // 単調増加制約: 前日のEN kcal以上を要求
     List<Product> mealProducts = const [], // 食事(濃厚流動食/栄養サポート)
-    double mealFrac = 0, // 食事で供給する目標割合(0..1, 経口リハ期に使用)
+    int mealPac = 0, // 食事 朝昼夕あたりpac数(1..3, 経口リハ期に使用)
   }) {
     // ゼロmenu(静注ブレンド)のitem群を構築
     List<DesignItem> buildZeroItems(double tKcal) {
@@ -4831,51 +4915,51 @@ class NutritionCalculator {
       }
     }
 
-    // 食事(経口リハ): 濃厚流動食で mealFrac×目標 を経口供給し、
-    //   残りを EN(経管) で漸減補完。食事が増えるほど EN は自然に減る。
+    // 食事(経口リハ): 食事製剤を朝昼夕 mealPac本ずつ(=計3×mealPac本)投与。
+    //   ただしkcalが当日目標を超えない範囲にcap。不足分(kcal・タンパク)はPPNで補う。
     if (mode == '食事') {
       final meals = mealProducts
           .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
           .toList();
       final items = <DesignItem>[];
-      final mealKcalTarget = mealFrac * dayTargetKcal;
-      final mealProtTarget = mealFrac * dayTargetProt;
-      if (meals.isNotEmpty && mealKcalTarget > 0) {
-        final mp = _designWithBase(
-            meals, const [], mealKcalTarget, mealProtTarget, '食事',
-            maxBase: 2);
-        if (mp != null) items.addAll(mp.items);
-      }
-      final mealKcal = items.fold<double>(0, (s, it) => s + it.kcal);
-      // 残りを EN(経管) 1製剤で補完(食事増加に伴い漸減)
-      final restKcal =
-          (dayTargetKcal - mealKcal).clamp(0, double.infinity).toDouble();
-      final ensAvail = enProducts
-          .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
-          .toList();
-      double enFillKcal = 0;
-      if (restKcal > 60 && ensAvail.isNotEmpty) {
-        final p = ensAvail.first;
-        final pacKcal = (p.kcal ?? 0).toDouble();
-        if (pacKcal > 0) {
-          final pac = (restKcal / pacKcal).floor().clamp(0, 9);
+      double mealKcal = 0, mealProt = 0;
+      if (meals.isNotEmpty && mealPac > 0) {
+        // 主食 = kcal/pacが最大の食事製剤(高栄養の濃厚流動食)を一貫採用
+        final sorted = [...meals]
+          ..sort((a, b) => (b.kcal ?? 0).compareTo(a.kcal ?? 0));
+        final p = sorted.first;
+        final pk = (p.kcal ?? 0).toDouble();
+        if (pk > 0) {
+          final capPac = 3 * mealPac; // 朝昼夕 × pac数(1→3で漸増)
+          // kcalが当日目標を超えない範囲にcap
+          final byKcal = (dayTargetKcal / pk).floor();
+          final pac = (capPac < byKcal ? capPac : byKcal).clamp(0, capPac);
           if (pac > 0) {
-            final double vol = pac * (p.volumeMl ?? 0.0);
-            enFillKcal = (p.kcal ?? 0) * pac;
+            mealKcal = pk * pac;
+            mealProt = (p.aminoAcidG ?? 0) * pac;
             items.add(DesignItem(
                 name: p.name,
                 units: pac,
-                volumeMl: vol,
-                kcal: enFillKcal,
-                proteinG: (p.aminoAcidG ?? 0) * pac));
+                volumeMl: (p.volumeMl ?? 0) * pac,
+                kcal: mealKcal,
+                proteinG: mealProt));
           }
         }
       }
-      // タンパク不足は高濃度AA(PPN)で補正
-      final curK = items.fold<double>(0, (s, it) => s + it.kcal);
-      final curP = items.fold<double>(0, (s, it) => s + it.proteinG);
-      addPpnProtein(items, curK, curP);
-      return DesignPlan(label: 'Day', items: items, enKcal: enFillKcal);
+      // 不足分(kcal・タンパク)をPPN製剤で補う
+      final restKcal =
+          (dayTargetKcal - mealKcal).clamp(0, double.infinity).toDouble();
+      final restProt =
+          (dayTargetProt - mealProt).clamp(0, double.infinity).toDouble();
+      if (restKcal > 80 && ppnProducts.isNotEmpty) {
+        final sub = _designWithBase(
+            ppnProducts, ppnProducts, restKcal, restProt, 'PPN',
+            maxBase: 2);
+        if (sub != null) items.addAll(sub.items);
+      } else {
+        addPpnProtein(items, mealKcal, mealProt);
+      }
+      return DesignPlan(label: 'Day', items: items);
     }
 
     // EN baseのitem群＋PN主剤(pnBase)を渡して、PN自動減量＋PPN補正で1日プランを完成
@@ -5632,12 +5716,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   late List<double> _dayPercents; // 各Dayの達成目標%
   late List<String> _dayModes; // 各Dayのクラス
   late List<String> _dayEnDose; // 各DayのEN投与 ('0'/'r20'(速度)/'p3'(pac))
-  late List<double> _dayMealFrac; // 各Dayの食事(経口)供給割合(0..1)
+  late List<int> _dayMealPac; // 各Dayの食事 朝昼夕あたりpac数(0=食事なし, 1..3)
 
   // EN食上げ固定シーケンス(7日): 10→20→30→40ml/h → 1pac朝昼夕(3) → 2pac朝昼夕(6) → EN単独full
   static const _enRampSequence = ['r10', 'r20', 'r30', 'r40', 'p3', 'p6', 'p6'];
   static const _enRampDays = 7;
-  // 経口リハ食上げ(開始日から+5日=計6日): 食事割合を漸増しENを漸減
+  // 経口リハ食上げ(開始日から+5日=計6日): 朝昼夕pacを1→2→3に漸増、不足はPPN補充
   static const _mealRampDays = 6;
 
   @override
@@ -5835,12 +5919,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final step = (day - _enStartDay).clamp(0, _enRampDays - 1);
       return _enRampSequence[step];
     });
-    _dayMealFrac = List.generate(n, (i) {
+    _dayMealPac = List.generate(n, (i) {
       final day = i + 1;
-      if (oral == null || day < oral) return 0.0;
+      if (oral == null || day < oral) return 0;
       final d = day - oral; // 0..5
-      // 食事割合 40%→100% (経口リハ開始から+5日で全量経口)
-      return (0.4 + 0.12 * d).clamp(0.0, 1.0);
+      // 朝昼夕 1→2→3pac (2日ごとに1pac up)。不足分はPPNで補う
+      return (1 + d ~/ 2).clamp(1, 3);
     });
   }
 
@@ -5885,7 +5969,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
         minEnKcal: prevEnKcal,
         mealProducts: mealList,
-        mealFrac: _dayMealFrac[i],
+        mealPac: _dayMealPac[i],
       );
       dayPlans.add(plan);
       if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
@@ -6075,41 +6159,39 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           ],
                         ),
                       ]),
-                      // 行4: 経口リハ開始日
+                      // 行4: 経口リハ導入 (EN導入行と同一レイアウト)
                       TableRow(children: [
                         Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.restaurant,
-                                size: 13, color: Colors.teal.shade600),
-                            const SizedBox(width: 4),
-                            Text('経口リハ開始日:',
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.teal.shade700)),
-                          ]),
+                          padding: const EdgeInsets.only(right: 8, bottom: 6),
+                          child: Text('経口リハ導入:',
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.teal.shade700)),
                         ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('Day ', style: TextStyle(fontSize: 13)),
-                            DropdownButton<int?>(
-                              value: _oralRehabStartDay,
-                              isDense: true,
-                              hint: const Text('未設定',
-                                  style: TextStyle(fontSize: 13)),
-                              items: [
-                                const DropdownMenuItem<int?>(
-                                    value: null, child: Text('未設定')),
-                                ...List.generate(28, (i) => i + 1).map((d) =>
-                                    DropdownMenuItem<int?>(
-                                        value: d, child: Text('$d'))),
-                              ],
-                              onChanged: (v) => setState(() {
-                                _oralRehabStartDay = v;
-                                _rebuildDays(); // 食事フェーズを再生成
-                              }),
-                            ),
-                          ],
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Day ', style: TextStyle(fontSize: 13)),
+                              DropdownButton<int?>(
+                                value: _oralRehabStartDay,
+                                isDense: true,
+                                hint: const Text('未設定',
+                                    style: TextStyle(fontSize: 13)),
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                      value: null, child: Text('未設定')),
+                                  ...List.generate(28, (i) => i + 1).map((d) =>
+                                      DropdownMenuItem<int?>(
+                                          value: d, child: Text('$d'))),
+                                ],
+                                onChanged: (v) => setState(() {
+                                  _oralRehabStartDay = v;
+                                  _rebuildDays(); // 食事フェーズを再生成
+                                }),
+                              ),
+                            ],
+                          ),
                         ),
                       ]),
                     ],
@@ -6198,8 +6280,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                 border: Border.all(
                                     color: Colors.orange.shade400, width: 0.8),
                               ),
-                              child: Text(
-                                  '経口 ${(_dayMealFrac[i] * 100).round()}%',
+                              child: Text('朝昼夕 ${_dayMealPac[i]}pac',
                                   style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.orange.shade800)),
@@ -6292,7 +6373,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
               minEnKcal: prevEnKcalChart,
               mealProducts: _adoptedMeals(),
-              mealFrac: _dayMealFrac[i],
+              mealPac: _dayMealPac[i],
             );
       if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
       designPlans.add(p);
