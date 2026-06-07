@@ -6832,8 +6832,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           const Icon(Icons.touch_app,
                               size: 14, color: Colors.grey),
                           const SizedBox(width: 4),
-                          _modeBadge(mode,
-                              planIsZero: plan.label == 'ZERO'),
+                          _modeBadges(plan),
                         ],
                       ),
                       const Divider(height: 16),
@@ -7666,43 +7665,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (plan.items.isEmpty)
-                const Text('（条件を満たす組み合わせなし）',
-                    style: TextStyle(color: Colors.red)),
-              ...plan.items.map((it) {
-                final cat = widget.state.catalog.byName(it.name)?.category;
-                final isEnCat = cat == 'EN' || cat == 'EN_AUX';
-                final isEnPacItem = it.units != null && isEnCat;
-                final isEnRateItem = it.units == null && isEnCat;
-                String line;
-                if (isZero) {
-                  line = '${it.name}：${it.volumeMl.round()}ml';
-                } else if (isEnPacItem) {
-                  final mp = (it.units! / 3).round().clamp(1, it.units!);
-                  line = '${it.name}：朝昼夕${mp}pac (${it.volumeMl.round()}ml/day)';
-                } else if (isEnRateItem) {
-                  final rml = it.volumeMl / 24;
-                  final pex = (rml * 8 / (widget.state.catalog.byName(it.name)?.volumeMl ?? 200)).ceil();
-                  line = '${it.name}：${rml.toStringAsFixed(0)}ml/h  朝昼夕${pex}pac';
-                } else if (it.units != null) {
-                  line = '${it.name}：${it.units}pac (${it.volumeMl.round()}ml, ${it.ratePerHour.round()}ml/h)';
-                } else {
-                  line = '${it.name}：${it.volumeMl.round()}ml (${it.ratePerHour.round()}ml/h)';
-                }
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child:
-                      Text(line, style: const TextStyle(fontSize: 14)),
-                );
-              }),
-              const Divider(height: 20),
-              Text(
-                'IN ${plan.totalVolumeMl.round()}ml ／ 熱量 ${plan.totalKcal.round()}kcal ／ '
-                'タンパク ${plan.totalProteinG.toStringAsFixed(1)}g'
-                '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(1)}g/kg)' : ''}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 13),
-              ),
+              _planBody(plan, dayKcal, dayProt, mode),
+              const Divider(height: 16),
               const SizedBox(height: 2),
               Text('当日目標 ${dayKcal.round()}kcal / タンパク ${dayProt.round()}g',
                   style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -7718,6 +7682,38 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     );
   }
 
+  /// 日次処方カードのモードバッジ（プラン内容に応じて 食事/EN/PN を横並び表示）
+  Widget _modeBadges(DesignPlan plan) {
+    final mealK = _mealKcalOfPlan(plan);
+    final enK = _enKcalOfPlan(plan);
+    final pnK = (plan.totalKcal - mealK - enK);
+    final isZero = plan.label == 'ZERO';
+    Widget badge(String label, Color color) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withOpacity(0.5)),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 12, color: color, fontWeight: FontWeight.bold)),
+        );
+    final badges = <Widget>[];
+    if (mealK > 1) badges.add(badge('食事', Colors.deepOrange.shade400));
+    if (enK > 1) badges.add(badge('EN', Colors.amber.shade700));
+    if (pnK > 1) {
+      badges.add(badge(isZero ? 'ゼロmenu' : 'PN', Colors.blue));
+    }
+    if (badges.isEmpty) badges.add(badge('—', Colors.grey));
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (var i = 0; i < badges.length; i++) ...[
+        if (i > 0) const SizedBox(width: 4),
+        badges[i],
+      ],
+    ]);
+  }
+
   Widget _planBody(
       DesignPlan plan, double targetKcal, double targetProt, String mode) {
     if (plan.items.isEmpty) {
@@ -7727,53 +7723,85 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final w = widget.current.weightKg;
     final protPerKg = w > 0 ? plan.totalProteinG / w : 0.0;
     final isZero = mode == 'ZERO' || plan.label == 'ZERO';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...plan.items.map((it) {
-          // ゼロmenuは各製剤の使用量(ml)だけ記載
-          if (isZero) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text('${it.name}  ${it.volumeMl.round()}ml',
-                  style: const TextStyle(fontSize: 12.5)),
-            );
-          }
-          // EN製剤(pac指定): 間欠的→"朝昼夕Npac"  持続→"Nml/h 朝昼夕Npac, 交換時残破棄"
-          // PN静注: "_ml (_ml/h)"
-          final cat = widget.state.catalog.byName(it.name)?.category;
-          final isEnPac = it.units != null && (cat == 'EN' || cat == 'EN_AUX');
-          final isEnRate = it.units == null && (cat == 'EN' || cat == 'EN_AUX');
-          String dispStr;
-          if (isEnPac) {
+    const ts = TextStyle(fontSize: 12.5);
+    final children = <Widget>[];
+    Widget line(String s, {TextStyle style = ts}) => Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Text(s, style: style));
+
+    if (isZero) {
+      for (final it in plan.items) {
+        children.add(line('${it.name}  ${it.volumeMl.round()}ml'));
+      }
+    } else {
+      double tpnVol = 0, ppnVol = 0;
+      final tpnNames = <String>[], ppnNames = <String>[];
+      for (final it in plan.items) {
+        final p = widget.state.catalog.byName(it.name);
+        final cat = p?.category;
+        final isFood = p?.isFood ?? false;
+        if (isFood) {
+          // 食事: 経口摂取(嚥下リハ)なので流量指定なし。合計容量 ml/day のみ
+          final n = it.units != null ? '${it.units}本 ' : '';
+          children.add(line('${it.name}  $n(${it.volumeMl.round()}ml/day)'));
+        } else if (cat == 'EN' || cat == 'EN_AUX') {
+          if (it.units != null) {
             final mealPac = (it.units! / 3).round().clamp(1, it.units!);
-            dispStr = '${it.name}  朝昼夕${mealPac}pac (${it.volumeMl.round()}ml/day)';
-          } else if (isEnRate) {
-            final rateMlH = it.volumeMl / 24;
-            final pacPerExchange = (rateMlH * 8 / (widget.state.catalog.byName(it.name)?.volumeMl ?? 200)).ceil();
-            dispStr = '${it.name}  ${rateMlH.toStringAsFixed(0)}ml/h  朝昼夕${pacPerExchange}pac';
+            children.add(line(
+                '${it.name}  朝昼夕${mealPac}pac (${it.volumeMl.round()}ml/day)'));
           } else {
-            // PN静注: 流速は整数表記
-            final unitStr = it.units != null
-                ? '${it.units}pac (${it.volumeMl.round()}ml)'
-                : '${it.volumeMl.round()}ml';
-            dispStr = '${it.name}  $unitStr  (${it.ratePerHour.round()}ml/h)';
+            final rateMlH = it.volumeMl / 24;
+            final pacPerExchange =
+                (rateMlH * 8 / (p?.volumeMl ?? 200)).ceil();
+            children.add(line(
+                '${it.name}  ${rateMlH.toStringAsFixed(0)}ml/h  朝昼夕${pacPerExchange}pac'));
           }
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Text(dispStr, style: const TextStyle(fontSize: 12.5)),
-          );
-        }),
-        const SizedBox(height: 4),
-        Text(
-          'IN ${plan.totalVolumeMl.round()}ml, 熱量 ${plan.totalKcal.round()}kcal, '
-          'タンパク ${plan.totalProteinG.toStringAsFixed(1)}g (${protPerKg.toStringAsFixed(1)}g/kg)'
-          '${isZero ? ', ${(plan.totalVolumeMl / 24).toStringAsFixed(1)}ml/h' : ''}',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-      ],
-    );
+        } else if (cat == 'TPN') {
+          tpnVol += it.volumeMl;
+          final u = it.units != null ? '${it.units}本 ' : '';
+          tpnNames.add('${it.name}  $u(${it.volumeMl.round()}ml)');
+        } else if (cat == 'PPN') {
+          ppnVol += it.volumeMl;
+          final u = it.units != null ? '${it.units}本 ' : '';
+          ppnNames.add('${it.name}  $u(${it.volumeMl.round()}ml)');
+        } else {
+          children.add(line(it.name));
+        }
+      }
+      // TPN / PPN はそれぞれまとめて別々に流量表記
+      if (tpnVol > 0) {
+        children.add(line(
+            'TPN  ${(tpnVol / 24).toStringAsFixed(0)}ml/h（計${tpnVol.round()}ml）',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade700)));
+        for (final s in tpnNames) {
+          children.add(line('　$s'));
+        }
+      }
+      if (ppnVol > 0) {
+        children.add(line(
+            'PPN  ${(ppnVol / 24).toStringAsFixed(0)}ml/h（計${ppnVol.round()}ml）',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.cyan.shade700)));
+        for (final s in ppnNames) {
+          children.add(line('　$s'));
+        }
+      }
+    }
+    children.add(const SizedBox(height: 4));
+    children.add(Text(
+      'IN ${plan.totalVolumeMl.round()}ml, 熱量 ${plan.totalKcal.round()}kcal, '
+      'タンパク ${plan.totalProteinG.toStringAsFixed(1)}g (${protPerKg.toStringAsFixed(1)}g/kg)',
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+    ));
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: children);
   }
+
 }
 
 class _LegendChip extends StatelessWidget {
