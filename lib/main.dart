@@ -6672,11 +6672,20 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final int evCount = flags.where((f) => f).length;
       final double fs = evCount >= 2 ? 12.0 : 15.0; // boxラベル文字/アイコンサイズ
 
+      // 入室からの経過日数(入室=0)。5の倍数(day5/10/15…)を丸囲み対象にする
+      final int daysFromAdm =
+          admissionIdxClamped >= 0 ? i - admissionIdxClamped : -999;
+      final bool mult5FromAdm = daysFromAdm > 0 && daysFromAdm % 5 == 0;
+
       // 横幅が詰まっているとき(セル幅が狭い)は、日付ラベルを
-      // 「イベント日」または「5の倍数の日」のみに間引く
+      // 「イベント日」または「入室後5の倍数の日」のみに間引く
+      //  (入室未設定時は従来どおり暦日の5の倍数で間引く)
       final double cellW = n > 0 ? _cachedChartW / n : 999;
       final bool cramped = cellW < 30;
-      final bool showDate = !cramped || hasEvent || dates[i].day % 5 == 0;
+      final bool showDate = !cramped ||
+          hasEvent ||
+          mult5FromAdm ||
+          (admissionIdxClamped < 0 && dates[i].day % 5 == 0);
 
       // 横幅をはみ出しても折り返さない（横方向の制約を外す）
       Widget noWrap(Widget child) => UnconstrainedBox(
@@ -6742,12 +6751,33 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         children: [
           const SizedBox(height: 8), // バーと日付の間隔
           if (showDate)
-            noWrap(Text(dateLabel(i),
-                softWrap: false,
-                maxLines: 1,
-                overflow: TextOverflow.visible,
-                style: const TextStyle(
-                    fontSize: 14, letterSpacing: -0.5, height: 1.0)))
+            // 入室後day5の倍数は丸囲み(ピル)で強調
+            mult5FromAdm
+                ? noWrap(Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: Colors.blueGrey.shade400, width: 1.2),
+                    ),
+                    child: Text(dateLabel(i),
+                        softWrap: false,
+                        maxLines: 1,
+                        overflow: TextOverflow.visible,
+                        style: TextStyle(
+                            fontSize: 14,
+                            letterSpacing: -0.5,
+                            height: 1.0,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueGrey.shade700)),
+                  ))
+                : noWrap(Text(dateLabel(i),
+                    softWrap: false,
+                    maxLines: 1,
+                    overflow: TextOverflow.visible,
+                    style: const TextStyle(
+                        fontSize: 14, letterSpacing: -0.5, height: 1.0)))
           else
             const SizedBox(height: 14),
           const SizedBox(height: 8), // 日付とスタンプの間隔
