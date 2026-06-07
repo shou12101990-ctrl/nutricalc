@@ -1399,6 +1399,19 @@ class _BuilderPageState extends State<BuilderPage>
         formatRequiredUnits(glucoseProduct, _round10(zeroMenu.glucoseVolumeMl));
     final scratchLipidUnits =
         formatRequiredUnits(lipidProduct, _round10(zeroMenu.lipidVolumeMl));
+    // 加注製剤の処方表示 (名称 + 合計量, 同一製剤は×本数で集約)
+    final scratchAdditiveLines = (() {
+      final m = <String, int>{};
+      for (final n in _zeroAdditives) {
+        m[n] = (m[n] ?? 0) + 1;
+      }
+      return m.entries.map((e) {
+        final vol = widget.state.catalog.byName(e.key)?.volumeMl;
+        final amt = vol != null ? '${(vol * e.value).round()} ml' : '${e.value}管';
+        final nm = e.value > 1 ? '${e.key} ×${e.value}' : e.key;
+        return '$nm  $amt';
+      }).toList();
+    })();
 
     int _actualCategoryUnits(String categoryKey) {
       return current.regimenItems.fold<int>(0, (sum, item) {
@@ -2274,6 +2287,9 @@ class _BuilderPageState extends State<BuilderPage>
                                                     Text('${lipidProduct.name}  $scratchLipidUnits', style: const TextStyle(fontSize: 12.5)),
                                                   if (zeroMenu.glucoseVolumeMl > 0 && glucoseProduct != null)
                                                     Text('${glucoseProduct.name}  $scratchGlucoseUnits', style: const TextStyle(fontSize: 12.5)),
+                                                  // 加注製剤
+                                                  for (final l in scratchAdditiveLines)
+                                                    Text(l, style: const TextStyle(fontSize: 12.5)),
                                                 ] else ...[
                                                   Builder(builder: (c) {
                                                     final ts = TextStyle(fontSize: labelFs);
