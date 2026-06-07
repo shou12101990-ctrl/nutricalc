@@ -5,6 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'local_store.dart';
+import 'clinical/constants.dart' as ck;
+import 'clinical/body_weight.dart' as cbw;
+import 'clinical/energy.dart' as ce;
+import 'clinical/protein.dart' as cp;
+import 'clinical/conditions.dart' as cc;
+import 'clinical/infusion.dart' as ci;
+import 'clinical/refeeding.dart' as cr;
+import 'clinical/micronutrients.dart' as cm;
 
 /// AF / SF ドロップダウン用の説明ラベル（値の toStringAsFixed(1) をキーにする）
 const _afHints = {
@@ -129,12 +137,114 @@ Future<DateTime?> _quickPickDate(BuildContext context, DateTime initial) {
 
 /// 患者情報編集ダイアログ（TOP画面・ビルダー画面で共通利用）
 /// 患者/入室日は固定表示。絶食開始日・ベッド・AF/SF・目標タンパク・病態タグ・メモを編集。
+/// エネルギー式セレクタ（患者編集/新規入室で共用）。
+/// kcal/kg選択時は kcal/kg ドロップダウン、間接熱量測定時はREE入力欄を出す。
+List<Widget> _energyModelFields({
+  required String energyModel,
+  required double kcalPerKgValue,
+  required TextEditingController reeCtrl,
+  required ValueChanged<String> onModel,
+  required ValueChanged<double> onKcalPerKg,
+}) {
+  return [
+    DropdownButtonFormField<String>(
+      initialValue: energyModel,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'エネルギー式', isDense: true),
+      items: const [
+        DropdownMenuItem(
+            value: 'harrisBenedict', child: Text('Harris-Benedict ×係数')),
+        DropdownMenuItem(
+            value: 'mifflinStJeor', child: Text('Mifflin-St Jeor ×係数')),
+        DropdownMenuItem(value: 'kcalPerKg', child: Text('簡易式 (kcal/kg)')),
+        DropdownMenuItem(
+            value: 'indirectCalorimetry', child: Text('間接熱量測定 (実測REE)')),
+      ],
+      onChanged: (v) {
+        if (v != null) onModel(v);
+      },
+    ),
+    if (energyModel == 'kcalPerKg') ...[
+      const SizedBox(height: 8),
+      DropdownButtonFormField<double>(
+        initialValue: kcalPerKgValue,
+        isExpanded: true,
+        decoration:
+            const InputDecoration(labelText: '目標 kcal/kg/day', isDense: true),
+        items: [for (int i = 0; i <= 10; i++) 25 + i * 0.5]
+            .map((v) => DropdownMenuItem(
+                value: v.toDouble(), child: Text(v.toStringAsFixed(1))))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) onKcalPerKg(v);
+        },
+      ),
+    ],
+    if (energyModel == 'indirectCalorimetry') ...[
+      const SizedBox(height: 8),
+      TextField(
+        controller: reeCtrl,
+        keyboardType: TextInputType.number,
+        decoration:
+            const InputDecoration(labelText: '実測REE (kcal/day)', isDense: true),
+      ),
+    ],
+  ];
+}
+
+/// 病態に基づくタンパク推奨範囲サジェスト（非強制・表示のみ）。該当なしは null。
+Widget? _proteinSuggestion(Iterable<String> tags, double currentGoal) {
+  final ranges = cc.proteinRangesFor(tags);
+  if (ranges.isEmpty) return null;
+  final inter = cc.intersectedProteinRange(tags);
+  final outside =
+      inter != null && (currentGoal < inter.min || currentGoal > inter.max);
+  return Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(top: 6),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.teal.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: Colors.teal.shade200),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('💡 推奨タンパク',
+            style: TextStyle(
+                fontSize: 11,
+                color: Colors.teal.shade800,
+                fontWeight: FontWeight.bold)),
+        for (final c in ranges)
+          Text(
+            '${ConditionCatalog.labelOf(c.id)}: '
+            '${c.proteinMinPerKg}–${c.proteinMaxPerKg} g/kg',
+            style: TextStyle(fontSize: 11.5, color: Colors.teal.shade900),
+          ),
+        if (outside)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '現在値 ${currentGoal.toStringAsFixed(1)} g/kg は推奨範囲外（医師判断で許容可）',
+              style: TextStyle(fontSize: 11, color: Colors.deepOrange.shade400),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
 Future<void> showPatientEditDialog(
     BuildContext context, AppState state, PatientCase current,
     {VoidCallback? onSaved}) async {
   double activity = current.activityFactor;
   double stress = current.stressFactor;
   double protein = current.proteinGoalPerKg;
+  String energyModel = current.energyModel;
+  double kcalPerKgValue = current.kcalPerKgValue ?? 25;
+  final reeCtrl =
+      TextEditingController(text: current.measuredREE?.toStringAsFixed(0) ?? '');
   final memoCtrl = TextEditingController(text: current.memo);
   final selectedTags = current.conditionTags.toSet();
   DateTime? fastingDate = current.fastingDate != null
@@ -226,6 +336,15 @@ Future<void> showPatientEditDialog(
                   label: bedIdx.toString().padLeft(2, '0'),
                   onChanged: (v) => setLocal(() => bedIdx = v.toInt()),
                 ),
+                // エネルギー式
+                ..._energyModelFields(
+                  energyModel: energyModel,
+                  kcalPerKgValue: kcalPerKgValue,
+                  reeCtrl: reeCtrl,
+                  onModel: (v) => setLocal(() => energyModel = v),
+                  onKcalPerKg: (v) => setLocal(() => kcalPerKgValue = v),
+                ),
+                const SizedBox(height: 8),
                 // AF / SF (横並び)
                 Row(children: [
                   Expanded(
@@ -282,6 +401,10 @@ Future<void> showPatientEditDialog(
                       .toList(),
                   onChanged: (v) => setLocal(() => protein = v ?? protein),
                 ),
+                Builder(builder: (_) {
+                  final w = _proteinSuggestion(selectedTags, protein);
+                  return w ?? const SizedBox.shrink();
+                }),
                 const SizedBox(height: 12),
                 // 病態タグ (常時展開)
                 Align(
@@ -340,6 +463,9 @@ Future<void> showPatientEditDialog(
   current.activityFactor = activity;
   current.stressFactor = stress;
   current.proteinGoalPerKg = protein;
+  current.energyModel = energyModel;
+  current.kcalPerKgValue = kcalPerKgValue;
+  current.measuredREE = double.tryParse(reeCtrl.text.trim());
   current.memo = memoCtrl.text.trim();
   current.conditionTags = ConditionCatalog.all
       .map((c) => c.id)
@@ -640,6 +766,9 @@ class CasesPage extends StatelessWidget {
     double activity = 1.2;
     double stress = 1.6;
     double protein = 1.5;
+    String energyModel = 'harrisBenedict';
+    double kcalPerKgValue = 25;
+    final reeCtrl = TextEditingController();
     Sex sex = Sex.male;
     DateTime? fastingDate = DateTime.now(); // 絶食開始日(デフォルト=入室日)
     final List<String> selectedTags = []; // 病態タグ
@@ -782,6 +911,15 @@ class CasesPage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
+                // エネルギー式
+                ..._energyModelFields(
+                  energyModel: energyModel,
+                  kcalPerKgValue: kcalPerKgValue,
+                  reeCtrl: reeCtrl,
+                  onModel: (v) => setLocal(() => energyModel = v),
+                  onKcalPerKg: (v) => setLocal(() => kcalPerKgValue = v),
+                ),
+                const SizedBox(height: 8),
                 // 活動係数・侵害係数 (横並び)
                 Row(
                   children: [
@@ -843,6 +981,10 @@ class CasesPage extends StatelessWidget {
                       .toList(),
                   onChanged: (v) => setLocal(() => protein = v ?? protein),
                 ),
+                Builder(builder: (_) {
+                  final w = _proteinSuggestion(selectedTags, protein);
+                  return w ?? const SizedBox.shrink();
+                }),
                 const SizedBox(height: 8),
                 // 病態追加 (目標タンパクの下) — タップで展開
                 Align(
@@ -934,6 +1076,9 @@ class CasesPage extends StatelessWidget {
                   selectedProtocolId: 'five_day',
                   zeroMenuConfig: ZeroMenuConfig.defaultConfig(),
                   conditionTags: List.of(selectedTags),
+                  energyModel: energyModel,
+                  kcalPerKgValue: kcalPerKgValue,
+                  measuredREE: double.tryParse(reeCtrl.text.trim()),
                 );
                 // 絶食開始日 (設定されていれば反映)
                 if (fastingDate != null) {
@@ -1420,6 +1565,15 @@ class _BuilderPageState extends State<BuilderPage>
     final defVit = widget.state.catalog.byCategory('ビタミン').firstOrNull?.name;
     if (defTrace != null) _zeroAdditives.add(defTrace);
     if (defVit != null) _zeroAdditives.add(defVit);
+    // 病態に応じてゼロmenu係数を自動設定（NPC/N・脂質g/kg を中央値に）。病態なしは既定維持。
+    final selCase = widget.state.selectedCase;
+    if (selCase != null) {
+      final rc = cc.resolveCoeff(selCase.conditionTags);
+      if (rc != null) {
+        npcnController.text = rc.npcN.toStringAsFixed(0);
+        _lipidGPerKg = double.parse(rc.lipidGPerKg.toStringAsFixed(1));
+      }
+    }
     _snapCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 260));
     _snapCtrl.addListener(() {
@@ -1449,6 +1603,82 @@ class _BuilderPageState extends State<BuilderPage>
     _listScroll.dispose();
     _chartScroll.dispose();
     super.dispose();
+  }
+
+  /// 静脈栄養(TPN/PPN)由来のブドウ糖・脂質グラム（GIR/脂質速度の評価用）。
+  ({double glucoseG, double lipidG}) _parenteralMacros(PatientCase current) {
+    double glu = 0, fat = 0;
+    for (final item in current.regimenItems) {
+      final p = widget.state.catalog.byId(item.productId);
+      if (p == null || item.units <= 0) continue;
+      if (p.category == 'TPN' || p.category == 'PPN') {
+        glu += (p.carbBase ?? 0) * item.units;
+        fat += (p.fatBase ?? 0) * item.units;
+      }
+    }
+    return (glucoseG: glu, lipidG: fat);
+  }
+
+  Widget _infusionAlertRow(ci.AlertLevel lv, String text) {
+    final color = lv == ci.AlertLevel.danger
+        ? Colors.red.shade600
+        : Colors.orange.shade800;
+    final label = lv == ci.AlertLevel.danger ? '危険' : '注意';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color),
+      ),
+      child: Row(children: [
+        Icon(Icons.warning_amber_rounded, size: 15, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text('$label  $text',
+              style: TextStyle(fontSize: 11.5, color: color)),
+        ),
+      ]),
+    );
+  }
+
+  /// GIR・脂質負荷速度のアラート群（超過時のみ表示。糖質制限病態はGIR上限4）。
+  Widget _infusionAlerts({
+    required double glucoseGramPerDay,
+    required double lipidGramPerDay,
+    required double weightKg,
+    required bool glucoseRestrict,
+  }) {
+    final rows = <Widget>[];
+    if (glucoseGramPerDay > 0 && weightKg > 0) {
+      final girVal =
+          ci.gir(glucoseGramPerDay: glucoseGramPerDay, weightKg: weightKg);
+      final hardLimit =
+          glucoseRestrict ? 4.0 : ck.ClinicalConst.girLimitMgKgMin;
+      final warnAt = glucoseRestrict ? 3.5 : ck.ClinicalConst.girWarnMgKgMin;
+      final lv = ci.girLevel(girVal, warn: warnAt, limit: hardLimit);
+      if (lv != ci.AlertLevel.ok) {
+        rows.add(_infusionAlertRow(lv,
+            'GIR ${girVal.toStringAsFixed(1)} mg/kg/min（上限${hardLimit.toStringAsFixed(0)}）糖負荷過剰、高血糖・脂肪肝に注意'));
+      }
+    }
+    if (lipidGramPerDay > 0 && weightKg > 0) {
+      final rate = ci.lipidRatePerHour(
+          lipidGramPerDay: lipidGramPerDay, weightKg: weightKg);
+      final perDay = ci.lipidPerDayGramPerKg(
+          lipidGramPerDay: lipidGramPerDay, weightKg: weightKg);
+      final lvRate = ci.lipidRateLevel(rate);
+      final lvDay = ci.lipidDayLevel(perDay);
+      final lv = lvRate.index >= lvDay.index ? lvRate : lvDay;
+      if (lv != ci.AlertLevel.ok) {
+        rows.add(_infusionAlertRow(lv,
+            '脂質 ${perDay.toStringAsFixed(2)} g/kg/day・${rate.toStringAsFixed(3)} g/kg/h、高TG血症に注意'));
+      }
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
   }
 
   void _snapTo(double target) {
@@ -2062,6 +2292,22 @@ class _BuilderPageState extends State<BuilderPage>
                               'タンパク ${targetProtein.round()} g/day',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
+                            Builder(builder: (_) {
+                              final er = NutritionCalculator
+                                  .targetEnergyResult(current);
+                              final showW = (er.feedingWeightKg -
+                                          er.actualWeightKg)
+                                      .abs() >=
+                                  0.1;
+                              return Text(
+                                '式 ${ce.energyModelFromId(current.energyModel).label}'
+                                '${showW ? ' / 栄養計算体重 ${er.feedingWeightKg.toStringAsFixed(1)}kg（実${er.actualWeightKg.toStringAsFixed(0)}/理想${er.idealWeightKg.toStringAsFixed(0)}）' : ''}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: Colors.blueGrey),
+                              );
+                            }),
                             if (current.memo.isNotEmpty) ...[
                               const SizedBox(height: 2),
                               Text(current.memo,
@@ -2350,6 +2596,25 @@ class _BuilderPageState extends State<BuilderPage>
                                           ? '${prod(n)!.volumeMl!.round()} ml'
                                           : '1管')),
                                 ],
+                                Builder(builder: (_) {
+                                  final gluProd =
+                                      widget.state.adoptedByBase(glucoseSource);
+                                  final gluKcal = (gluProd != null &&
+                                          (gluProd.volumeMl ?? 0) > 0)
+                                      ? gluMl *
+                                          (gluProd.kcal ?? 0) /
+                                          gluProd.volumeMl!
+                                      : 0.0;
+                                  return _infusionAlerts(
+                                    glucoseGramPerDay: gluKcal / 4,
+                                    lipidGramPerDay: zeroMenu.lipidGram,
+                                    weightKg: current.weightKg,
+                                    glucoseRestrict: cc
+                                            .resolveCoeff(current.conditionTags)
+                                            ?.glucoseRestrict ??
+                                        false,
+                                  );
+                                }),
                               ],
                             ),
                           ),
@@ -2874,6 +3139,25 @@ class _BuilderPageState extends State<BuilderPage>
                                                       Text('IN ${aggregate.totalVolumeMl.round()}ml, 総カロリー ${aggregate.totalKcal.round()}kcal', style: ss),
                                                       Text('タンパク ${aggregate.totalProteinG.toStringAsFixed(1)}g/day (${protPerKg.toStringAsFixed(1)}g/kg)', style: ss),
                                                       Text('NPC/N比 ${aggregate.npcNText}', style: ss),
+                                                      Builder(builder: (_) {
+                                                        final pm =
+                                                            _parenteralMacros(
+                                                                current);
+                                                        return _infusionAlerts(
+                                                          glucoseGramPerDay:
+                                                              pm.glucoseG,
+                                                          lipidGramPerDay:
+                                                              pm.lipidG,
+                                                          weightKg:
+                                                              current.weightKg,
+                                                          glucoseRestrict: cc
+                                                                  .resolveCoeff(
+                                                                      current
+                                                                          .conditionTags)
+                                                                  ?.glucoseRestrict ??
+                                                              false,
+                                                        );
+                                                      }),
                                                       Text('脂質 ${fatPerKg.toStringAsFixed(1)}g/kg/day', style: ss),
                                                     ],
                                                   );
@@ -4849,6 +5133,9 @@ class PatientCase {
     required this.selectedProtocolId,
     required this.zeroMenuConfig,
     this.autoDesignConfig,
+    this.energyModel = 'harrisBenedict',
+    this.kcalPerKgValue,
+    this.measuredREE,
     this.memo = '',
     List<String>? conditionTags,
   }) : conditionTags = conditionTags ?? [];
@@ -4872,6 +5159,9 @@ class PatientCase {
   String memo; // 合併症・コメントなど
   String? fastingDate; // 絶食開始日 (ISO date string, null=未設定)
   List<String> conditionTags; // 病態タグ (ConditionCatalog の id 群)
+  String energyModel; // 'harrisBenedict'|'mifflinStJeor'|'kcalPerKg'|'indirectCalorimetry'
+  double? kcalPerKgValue; // 簡易式の kcal/kg/day
+  double? measuredREE; // 間接熱量測定の実測REE (kcal/day)
 
   String get displayLabel => '$caseCode / $currentBed';
 
@@ -4918,6 +5208,9 @@ class PatientCase {
         'memo': memo,
         'fastingDate': fastingDate,
         'conditionTags': conditionTags,
+        'energyModel': energyModel,
+        'kcalPerKgValue': kcalPerKgValue,
+        'measuredREE': measuredREE,
       };
 
   factory PatientCase.fromMap(Map<String, dynamic> map) => PatientCase(
@@ -4951,6 +5244,9 @@ class PatientCase {
         conditionTags: (map['conditionTags'] as List?)
             ?.map((e) => e.toString())
             .toList(),
+        energyModel: (map['energyModel'] as String?) ?? 'harrisBenedict',
+        kcalPerKgValue: (map['kcalPerKgValue'] as num?)?.toDouble(),
+        measuredREE: (map['measuredREE'] as num?)?.toDouble(),
       )..fastingDate = map['fastingDate'] as String?;
 }
 
@@ -5052,15 +5348,29 @@ class NutritionCalculator {
   static double bmi(PatientCase item) =>
       item.weightKg / ((item.heightCm / 100) * (item.heightCm / 100));
 
-  static double targetEnergy(PatientCase item) {
-    final bee = item.sex == Sex.male
-        ? 66 + 13.7 * item.weightKg + 5 * item.heightCm - 6.8 * item.age
-        : 665 + 9.6 * item.weightKg + 1.8 * item.heightCm - 4.7 * item.age;
-    return (bee * item.activityFactor * item.stressFactor);
-  }
+  /// 目標エネルギー（kcal/day）。選択モデル＋補正体重を内部適用（clinical/energy.dart に委譲）。
+  static ce.EnergyResult targetEnergyResult(PatientCase item) => ce.targetEnergy(
+        model: ce.energyModelFromId(item.energyModel),
+        isMale: item.sex == Sex.male,
+        weightKg: item.weightKg,
+        heightCm: item.heightCm,
+        age: item.age,
+        activityFactor: item.activityFactor,
+        stressFactor: item.stressFactor,
+        kcalPerKgValue: item.kcalPerKgValue ?? 25,
+        measuredREE: item.measuredREE,
+      );
 
-  static double targetProtein(PatientCase item) =>
-      item.weightKg * item.proteinGoalPerKg;
+  static double targetEnergy(PatientCase item) =>
+      targetEnergyResult(item).kcal;
+
+  /// 目標タンパク（g/day）。肥満は理想体重基準（clinical/protein.dart に委譲）。
+  static double targetProtein(PatientCase item) => cp.targetProtein(
+        actualKg: item.weightKg,
+        heightCm: item.heightCm,
+        isMale: item.sex == Sex.male,
+        gramPerKg: item.proteinGoalPerKg,
+      );
 
   static AggregateResult aggregate(List<RegimenItem> items) {
     double totalVolumeMl = 0;
@@ -5100,6 +5410,8 @@ class NutritionCalculator {
     required Product? glucoseProduct,
     required Product? aminoProduct,
     required Product? lipidProduct,
+    double? girLimitMgKgMin, // 指定時: GIR上限でブドウ糖をcapし余剰kcalを脂質へ再配分(自動設計用)
+    double? maxLipidGramPerKgDay, // 脂質再配分の上限(g/kg/day)
   }) {
     final aminoMlPerGram = (aminoProduct?.volumeMl ?? 500) /
         ((aminoProduct?.aminoAcidG ?? 50) == 0
@@ -5107,13 +5419,32 @@ class NutritionCalculator {
             : (aminoProduct?.aminoAcidG ?? 50));
     final proteinGram = (6.25 * targetKcal) / (npcNRatio + 6.25 * 4);
     final aminoVolumeMl = proteinGram * aminoMlPerGram;
-    final lipidGram = lipidGramPerKg * weightKg;
+    double lipidGram = lipidGramPerKg * weightKg;
+    double glucoseKcal = (targetKcal - proteinGram * 4 - lipidGram * 9)
+        .clamp(0, double.infinity)
+        .toDouble();
+    // GIR上限でブドウ糖を制限し、余剰kcalを脂質へ再配分（自動設計でのみ有効）
+    if (girLimitMgKgMin != null && weightKg > 0) {
+      final maxGluGram = girLimitMgKgMin * weightKg * 1440 / 1000;
+      double glucoseGram = glucoseKcal / 4;
+      if (glucoseGram > maxGluGram) {
+        final deficitKcal = (glucoseGram - maxGluGram) * 4;
+        glucoseGram = maxGluGram;
+        glucoseKcal = glucoseGram * 4;
+        if (maxLipidGramPerKgDay != null) {
+          final maxLipidGram = maxLipidGramPerKgDay * weightKg;
+          final addable = maxLipidGram - lipidGram;
+          if (addable > 0) {
+            final extra = deficitKcal / 9;
+            lipidGram += extra < addable ? extra : addable;
+          }
+        }
+      }
+    }
     final lipidVolumeMl = lipidProduct == null
         ? 0.0
         : lipidGram /
             ((lipidProduct.fatBase ?? 20) / (lipidProduct.volumeMl ?? 100));
-    final glucoseKcal = (targetKcal - proteinGram * 4 - lipidGram * 9)
-        .clamp(0, double.infinity);
     final glucoseDensity =
         glucoseProduct == null || (glucoseProduct.volumeMl ?? 0) == 0
             ? 1
@@ -5308,6 +5639,8 @@ class NutritionCalculator {
     double minEnKcal = 0, // 単調増加制約: 前日のEN kcal以上を要求
     List<Product> mealProducts = const [], // 食事(濃厚流動食/栄養サポート)
     int mealPac = 0, // 食事 朝昼夕あたりpac数(1..3, 経口リハ期に使用)
+    double? girLimitMgKgMin, // 自動設計: GIR上限(糖質制限病態は4, 既定5)
+    double? maxLipidGramPerKgDay, // 脂質再配分の上限
   }) {
     // ゼロmenu(静注ブレンド)のitem群を構築
     List<DesignItem> buildZeroItems(double tKcal) {
@@ -5320,6 +5653,8 @@ class NutritionCalculator {
         glucoseProduct: glucoseProduct,
         aminoProduct: aminoProduct,
         lipidProduct: lipidProduct,
+        girLimitMgKgMin: girLimitMgKgMin,
+        maxLipidGramPerKgDay: maxLipidGramPerKgDay,
       );
       double dKcal(Product? p, double ml) =>
           p == null || (p.volumeMl ?? 0) == 0 ? 0 : (p.kcal ?? 0) * ml / p.volumeMl!;
@@ -6486,7 +6821,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final pct = pcts[i];
       final plan = NutritionCalculator.designDay(
         mode: _dayModes[i],
-        dayTargetKcal: targetKcal * pct / 100,
+        dayTargetKcal: _refeedCappedKcal(i, targetKcal * pct / 100),
         dayTargetProt: targetProt * pct / 100,
         weightKg: widget.current.weightKg,
         enProducts: enList,
@@ -6501,6 +6836,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         minEnKcal: prevEnKcal,
         mealProducts: mealList,
         mealPac: _dayMealPac[i],
+        girLimitMgKgMin: _girLimit,
+        maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
       );
       dayPlans.add(plan);
       if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
@@ -6895,6 +7232,56 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return s;
   }
 
+  /// 自動設計で用いるGIR上限（糖質制限病態は4、それ以外は5 mg/kg/min）。
+  double get _girLimit =>
+      (cc.resolveCoeff(widget.current.conditionTags)?.glucoseRestrict ?? false)
+          ? ck.ClinicalConst.girWarnMgKgMin
+          : ck.ClinicalConst.girLimitMgKgMin;
+
+  /// Refeeding（NICE）リスク階層。栄養開始日−絶食開始日 と BMI から判定。
+  cr.RefeedingTier get _refeedingTier {
+    final c = widget.current;
+    final bmi = cbw.bmiOf(c.weightKg, c.heightCm);
+    int? days;
+    final fr = c.fastingDate != null ? DateTime.tryParse(c.fastingDate!) : null;
+    if (fr != null) {
+      days = DateTime(_startDate.year, _startDate.month, _startDate.day)
+          .difference(DateTime(fr.year, fr.month, fr.day))
+          .inDays;
+    }
+    return cr.refeedingTier(bmi: bmi, daysNoIntake: days);
+  }
+
+  /// Refeedingリスク時、栄養開始からの feeding 日(0始まり)で kcal を上限cap。
+  double _refeedCappedKcal(int dayIndexZero, double rawKcal) {
+    final tier = _refeedingTier;
+    if (tier == cr.RefeedingTier.none) return rawKcal;
+    final fw =
+        NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
+    if (fw <= 0) return rawKcal;
+    final fullKpk = NutritionCalculator.targetEnergy(widget.current) / fw;
+    final cap = cr.refeedingCapKcalPerKg(tier, dayIndexZero + 1, fullKpk) * fw;
+    return rawKcal < cap ? rawKcal : cap;
+  }
+
+  /// 1日プランの電解質・微量元素・ビタミンUL超過アラート。
+  List<cm.MicroAlert> _dayMicroAlerts(DesignPlan p) {
+    final totals = cm.aggregateMicro(p.items.map((it) {
+      final prod = widget.state.catalog.byName(it.name);
+      double mult;
+      if ((it.units ?? 0) > 0) {
+        mult = it.units!.toDouble();
+      } else if (prod != null && (prod.volumeMl ?? 0) > 0) {
+        mult = it.volumeMl / prod.volumeMl!;
+      } else {
+        mult = 0;
+      }
+      return cm.MicroContribution(prod?.micro, mult);
+    }));
+    return cm.microAlerts(totals,
+        isMale: widget.current.sex == Sex.male, longTermTpn: false);
+  }
+
   Widget _buildBarCharts(double targetKcal, List<double> pcts,
       List<Product> en, List<Product> tpn, List<Product> ppn) {
     final targetProt = NutritionCalculator.targetProtein(widget.current);
@@ -6904,7 +7291,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     for (int i = 0; i < pcts.length; i++) {
       final p = NutritionCalculator.designDay(
               mode: _dayModes[i],
-              dayTargetKcal: targetKcal * pcts[i] / 100,
+              dayTargetKcal: _refeedCappedKcal(i, targetKcal * pcts[i] / 100),
               dayTargetProt: targetProt * pcts[i] / 100,
               weightKg: widget.current.weightKg,
               enProducts: en,
@@ -6919,6 +7306,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               minEnKcal: prevEnKcalChart,
               mealProducts: _adoptedMeals(),
               mealPac: _dayMealPac[i],
+              girLimitMgKgMin: _girLimit,
+              maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
             );
       if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
       designPlans.add(p);
@@ -7000,6 +7389,31 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       }
     }
     final pnMonitorRisk = pnHeavyMaxDay >= 7;
+
+    // Refeeding（NICE）リスク: 絶食日数(preDays)とBMIから判定。
+    final refeedTier = _refeedingTier;
+    final refeedRisk = refeedTier != cr.RefeedingTier.none;
+    // 電解質・微量元素・ビタミンのUL超過: 日毎に集計し栄養素ごとに最高レベル/最早日を採用。
+    final microByNutrient = <String, ({cm.MicroAlert alert, int dayIdx})>{};
+    for (int i = 0; i < n; i++) {
+      for (final a in _dayMicroAlerts(plans[i])) {
+        final prev = microByNutrient[a.nutrient];
+        if (prev == null || a.level.index > prev.alert.level.index) {
+          microByNutrient[a.nutrient] = (alert: a, dayIdx: i);
+        }
+      }
+    }
+    final microAlertsList = microByNutrient.values.toList();
+    final hasAlerts = efadRisk ||
+        thiamineRisk ||
+        pnMonitorRisk ||
+        refeedRisk ||
+        microAlertsList.isNotEmpty;
+    final alertCount = (efadRisk ? 1 : 0) +
+        (thiamineRisk && !refeedRisk ? 1 : 0) +
+        (pnMonitorRisk ? 1 : 0) +
+        (refeedRisk ? 1 : 0) +
+        microAlertsList.length;
 
     // 日付ラベル: 同月内は日のみ, 月が変わる初日はmm/dd
     final dates = List.generate(n, (i) => chartOrigin.add(Duration(days: i)));
@@ -7455,7 +7869,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               ), // SizedBox
             ), // TapRegion
             // === 栄養管理アラート（グラフの下・既定は折り畳み、タップで展開） ===
-            if (efadRisk || thiamineRisk || pnMonitorRisk) ...[
+            if (hasAlerts) ...[
               const SizedBox(height: 12),
               InkWell(
                 borderRadius: BorderRadius.circular(8),
@@ -7486,7 +7900,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             Border.all(color: Colors.deepOrange.shade200),
                       ),
                       child: Text(
-                          '${(efadRisk ? 1 : 0) + (thiamineRisk ? 1 : 0) + (pnMonitorRisk ? 1 : 0)}件',
+                          '$alertCount件',
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -7514,7 +7928,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 suggest: 'イントラリポス20% 100mL/日（脂質20g）を補充'
                     '（または週2回100mL）',
               ),
-            if (_alertsExpanded && thiamineRisk)
+            if (_alertsExpanded && thiamineRisk && !refeedRisk)
               _chartAlert(
                 color: Colors.red.shade700,
                 title: '${_alertDate(preDays + 1, dates, n)}以降（栄養再開・糖負荷時）'
@@ -7537,6 +7951,28 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 suggest: '不足時は リン酸Na/KCL/硫酸Mg補正液・微量元素製剤・'
                     '総合ビタミン剤 で補正',
               ),
+            if (_alertsExpanded && refeedRisk)
+              _chartAlert(
+                color: Colors.red.shade700,
+                title:
+                    '${_alertDate(preDays + 1, dates, n)}以降（栄養再開初期）'
+                        '　Refeeding症候群 ${refeedTier.label}（NICE）',
+                body:
+                    '絶食$preDays日・BMI ${cbw.bmiOf(widget.current.weightKg, widget.current.heightCm).toStringAsFixed(1)}。'
+                    '初期は10 kcal/kg（超高リスクは5）から開始し4–7日で漸増します'
+                    '（本設計は自動でcap済み）。',
+                suggest: cr.refeedingActionText(refeedTier),
+              ),
+            for (final m in microAlertsList)
+              if (_alertsExpanded)
+                _chartAlert(
+                  color: m.alert.level == ci.AlertLevel.danger
+                      ? Colors.red.shade700
+                      : Colors.orange.shade800,
+                  title:
+                      '${_alertDate(m.dayIdx + 1, dates, n)}以降　${m.alert.nutrient} 過剰のリスク',
+                  body: m.alert.message,
+                ),
           ],
         ),
       ),
