@@ -5274,6 +5274,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
+  int? _oralRehabStartDay; // 経口リハ開始Day (null=未設定)
   int _totalDays = 5; // シミュレーション全体の日数 (= _enStartDay + EN食上げ7日 -1)
   Product? _pnProduct; // PN(中心静脈栄養)主剤
   late DateTime _startDate; // 栄養開始日
@@ -5294,6 +5295,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       // 保存済み設定を復元 (rampDays・開始日・PN製剤のみ。日別は固定シーケンスから再生成)
       _rampDays = ((cfg['rampDays'] as num?)?.toInt() ?? 5).clamp(2, 6);
       _enStartDay = (cfg['enStartDay'] as num?)?.toInt() ?? (_rampDays + 1);
+      _oralRehabStartDay = (cfg['oralRehabStartDay'] as num?)?.toInt();
       _startDate =
           DateTime.tryParse(cfg['startDate'] as String? ?? '') ?? DateTime.now();
       final pid = cfg['pnProductId'] as String?;
@@ -5328,6 +5330,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     widget.current.autoDesignConfig = {
       'rampDays': _rampDays,
       'enStartDay': _enStartDay,
+      'oralRehabStartDay': _oralRehabStartDay,
       'pnProductId': _pnProduct?.id,
       'startDate': _startDate.toIso8601String(),
     };
@@ -5665,11 +5668,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           ),
                         ),
                       ]),
-                      // 行3: EN導入時期
+                      // 行3: EN導入
                       TableRow(children: [
                         const Padding(
-                          padding: EdgeInsets.only(right: 8),
-                          child: Text('EN導入時期:',
+                          padding: EdgeInsets.only(right: 8, bottom: 6),
+                          child: Text('EN導入:',
                               style: TextStyle(fontSize: 13)),
                         ),
                         Row(
@@ -5687,6 +5690,41 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                 _enStartDay = v ?? _enStartDay;
                                 _rebuildDays();
                               }),
+                            ),
+                          ],
+                        ),
+                      ]),
+                      // 行4: 経口リハ開始日
+                      TableRow(children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.restaurant,
+                                size: 13, color: Colors.teal.shade600),
+                            const SizedBox(width: 4),
+                            Text('経口リハ開始日:',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.teal.shade700)),
+                          ]),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Day ', style: TextStyle(fontSize: 13)),
+                            DropdownButton<int?>(
+                              value: _oralRehabStartDay,
+                              isDense: true,
+                              hint: const Text('未設定',
+                                  style: TextStyle(fontSize: 13)),
+                              items: [
+                                const DropdownMenuItem<int?>(
+                                    value: null, child: Text('未設定')),
+                                ...List.generate(28, (i) => i + 1).map((d) =>
+                                    DropdownMenuItem<int?>(
+                                        value: d, child: Text('$d'))),
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => _oralRehabStartDay = v),
                             ),
                           ],
                         ),
