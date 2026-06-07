@@ -367,6 +367,8 @@ class CasesPage extends StatelessWidget {
     double stress = 1.6;
     double protein = 1.5;
     Sex sex = Sex.male;
+    DateTime? fastingDate; // 絶食開始日
+    final List<String> selectedTags = []; // 病態タグ
 
     await showDialog(
       context: context,
@@ -414,6 +416,39 @@ class CasesPage extends StatelessWidget {
                         'このベッドは既に使用中です。\n続行するとベッドが重複します。',
                         style: TextStyle(fontSize: 12, color: Colors.deepOrange),
                       ),
+                    // 絶食開始日 (ベッド番号の下)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      leading: Icon(Icons.no_meals,
+                          size: 22,
+                          color: fastingDate == null
+                              ? Colors.grey.shade600
+                              : Colors.red.shade400),
+                      title: Text(
+                        fastingDate == null
+                            ? '絶食開始日: 未設定'
+                            : '絶食開始日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: fastingDate == null
+                                ? Colors.grey
+                                : Colors.red.shade400),
+                      ),
+                      trailing: fastingDate != null
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () =>
+                                  setLocal(() => fastingDate = null))
+                          : const Icon(Icons.calendar_today, size: 18),
+                      onTap: () async {
+                        final picked = await _quickPickDate(
+                            context, fastingDate ?? DateTime.now());
+                        if (picked != null) {
+                          setLocal(() => fastingDate = picked);
+                        }
+                      },
+                    ),
                   ],
                 ),
                 TextField(
@@ -469,6 +504,42 @@ class CasesPage extends StatelessWidget {
                     min: 0.6,
                     max: 2.0,
                     onChanged: (v) => setLocal(() => protein = v)),
+                const SizedBox(height: 8),
+                // 病態追加 (目標タンパクの下)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.add_circle_outline,
+                        size: 16, color: Colors.teal.shade700),
+                    const SizedBox(width: 4),
+                    Text('病態を追加（該当をタップ）',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.teal.shade700)),
+                  ]),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: -4,
+                  children: [
+                    for (final c in ConditionCatalog.all)
+                      FilterChip(
+                        label: Text(c.label,
+                            style: const TextStyle(fontSize: 12)),
+                        selected: selectedTags.contains(c.id),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        onSelected: (sel) => setLocal(() {
+                          if (sel) {
+                            selectedTags.add(c.id);
+                          } else {
+                            selectedTags.remove(c.id);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -508,7 +579,13 @@ class CasesPage extends StatelessWidget {
                   regimenItems: [],
                   selectedProtocolId: 'five_day',
                   zeroMenuConfig: ZeroMenuConfig.defaultConfig(),
+                  conditionTags: List.of(selectedTags),
                 );
+                // 絶食開始日 (設定されていれば反映)
+                if (fastingDate != null) {
+                  item.fastingDate =
+                      '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
+                }
                 await state.addCase(item);
                 refresh();
                 if (context.mounted) Navigator.pop(context);
