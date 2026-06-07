@@ -6875,31 +6875,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           children: [
             const Text('栄養の推移', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            // 栄養管理アラート
-            if (efadRisk)
-              _chartAlert(
-                color: Colors.orange.shade800,
-                title: '必須脂肪酸欠乏に注意',
-                body:
-                    '絶食開始からDay14までに脂質が投与されていません。脂肪乳剤の投与を検討してください。',
-              ),
-            if (thiamineRisk)
-              _chartAlert(
-                color: Colors.red.shade700,
-                title: 'リフィーディング症候群・Wernicke脳症に注意',
-                body:
-                    '絶食5日以上＋糖質投与でビタミンB1の需要が増大し欠乏しうる（貯蔵は約2週間で枯渇）。'
-                    '糖負荷の前〜同時にビタミンB1（例: 100〜300mg/日）を補充してください。',
-              ),
-            if (pnMonitorRisk)
-              _chartAlert(
-                color: Colors.teal.shade700,
-                title: '採血で電解質・微量元素の確認を',
-                body:
-                    'EN≤30ml/hでPN主体の状態が絶食からDay$pnHeavyMaxDayまで続きます。'
-                    'P・K・Mg・亜鉛・ビタミン等の過不足が生じやすい時期です。'
-                    '採血検査を追加し、必要に応じて補正を検討してください。',
-              ),
             TapRegion(
               // チャート外タップでフローターを消去
               onTapOutside: (_) {
@@ -7129,6 +7104,54 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               ), // GestureDetector
               ), // SizedBox
             ), // TapRegion
+            // === 栄養管理アラート（グラフの下に表示） ===
+            if (efadRisk || thiamineRisk || pnMonitorRisk) ...[
+              const SizedBox(height: 12),
+              const Row(children: [
+                Icon(Icons.notifications_active_outlined,
+                    size: 16, color: Colors.black54),
+                SizedBox(width: 4),
+                Text('リスクと補充サジェスト',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.black54)),
+              ]),
+              const SizedBox(height: 8),
+            ],
+            if (efadRisk)
+              _chartAlert(
+                color: Colors.orange.shade800,
+                title: '${_alertDate(14, dates, n)}以降　必須脂肪酸欠乏のリスク',
+                body:
+                    '絶食開始からDay14まで脂質の投与がありません。長期化で必須脂肪酸が欠乏します。'
+                    '脂肪乳剤を開始してください。',
+                suggest: 'イントラリポス20% 100mL/日（脂質20g）を補充'
+                    '（または週2回100mL）',
+              ),
+            if (thiamineRisk)
+              _chartAlert(
+                color: Colors.red.shade700,
+                title: '${_alertDate(preDays + 1, dates, n)}以降（栄養再開・糖負荷時）'
+                    '　リフィーディング/Wernicke脳症のリスク',
+                body:
+                    '絶食5日以上＋糖質投与でビタミンB1の需要が増大し欠乏しうる'
+                    '（貯蔵は約2週間で枯渇）。糖負荷の前〜同時に補充してください。',
+                suggest: 'ビタミンB1（チアミン）100〜300mg/日を静注で補充',
+              ),
+            if (pnMonitorRisk)
+              _chartAlert(
+                color: Colors.teal.shade700,
+                title:
+                    '${_alertDate(pnHeavyMaxDay, dates, n)}以降（PN主体がDay$pnHeavyMaxDayまで継続）'
+                    '　電解質・微量元素の過不足に注意',
+                body:
+                    'EN≤30ml/hでPN主体の状態が続きます。'
+                    'P・K・Mg・亜鉛・ビタミンの過不足が生じやすい時期です。'
+                    '採血検査を追加して確認してください。',
+                suggest: '不足時は リン酸Na/KCL/硫酸Mg補正液・微量元素製剤・'
+                    '総合ビタミン剤 で補正',
+              ),
           ],
         ),
       ),
@@ -7159,11 +7182,20 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     ]),
   );
 
+  /// アラート用の日付文字列 (chartOrigin起算のDay番号 → ○月○日)
+  String _alertDate(int dayNum, List<DateTime> dates, int n) {
+    if (dates.isEmpty) return '';
+    final idx = (dayNum - 1).clamp(0, n - 1);
+    return '${dates[idx].month}月${dates[idx].day}日';
+  }
+
   /// 栄養管理アラート用の共通バナー
+  /// title=「○月○日以降 …リスク」, body=対処, suggest=補充する製剤/成分+量
   Widget _chartAlert({
     required Color color,
     required String title,
     required String body,
+    String? suggest,
   }) =>
       Container(
         width: double.infinity,
@@ -7180,19 +7212,52 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             Icon(Icons.warning_amber_rounded, size: 18, color: color),
             const SizedBox(width: 8),
             Expanded(
-              child: Text.rich(TextSpan(children: [
-                TextSpan(
-                    text: '$title\n',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                        fontSize: 12.5,
-                        height: 1.4)),
-                TextSpan(
-                    text: body,
-                    style: TextStyle(
-                        color: color, fontSize: 11.5, height: 1.4)),
-              ])),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text.rich(TextSpan(children: [
+                    TextSpan(
+                        text: '$title\n',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                            fontSize: 12.5,
+                            height: 1.4)),
+                    TextSpan(
+                        text: body,
+                        style: TextStyle(
+                            color: color, fontSize: 11.5, height: 1.4)),
+                  ])),
+                  if (suggest != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.add_circle_outline,
+                              size: 15, color: color),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(suggest,
+                                style: TextStyle(
+                                    color: color,
+                                    fontSize: 11.5,
+                                    height: 1.35,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),
