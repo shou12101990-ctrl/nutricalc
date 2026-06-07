@@ -7091,36 +7091,44 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 8), // バーと日付の間隔
-          if (showDate)
-            // 入室後day5の倍数は丸囲み(ピル)で強調
-            mult5FromAdm
-                ? noWrap(Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: Colors.blueGrey.shade400, width: 1.2),
-                    ),
-                    child: Text(dateLabel(i),
-                        softWrap: false,
-                        maxLines: 1,
-                        overflow: TextOverflow.visible,
-                        style: TextStyle(
-                            fontSize: 14,
-                            letterSpacing: -0.5,
-                            height: 1.0,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blueGrey.shade700)),
-                  ))
-                : noWrap(Text(dateLabel(i),
-                    softWrap: false,
-                    maxLines: 1,
-                    overflow: TextOverflow.visible,
-                    style: const TextStyle(
-                        fontSize: 14, letterSpacing: -0.5, height: 1.0)))
-          else
-            const SizedBox(height: 14),
+          // 日付ラベル領域は固定高(22)。丸囲みの有無でアイコン位置がずれないように揃える
+          SizedBox(
+            height: 22,
+            child: Center(
+              child: !showDate
+                  ? const SizedBox.shrink()
+                  : mult5FromAdm
+                      // 入室後day5の倍数は「円」で強調(楕円ではなく真円)
+                      ? noWrap(Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: Colors.blueGrey.shade400, width: 1.2),
+                          ),
+                          child: Text(dateLabel(i),
+                              softWrap: false,
+                              maxLines: 1,
+                              overflow: TextOverflow.visible,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  letterSpacing: -0.5,
+                                  height: 1.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blueGrey.shade700)),
+                        ))
+                      : noWrap(Text(dateLabel(i),
+                          softWrap: false,
+                          maxLines: 1,
+                          overflow: TextOverflow.visible,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              letterSpacing: -0.5,
+                              height: 1.0))),
+            ),
+          ),
           const SizedBox(height: 8), // 日付とスタンプの間隔
           if (icon != null) icon else const SizedBox(height: 20),
         ],
@@ -7171,6 +7179,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               onTapOutside: (_) {
                 if (_selectedBarIdx >= 0) {
                   setState(() { _selectedBarIdx = -1; _hoveredBarIdx = -1; });
+                  widget.onSettingsChanged?.call();
                 }
               },
               child: SizedBox(
@@ -7184,6 +7193,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       .floor()
                       .clamp(0, n - 1);
                   setState(() { _selectedBarIdx = idx; });
+                  widget.onSettingsChanged?.call();
                 },
                 child: MouseRegion(
                 onHover: (e) {
@@ -7194,9 +7204,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       .clamp(0, n - 1);
                   if (idx != _hoveredBarIdx) {
                     setState(() => _hoveredBarIdx = idx);
+                    widget.onSettingsChanged?.call();
                   }
                 },
-                onExit: (_) => setState(() => _hoveredBarIdx = -1),
+                onExit: (_) {
+                  setState(() => _hoveredBarIdx = -1);
+                  widget.onSettingsChanged?.call();
+                },
                 child: LayoutBuilder(builder: (_, _lbc) {
                   _cachedChartW = _lbc.maxWidth;
                   const plotH = 184.0; // プロット領域(棒・線)の高さ
@@ -7215,31 +7229,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                 alignment: BarChartAlignment.spaceAround,
                                 minY: 0,
                                 maxY: maxKcal,
-                                // fl_chart本体のポインタ追跡でホバー検知（重ね描画でも確実に発火）
-                                barTouchData: BarTouchData(
-                                  enabled: true,
-                                  handleBuiltInTouches: false,
-                                  touchCallback: (event, resp) {
-                                    final idx =
-                                        resp?.spot?.touchedBarGroupIndex ?? -1;
-                                    if (event is FlPointerHoverEvent) {
-                                      // デスクトップ: カーソルオンで表示
-                                      if (idx != _hoveredBarIdx) {
-                                        setState(() => _hoveredBarIdx = idx);
-                                      }
-                                    } else if (event is FlPointerExitEvent) {
-                                      if (_hoveredBarIdx != -1) {
-                                        setState(() => _hoveredBarIdx = -1);
-                                      }
-                                    } else if (event is FlTapUpEvent ||
-                                        event is FlTapDownEvent) {
-                                      // タッチ端末: タップで固定表示
-                                      if (idx >= 0) {
-                                        setState(() => _selectedBarIdx = idx);
-                                      }
-                                    }
-                                  },
-                                ),
+                                barTouchData: BarTouchData(enabled: false),
                                 barGroups: List.generate(n, (i) {
                                   final enK = enKcals[i];
                                   final mealK = mealKcals[i];
@@ -7250,15 +7240,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       width: 16,
                                       borderRadius: BorderRadius.circular(2),
                                       rodStackItems: [
-                                        // 下: 食事(橙)
+                                        // 下: 食事(橙) — 淡め
                                         BarChartRodStackItem(0, mealK,
-                                            Colors.deepOrange.shade400),
-                                        // 中: EN(黄)
+                                            Colors.deepOrange.shade200),
+                                        // 中: EN(黄) — 淡め
                                         BarChartRodStackItem(mealK, mealK + enK,
-                                            Colors.yellow.shade700),
-                                        // 上: PN(緑)
+                                            Colors.yellow.shade400),
+                                        // 上: PN(緑) — 淡め
                                         BarChartRodStackItem(mealK + enK, total,
-                                            Colors.green.shade300),
+                                            Colors.green.shade200),
                                       ],
                                     ),
                                   ]);
@@ -7382,11 +7372,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        _legItem(Colors.deepOrange.shade400,
+                                        _legItem(Colors.deepOrange.shade200,
                                             '食事 (kcal)', false),
-                                        _legItem(Colors.yellow.shade700,
+                                        _legItem(Colors.yellow.shade400,
                                             'EN (kcal)', false),
-                                        _legItem(Colors.green.shade300,
+                                        _legItem(Colors.green.shade200,
                                             'PN (kcal)', false),
                                         _legItem(Colors.blue.shade600,
                                             'IN (ml)', true),
@@ -7424,8 +7414,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               const SizedBox(height: 12),
               InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: () =>
-                    setState(() => _alertsExpanded = !_alertsExpanded),
+                onTap: () {
+                  setState(() => _alertsExpanded = !_alertsExpanded);
+                  widget.onSettingsChanged?.call();
+                },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(children: [
