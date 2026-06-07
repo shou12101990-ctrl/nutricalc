@@ -2911,6 +2911,20 @@ class _BuilderPageState extends State<BuilderPage>
     DateTime? fastingDate = current.fastingDate != null
         ? DateTime.tryParse(current.fastingDate!)
         : null;
+    int bedIdx =
+        int.tryParse(current.currentBed.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
+    bedIdx = bedIdx.clamp(1, 8);
+    // 患者・入室日（固定表示）
+    final admEntry =
+        current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
+    final admDateStr = admEntry == null
+        ? '—'
+        : (() {
+            final p = DateTime.tryParse(admEntry.changedAt);
+            return p == null
+                ? admEntry.changedAt
+                : '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}';
+          })();
 
     final saved = await showDialog<bool>(
       context: context,
@@ -2920,33 +2934,123 @@ class _BuilderPageState extends State<BuilderPage>
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DropdownButtonFormField<double>(
-                  initialValue: activity,
-                  decoration: const InputDecoration(labelText: '活動係数 (AF)'),
-                  items: [for (var i = 0; i < 7; i++) _factorItem(1.0 + i * 0.1, _afHints)],
-                  selectedItemBuilder: (context) => [
-                    for (var i = 0; i < 7; i++)
-                      Align(alignment: Alignment.centerLeft,
-                            child: Text((1.0 + i * 0.1).toStringAsFixed(1))),
-                  ],
-                  onChanged: (v) => setLocal(() => activity = v ?? activity),
+                // ── 患者 / 入室日 (固定表示) ──
+                Row(children: [
+                  const Icon(Icons.person, size: 16, color: Colors.black54),
+                  const SizedBox(width: 2),
+                  Text('患者${current.caseCode}',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 12),
+                  Icon(Icons.login, size: 14, color: Colors.green.shade500),
+                  const SizedBox(width: 2),
+                  Text('入室日 $admDateStr',
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.green.shade600)),
+                ]),
+                const Divider(height: 16),
+                // ── 絶食開始日 (編集可) ──
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(Icons.no_meals,
+                      size: 22,
+                      color: fastingDate == null
+                          ? Colors.grey.shade600
+                          : Colors.red.shade400),
+                  title: Text(
+                    fastingDate == null
+                        ? '絶食開始日: 未設定'
+                        : '絶食開始日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: fastingDate == null
+                            ? Colors.grey
+                            : Colors.red.shade400),
+                  ),
+                  trailing: fastingDate != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setLocal(() => fastingDate = null),
+                        )
+                      : const Icon(Icons.calendar_today, size: 18),
+                  onTap: () async {
+                    final picked = await _quickPickDate(
+                        context, fastingDate ?? DateTime.now());
+                    if (picked != null) setLocal(() => fastingDate = picked);
+                  },
                 ),
-                DropdownButtonFormField<double>(
-                  initialValue: stress,
-                  decoration: const InputDecoration(labelText: '侵害係数 (SF)'),
-                  items: [for (var i = 0; i < 13; i++) _factorItem(0.9 + i * 0.1, _sfHints)],
-                  selectedItemBuilder: (context) => [
-                    for (var i = 0; i < 13; i++)
-                      Align(alignment: Alignment.centerLeft,
-                            child: Text((0.9 + i * 0.1).toStringAsFixed(1))),
-                  ],
-                  onChanged: (v) => setLocal(() => stress = v ?? stress),
+                // ── ベッド (編集可・移動を反映) ──
+                Row(children: [
+                  Icon(Icons.bed, size: 18, color: Colors.blueGrey.shade600),
+                  const SizedBox(width: 6),
+                  Text('ベッド ${bedIdx.toString().padLeft(2, '0')}',
+                      style: const TextStyle(fontSize: 14)),
+                ]),
+                Slider(
+                  value: bedIdx.toDouble(),
+                  min: 1,
+                  max: 8,
+                  divisions: 7,
+                  label: bedIdx.toString().padLeft(2, '0'),
+                  onChanged: (v) => setLocal(() => bedIdx = v.toInt()),
                 ),
+                // ── AF / SF (横並び) ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<double>(
+                        initialValue: activity,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: '活動係数 (AF)', isDense: true),
+                        items: [
+                          for (var i = 0; i < 7; i++)
+                            _factorItem(1.0 + i * 0.1, _afHints)
+                        ],
+                        selectedItemBuilder: (context) => [
+                          for (var i = 0; i < 7; i++)
+                            Align(
+                                alignment: Alignment.centerLeft,
+                                child:
+                                    Text((1.0 + i * 0.1).toStringAsFixed(1))),
+                        ],
+                        onChanged: (v) =>
+                            setLocal(() => activity = v ?? activity),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<double>(
+                        initialValue: stress,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: '侵害係数 (SF)', isDense: true),
+                        items: [
+                          for (var i = 0; i < 13; i++)
+                            _factorItem(0.9 + i * 0.1, _sfHints)
+                        ],
+                        selectedItemBuilder: (context) => [
+                          for (var i = 0; i < 13; i++)
+                            Align(
+                                alignment: Alignment.centerLeft,
+                                child:
+                                    Text((0.9 + i * 0.1).toStringAsFixed(1))),
+                        ],
+                        onChanged: (v) =>
+                            setLocal(() => stress = v ?? stress),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // ── 目標タンパク ──
                 DropdownButtonFormField<double>(
-                  initialValue: protein,
-                  decoration:
-                      const InputDecoration(labelText: '目標タンパク (g/kg/day)'),
+                  initialValue: double.parse(protein.toStringAsFixed(1)),
+                  decoration: const InputDecoration(
+                      labelText: '目標タンパク (g/kg/day)', isDense: true),
                   items: [for (var i = 6; i <= 20; i++) i * 0.1]
                       .map((v) => DropdownMenuItem(
                           value: double.parse(v.toStringAsFixed(1)),
@@ -2955,17 +3059,17 @@ class _BuilderPageState extends State<BuilderPage>
                   onChanged: (v) => setLocal(() => protein = v ?? protein),
                 ),
                 const SizedBox(height: 12),
-                // ── 病態タグ: 選択すると病態別製剤が処方画面で上位(★)に出る ──
+                // ── 病態タグ (編集画面では常時展開) ──
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text('病態タグ',
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade700)),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
-                  runSpacing: -4,
+                  runSpacing: 6,
                   children: [
                     for (final c in ConditionCatalog.all)
                       FilterChip(
@@ -2993,33 +3097,6 @@ class _BuilderPageState extends State<BuilderPage>
                       hintText: '例: 糖尿病、CKDステージ3'),
                   maxLines: 2,
                 ),
-                // 絶食日
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.no_meals,
-                      size: 24,
-                      color: fastingDate == null
-                          ? Colors.grey.shade600
-                          : Colors.red.shade400),
-                  title: Text(
-                    fastingDate == null
-                        ? '絶食日: 未設定'
-                        : '絶食日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                        color: fastingDate == null ? Colors.grey : null),
-                  ),
-                  trailing: fastingDate != null
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () => setLocal(() => fastingDate = null),
-                        )
-                      : null,
-                  onTap: () async {
-                    final picked = await _quickPickDate(
-                        context, fastingDate ?? DateTime.now());
-                    if (picked != null) setLocal(() => fastingDate = picked);
-                  },
-                ),
               ],
             ),
           ),
@@ -3045,6 +3122,20 @@ class _BuilderPageState extends State<BuilderPage>
         .toList();
     current.fastingDate = fastingDate == null ? null
         : '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
+    // ベッド移動: 変更されていれば履歴に追加して currentBed を更新
+    final newBed = bedIdx.toString().padLeft(2, '0');
+    if (newBed != current.currentBed) {
+      current.bedHistory.insert(
+        0,
+        BedAssignment(
+          changedAt: DateTime.now().toIso8601String().split('T').first,
+          fromBed: current.currentBed,
+          toBed: newBed,
+          note: 'ベッド移動',
+        ),
+      );
+      current.currentBed = newBed;
+    }
     await widget.state.persist();
     setState(() {});
     widget.refresh();
