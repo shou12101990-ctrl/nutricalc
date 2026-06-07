@@ -3415,62 +3415,160 @@ class MasterPage extends StatefulWidget {
 
 class _MasterPageState extends State<MasterPage> {
   String category = 'EN';
+  String _query = '';
+
+  static const _masterCats = [
+    'EN', 'TPN', 'PPN', '食事', '電解質', '微量元素', 'ビタミン'
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     // EN: EN本体/補助 + 両用food(alsoEn) を表示 / 食事: 濃厚流動食+栄養サポートを統合
-    final items = category == 'EN'
+    final all = category == 'EN'
         ? widget.state.catalog.products.where((p) => p.inEnTab).toList()
         : category == '食事'
             ? widget.state.catalog.products.where((p) => p.isFood).toList()
             : widget.state.catalog.byCategory(category);
+    final q = _query.trim().toLowerCase();
+    final items = q.isEmpty
+        ? all
+        : all
+            .where((p) =>
+                p.name.toLowerCase().contains(q) ||
+                p.content.toLowerCase().contains(q))
+            .toList();
+    final total = widget.state.catalog.products.length;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Center(
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'EN', label: Text('EN')),
-                ButtonSegment(value: 'TPN', label: Text('TPN')),
-                ButtonSegment(value: 'PPN', label: Text('PPN')),
-                ButtonSegment(value: '食事', label: Text('食事')),
-                ButtonSegment(value: '電解質', label: Text('電解質')),
-                ButtonSegment(value: '微量元素', label: Text('微量元素')),
-                ButtonSegment(value: 'ビタミン', label: Text('ビタミン')),
-              ],
-              selected: {category},
-              showSelectedIcon: false,
-              onSelectionChanged: (newSel) =>
-                  setState(() => category = newSel.first),
+        // ── ヘッダ: タイトル + 製剤数合計 ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+          child: Row(
+            children: [
+              Text('製剤マスタ',
+                  style: theme.textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('全 $total 製剤',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+        // ── 検索 ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+          child: TextField(
+            onChanged: (v) => setState(() => _query = v),
+            decoration: InputDecoration(
+              hintText: '製剤名・性状で検索',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-            category == '食事'
-                ? '食事(経口リハ)期の製剤。EN印は経腸でも使用可'
-                : '院内採用薬を選択（容量はチップで選択）',
-            style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 12),
-        // 「食事」タブは 濃厚流動食 / 栄養サポート食品 のサブセクションに分けて表示
-        if (category == '食事') ...[
-          for (final sub in const ['濃厚流動食', '栄養サポート食品'])
-            ...(() {
-              final subItems =
-                  items.where((p) => p.category == sub).toList();
-              if (subItems.isEmpty) return <Widget>[];
-              return [
-                _foodSectionHeader(sub),
-                ..._groupCards(subItems),
-              ];
-            })(),
-        ] else
-          // 同一ベース名(容量違い)を1項目に集約
-          ..._groupCards(items),
+        // ── カテゴリチップ (横スクロール) ──
+        SizedBox(
+          height: 42,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            children: [
+              for (final c in _masterCats)
+                _catChip(c, category == c,
+                    () => setState(() => category = c)),
+            ],
+          ),
+        ),
+        // ── 説明 + 件数 ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                    category == '食事'
+                        ? '食事(経口リハ)期の製剤。EN印は経腸でも使用可'
+                        : '院内採用薬を選択（容量はチップで選択）',
+                    style: theme.textTheme.bodySmall),
+              ),
+              Text('${items.length}件',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: Colors.black45)),
+            ],
+          ),
+        ),
+        // ── リスト ──
+        Expanded(
+          child: items.isEmpty
+              ? const Center(
+                  child: Text('該当する製剤がありません',
+                      style: TextStyle(color: Colors.black45)))
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  children: [
+                    // 「食事」タブは 濃厚流動食 / 栄養サポート食品 に分割表示
+                    if (category == '食事') ...[
+                      for (final sub in const ['濃厚流動食', '栄養サポート食品'])
+                        ...(() {
+                          final subItems =
+                              items.where((p) => p.category == sub).toList();
+                          if (subItems.isEmpty) return <Widget>[];
+                          return [
+                            _foodSectionHeader(sub),
+                            ..._groupCards(subItems),
+                          ];
+                        })(),
+                    ] else
+                      ..._groupCards(items),
+                  ],
+                ),
+        ),
       ],
+    );
+  }
+
+  /// 麻酔薬リファレンス風 カテゴリ選択チップ
+  Widget _catChip(String label, bool selected, VoidCallback onTap) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        showCheckmark: false,
+        selectedColor: scheme.primary,
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.black87,
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+        ),
+        backgroundColor: Colors.white,
+        side: BorderSide(color: scheme.primary.withValues(alpha: 0.3)),
+      ),
     );
   }
 
@@ -4667,6 +4765,8 @@ class NutritionCalculator {
     Product? aminoProduct,
     Product? lipidProduct,
     double minEnKcal = 0, // 単調増加制約: 前日のEN kcal以上を要求
+    List<Product> mealProducts = const [], // 食事(濃厚流動食/栄養サポート)
+    double mealFrac = 0, // 食事で供給する目標割合(0..1, 経口リハ期に使用)
   }) {
     // ゼロmenu(静注ブレンド)のitem群を構築
     List<DesignItem> buildZeroItems(double tKcal) {
@@ -4729,6 +4829,53 @@ class NutritionCalculator {
             kcal: (pp.kcal ?? 0) * add,
             proteinG: (pp.aminoAcidG ?? 0) * add));
       }
+    }
+
+    // 食事(経口リハ): 濃厚流動食で mealFrac×目標 を経口供給し、
+    //   残りを EN(経管) で漸減補完。食事が増えるほど EN は自然に減る。
+    if (mode == '食事') {
+      final meals = mealProducts
+          .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
+          .toList();
+      final items = <DesignItem>[];
+      final mealKcalTarget = mealFrac * dayTargetKcal;
+      final mealProtTarget = mealFrac * dayTargetProt;
+      if (meals.isNotEmpty && mealKcalTarget > 0) {
+        final mp = _designWithBase(
+            meals, const [], mealKcalTarget, mealProtTarget, '食事',
+            maxBase: 2);
+        if (mp != null) items.addAll(mp.items);
+      }
+      final mealKcal = items.fold<double>(0, (s, it) => s + it.kcal);
+      // 残りを EN(経管) 1製剤で補完(食事増加に伴い漸減)
+      final restKcal =
+          (dayTargetKcal - mealKcal).clamp(0, double.infinity).toDouble();
+      final ensAvail = enProducts
+          .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
+          .toList();
+      double enFillKcal = 0;
+      if (restKcal > 60 && ensAvail.isNotEmpty) {
+        final p = ensAvail.first;
+        final pacKcal = (p.kcal ?? 0).toDouble();
+        if (pacKcal > 0) {
+          final pac = (restKcal / pacKcal).floor().clamp(0, 9);
+          if (pac > 0) {
+            final double vol = pac * (p.volumeMl ?? 0.0);
+            enFillKcal = (p.kcal ?? 0) * pac;
+            items.add(DesignItem(
+                name: p.name,
+                units: pac,
+                volumeMl: vol,
+                kcal: enFillKcal,
+                proteinG: (p.aminoAcidG ?? 0) * pac));
+          }
+        }
+      }
+      // タンパク不足は高濃度AA(PPN)で補正
+      final curK = items.fold<double>(0, (s, it) => s + it.kcal);
+      final curP = items.fold<double>(0, (s, it) => s + it.proteinG);
+      addPpnProtein(items, curK, curP);
+      return DesignPlan(label: 'Day', items: items, enKcal: enFillKcal);
     }
 
     // EN baseのitem群＋PN主剤(pnBase)を渡して、PN自動減量＋PPN補正で1日プランを完成
@@ -5485,10 +5632,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   late List<double> _dayPercents; // 各Dayの達成目標%
   late List<String> _dayModes; // 各Dayのクラス
   late List<String> _dayEnDose; // 各DayのEN投与 ('0'/'r20'(速度)/'p3'(pac))
+  late List<double> _dayMealFrac; // 各Dayの食事(経口)供給割合(0..1)
 
   // EN食上げ固定シーケンス(7日): 10→20→30→40ml/h → 1pac朝昼夕(3) → 2pac朝昼夕(6) → EN単独full
   static const _enRampSequence = ['r10', 'r20', 'r30', 'r40', 'p3', 'p6', 'p6'];
   static const _enRampDays = 7;
+  // 経口リハ食上げ(開始日から+5日=計6日): 食事割合を漸増しENを漸減
+  static const _mealRampDays = 6;
 
   @override
   void initState() {
@@ -5545,6 +5695,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       .byCategory(cat)
       .where((p) => widget.state.isAdopted(p.id))
       .toList();
+
+  /// 食事(経口リハ)用の採用製剤: 濃厚流動食+栄養サポート。未採用なら全食事製剤。
+  List<Product> _adoptedMeals() {
+    final adopted = widget.state.catalog.products
+        .where((p) => p.isFood && widget.state.isAdopted(p.id))
+        .toList();
+    if (adopted.isNotEmpty) return adopted;
+    return widget.state.catalog.products.where((p) => p.isFood).toList();
+  }
 
   /// EN製剤を全日程で1製剤に固定するための選択。
   /// 40ml/h連続投与(=ピーク)でtargetKcalを超えず、できるだけ目標に近い製剤を選ぶ。
@@ -5613,6 +5772,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       'TPN+EN' => 'EN+PN',
       'EN' => 'EN',
       'ZERO' => 'ゼロmenu',
+      '食事' => '食事',
       _ => mode,
     };
     // PN部分がゼロmenuにフォールバックした場合の表記
@@ -5621,6 +5781,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       'TPN' => Colors.blue,
       'TPN+EN' => Colors.teal,
       'EN' => Colors.yellow.shade700,
+      '食事' => Colors.orange.shade700,
       _ => Colors.grey,
     };
     return Container(
@@ -5641,7 +5802,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   //   EN食上げ(enStartDay以降7日): 10→20→30→40ml/h → 1pac→2pac朝昼夕、PNは自動減量、最終日はEN単独full
   void _rebuildDays() {
     if (_enStartDay < 1) _enStartDay = 1;
-    _totalDays = _enStartDay + _enRampDays - 1;
+    final enEnd = _enStartDay + _enRampDays - 1;
+    final oral = _oralRehabStartDay;
+    // 経口リハ開始日+5日(計6日)まで延長
+    final mealEnd = oral != null ? oral + _mealRampDays - 1 : 0;
+    _totalDays = enEnd > mealEnd ? enEnd : mealEnd;
     // 設定変更を親(チャートパネル)に通知
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onSettingsChanged?.call();
@@ -5657,6 +5822,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     });
     _dayModes = List.generate(n, (i) {
       final day = i + 1;
+      if (oral != null && day >= oral) return '食事'; // 経口リハ期は食事主体
       if (day < _enStartDay) return 'TPN'; // EN導入前はPNのみ
       final step = (day - _enStartDay).clamp(0, _enRampDays - 1);
       if (step == _enRampDays - 1) return 'EN'; // 最終ステップはEN単独full
@@ -5664,9 +5830,17 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     });
     _dayEnDose = List.generate(n, (i) {
       final day = i + 1;
+      if (oral != null && day >= oral) return '0'; // 食事期のENは食事ロジック側で補完
       if (day < _enStartDay) return '0';
       final step = (day - _enStartDay).clamp(0, _enRampDays - 1);
       return _enRampSequence[step];
+    });
+    _dayMealFrac = List.generate(n, (i) {
+      final day = i + 1;
+      if (oral == null || day < oral) return 0.0;
+      final d = day - oral; // 0..5
+      // 食事割合 40%→100% (経口リハ開始から+5日で全量経口)
+      return (0.4 + 0.12 * d).clamp(0.0, 1.0);
     });
   }
 
@@ -5685,6 +5859,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final tpnAll = sortFav(_adopted('TPN'));
     final tpnList = tpnAll;
     final ppnList = sortFav(_adopted('PPN'));
+    final mealList = sortFav(_adoptedMeals());
     // _pnProduct が採用TPNに無ければ先頭にフォールバック
     if (_pnProduct == null || !tpnAll.any((p) => p.id == _pnProduct!.id)) {
       _pnProduct = tpnAll.isNotEmpty ? tpnAll.first : null;
@@ -5709,9 +5884,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         aminoProduct: widget.state.adoptedByBase('アミパレン'),
         lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
         minEnKcal: prevEnKcal,
+        mealProducts: mealList,
+        mealFrac: _dayMealFrac[i],
       );
       dayPlans.add(plan);
-      if (plan.enKcal > 0) prevEnKcal = plan.enKcal;
+      if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
     }
 
     final screenH = MediaQuery.of(context).size.height;
@@ -5927,8 +6104,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                     DropdownMenuItem<int?>(
                                         value: d, child: Text('$d'))),
                               ],
-                              onChanged: (v) =>
-                                  setState(() => _oralRehabStartDay = v),
+                              onChanged: (v) => setState(() {
+                                _oralRehabStartDay = v;
+                                _rebuildDays(); // 食事フェーズを再生成
+                              }),
                             ),
                           ],
                         ),
@@ -6008,6 +6187,24 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       color: Colors.brown.shade700)),
                             ),
                           ],
+                          if (mode == '食事') ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                    color: Colors.orange.shade400, width: 0.8),
+                              ),
+                              child: Text(
+                                  '経口 ${(_dayMealFrac[i] * 100).round()}%',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.orange.shade800)),
+                            ),
+                          ],
                           const Spacer(),
                           const Icon(Icons.touch_app,
                               size: 14, color: Colors.grey),
@@ -6053,9 +6250,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     double s = 0;
     for (final it in plan.items) {
       final p = widget.state.catalog.byName(it.name);
-      if (p != null && (p.category == 'EN' || p.category == 'EN_AUX')) {
+      // 食事(濃厚流動食/栄養サポート)はEN扱いしない。EN本体/補助のみ集計
+      if (p != null && !p.isFood &&
+          (p.category == 'EN' || p.category == 'EN_AUX')) {
         s += it.kcal;
       }
+    }
+    return s;
+  }
+
+  // 食事(経口リハ)由来kcal: 濃厚流動食/栄養サポート製剤の合計
+  double _mealKcalOfPlan(DesignPlan plan) {
+    double s = 0;
+    for (final it in plan.items) {
+      final p = widget.state.catalog.byName(it.name);
+      if (p != null && p.isFood) s += it.kcal;
     }
     return s;
   }
@@ -6082,8 +6291,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               aminoProduct: widget.state.adoptedByBase('アミパレン'),
               lipidProduct: widget.state.adoptedByBase('イントラリポス20%'),
               minEnKcal: prevEnKcalChart,
+              mealProducts: _adoptedMeals(),
+              mealFrac: _dayMealFrac[i],
             );
-      if (p.enKcal > 0) prevEnKcalChart = p.enKcal;
+      if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
       designPlans.add(p);
     }
 
@@ -6105,6 +6316,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     ];
 
     final enKcals = plans.map(_enKcalOfPlan).toList();
+    final mealKcals = plans.map(_mealKcalOfPlan).toList();
     final ins = plans.map((p) => p.totalVolumeMl).toList();
     final prots = plans.map((p) => p.totalProteinG).toList();
     final n = plans.length;
@@ -6412,7 +6624,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         child: ClipRect(
                           child: Stack(
                             children: [
-                              // ① 積み上げ棒: カロリー内訳 (PN+EN)
+                              // ① 積み上げ棒: カロリー内訳 (下→上: PN→EN→食事)
                               BarChart(BarChartData(
                                 alignment: BarChartAlignment.spaceAround,
                                 minY: 0,
@@ -6420,17 +6632,25 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                 barTouchData: BarTouchData(enabled: false),
                                 barGroups: List.generate(n, (i) {
                                   final enK = enKcals[i];
+                                  final mealK = mealKcals[i];
                                   final total = plans[i].totalKcal;
+                                  final pnK = (total - enK - mealK)
+                                      .clamp(0.0, double.infinity);
                                   return BarChartGroupData(x: i, barRods: [
                                     BarChartRodData(
                                       toY: total,
                                       width: 16,
                                       borderRadius: BorderRadius.circular(2),
                                       rodStackItems: [
+                                        // 下: PN(緑)
                                         BarChartRodStackItem(
-                                            0, enK, Colors.yellow.shade700),
-                                        BarChartRodStackItem(
-                                            enK, total, Colors.green.shade300),
+                                            0, pnK, Colors.green.shade300),
+                                        // 中: EN(黄)
+                                        BarChartRodStackItem(pnK, pnK + enK,
+                                            Colors.yellow.shade700),
+                                        // 上: 食事(橙)
+                                        BarChartRodStackItem(pnK + enK, total,
+                                            Colors.orange.shade400),
                                       ],
                                     ),
                                   ]);
@@ -6554,6 +6774,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
+                                        _legItem(Colors.orange.shade700,
+                                            '食事 (kcal)', false),
                                         _legItem(Colors.yellow.shade700,
                                             'EN (kcal)', false),
                                         _legItem(Colors.green.shade300,
@@ -6562,8 +6784,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                             'IN (ml)', true),
                                         _legItem(Colors.pink.shade300,
                                             'AA (g)', true),
-                                        _legItem(Colors.orange.shade700,
-                                            '食事', false),
                                       ],
                                     ),
                                   ),
