@@ -6351,7 +6351,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final color = switch (mode) {
       'TPN' => Colors.blue,
       'TPN+EN' => Colors.teal,
-      'EN' => Colors.yellow.shade700,
+      'EN' => Colors.amber.shade700,
       '食事' => Colors.deepOrange.shade400,
       _ => Colors.grey,
     };
@@ -6618,12 +6618,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           ),
                         ),
                       ]),
-                      // 行3: EN導入
+                      // 行3: EN導入 (色はグラフのEN(アンバー)と統一)
                       TableRow(children: [
-                        const Padding(
-                          padding: EdgeInsets.only(right: 8, bottom: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8, bottom: 6),
                           child: Text('EN導入:',
-                              style: TextStyle(fontSize: 13)),
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.amber.shade700)),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -6657,7 +6658,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           padding: const EdgeInsets.only(right: 8, bottom: 6),
                           child: Text('経口リハ導入:',
                               style: TextStyle(
-                                  fontSize: 13, color: Colors.teal.shade700)),
+                                  fontSize: 13, color: Colors.red.shade400)),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -7069,7 +7070,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         if (flags[1]) mkIconBox(Icons.bed,         Colors.blueGrey.shade400),
         // 栄養開始(=PN/輸液開始)は点滴(water_drop)アイコン。
         if (flags[2]) mkIconBox(Icons.water_drop,  Colors.blue.shade600),
-        if (flags[3]) mkBox('EN',   Colors.yellow.shade700),
+        if (flags[3]) mkBox('EN',   Colors.amber.shade700),
         if (flags[4]) mkBox('full', Colors.green.shade700),
         // 経口リハ開始(濃厚流動食・栄サポ食品・一般食)はフォーク&ナイフアイコン。
         if (flags[5]) mkIconBox(Icons.restaurant,  Colors.deepOrange.shade400),
@@ -7245,7 +7246,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                             Colors.deepOrange.shade200),
                                         // 中: EN(黄) — 暗めのアンバー(白背景との視認性確保)
                                         BarChartRodStackItem(mealK, mealK + enK,
-                                            Colors.amber.shade600),
+                                            Colors.amber.shade700),
                                         // 上: PN(緑) — 淡め
                                         BarChartRodStackItem(mealK + enK, total,
                                             Colors.green.shade200),
@@ -7374,7 +7375,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       children: [
                                         _legItem(Colors.deepOrange.shade200,
                                             '食事 (kcal)', false),
-                                        _legItem(Colors.amber.shade600,
+                                        _legItem(Colors.amber.shade700,
                                             'EN (kcal)', false),
                                         _legItem(Colors.green.shade200,
                                             'PN (kcal)', false),
