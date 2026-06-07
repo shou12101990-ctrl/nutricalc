@@ -559,18 +559,11 @@ class CasesPage extends StatelessWidget {
                 // 絶食日
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Icon(Icons.restaurant_menu,
-                          size: 22, color: Colors.grey.shade600),
-                      Positioned(
-                        right: 0, bottom: 0,
-                        child: Icon(Icons.cancel,
-                            size: 13, color: Colors.red.shade400),
-                      ),
-                    ],
-                  ),
+                  leading: Icon(Icons.no_meals,
+                      size: 24,
+                      color: fastingDate == null
+                          ? Colors.grey.shade600
+                          : Colors.red.shade400),
                   title: Text(
                     fastingDate == null
                         ? '絶食日: 未設定'
@@ -1167,6 +1160,9 @@ class _BuilderPageState extends State<BuilderPage>
     processCategory('EN', _enRateMlPerHour);
     processCategory('TPN', _tpnRateMlPerHour);
     processCategory('PPN', _ppnRateMlPerHour);
+    // 食事(濃厚流動食・栄養サポート食品)を本数ベースで合算 (rate=0 → 全量)
+    processCategory('濃厚流動食', 0);
+    processCategory('栄養サポート食品', 0);
 
     // 加注製剤(電解質/微量元素/ビタミン)を合算
     for (final name in _zeroAdditives) {
@@ -1434,10 +1430,14 @@ class _BuilderPageState extends State<BuilderPage>
                 .byCategory('EN_AUX')
                 .where((p) => widget.state.isAdopted(p.id)),
           ]
-        : widget.state.catalog
-            .byCategory(category)
-            .where((p) => widget.state.isAdopted(p.id))
-            .toList();
+        : category == '食事'
+            ? widget.state.catalog.products
+                .where((p) => p.isFood && widget.state.isAdopted(p.id))
+                .toList()
+            : widget.state.catalog
+                .byCategory(category)
+                .where((p) => widget.state.isAdopted(p.id))
+                .toList();
     // 朝 > 昼 > 夕 > ★ > 未選択
     products.sort((a, b) {
       int groupOf(Product p) {
@@ -1725,15 +1725,22 @@ class _BuilderPageState extends State<BuilderPage>
                             SizedBox(
                               height: rowH,
                               child: Row(children: [
+                                // 長い加注製剤名は折り返さず、末尾を省略(…)して容量の手前で切る
                                 Expanded(
                                     child: Text(label,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                             fontSize: 13,
                                             color: color,
                                             fontWeight: bold
                                                 ? FontWeight.bold
                                                 : FontWeight.normal))),
+                                const SizedBox(width: 6),
                                 Text(val,
+                                    maxLines: 1,
+                                    softWrap: false,
                                     style: TextStyle(
                                         fontSize: 13,
                                         color: color,
@@ -1970,8 +1977,8 @@ class _BuilderPageState extends State<BuilderPage>
                                 if (activeCategories.isEmpty) {
                                   return const Text('採用製剤を製剤マスタで選択してください');
                                 }
-                                // 加注タブは常時選択可。EN/TPN/PPNは採用製剤がある時のみ
-                                final tabCats = [...activeCategories, '加注'];
+                                // 加注・食事タブは常時選択可。EN/TPN/PPNは採用製剤がある時のみ
+                                final tabCats = [...activeCategories, '加注', '食事'];
                                 final effectiveCategory =
                                     tabCats.contains(category)
                                         ? category
@@ -2017,7 +2024,8 @@ class _BuilderPageState extends State<BuilderPage>
                                         alignment: Alignment.centerLeft,
                                         child: Padding(
                                           padding: const EdgeInsets.only(left: 12),
-                                          child: effectiveCategory == '加注'
+                                          child: (effectiveCategory == '加注' ||
+                                                  effectiveCategory == '食事')
                                             ? const SizedBox.shrink()
                                             : effectiveCategory == 'EN'
                                             ? DropdownButton<double>(
@@ -2067,7 +2075,22 @@ class _BuilderPageState extends State<BuilderPage>
                                 const SizedBox(height: 8),
                                 _additivePicker(),
                               ],
-                              if (category != '加注') ...[
+                              if (category == '食事') ...[
+                                const SizedBox(height: 4),
+                                Text('経口/経腸の食事製剤（濃厚流動食・栄養サポート食品）。本数を指定',
+                                    style: Theme.of(context).textTheme.bodySmall),
+                                if (mainProducts.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                        '採用された食事製剤がありません（製剤マスタの「食事」タブで採用してください）',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(color: Colors.grey)),
+                                  ),
+                              ],
+                              if (category != '加注' && category != '食事') ...[
                                 const SizedBox(height: 4),
                                 Text('ENは8h毎, TPN/PPNは24h毎に交換',
                                     style: Theme.of(context).textTheme.bodySmall),
@@ -2451,6 +2474,11 @@ class _BuilderPageState extends State<BuilderPage>
                                                       final p = widget.state.catalog.byId(item.productId);
                                                       return p != null && (p.category == 'EN' || p.category == 'EN_AUX') && item.hasMealTiming;
                                                     }).toList();
+                                                    // 食事(濃厚流動食・栄養サポート食品): 本数指定のもの
+                                                    final foodItems = current.regimenItems.where((item) {
+                                                      final p = widget.state.catalog.byId(item.productId);
+                                                      return p != null && p.isFood && item.units > 0;
+                                                    }).toList();
                                                     Widget mealRow(String label, int Function(RegimenItem) getter) {
                                                       final items = enItems.where((i) => getter(i) > 0).toList();
                                                       if (items.isEmpty) return const SizedBox.shrink();
@@ -2463,7 +2491,7 @@ class _BuilderPageState extends State<BuilderPage>
                                                         child: Text('$label  $desc', style: ts),
                                                       );
                                                     }
-                                                    final hasAny = enItems.isNotEmpty || tpnUnits > 0 || ppnUnits > 0;
+                                                    final hasAny = enItems.isNotEmpty || tpnUnits > 0 || ppnUnits > 0 || foodItems.isNotEmpty || _zeroAdditives.isNotEmpty;
                                                     if (!hasAny) return const Text('(未選択)', style: TextStyle(fontSize: 12.5, color: Colors.grey));
                                                     return Column(
                                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2497,6 +2525,13 @@ class _BuilderPageState extends State<BuilderPage>
                                                           final rateMlH = (volMl / 24).round();
                                                           return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('PPN  ${p.name} ${pacs}本  ${rateMlH}ml/h', style: ts));
                                                         }),
+                                                        ...foodItems.map((i) {
+                                                          final p = widget.state.catalog.byId(i.productId)!;
+                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('食事  ${p.name} ${i.units}本', style: ts));
+                                                        }),
+                                                        ...scratchAdditiveLines.map((l) => Padding(
+                                                            padding: const EdgeInsets.only(bottom: 2),
+                                                            child: Text('加注  $l', style: ts))),
                                                       ],
                                                     );
                                                   }),
@@ -2794,18 +2829,11 @@ class _BuilderPageState extends State<BuilderPage>
                 // 絶食日
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Icon(Icons.restaurant_menu,
-                          size: 22, color: Colors.grey.shade600),
-                      Positioned(
-                        right: 0, bottom: 0,
-                        child: Icon(Icons.cancel,
-                            size: 13, color: Colors.red.shade400),
-                      ),
-                    ],
-                  ),
+                  leading: Icon(Icons.no_meals,
+                      size: 24,
+                      color: fastingDate == null
+                          ? Colors.grey.shade600
+                          : Colors.red.shade400),
                   title: Text(
                     fastingDate == null
                         ? '絶食日: 未設定'
