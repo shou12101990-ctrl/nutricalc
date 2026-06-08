@@ -7176,92 +7176,105 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       .where((p) => widget.state.isAdopted(p.id))
       .toList();
 
-  /// 簡易式 栄養係数(20/25/30 kcal/kg)の段階開始日 設定列。
+  /// 簡易式 栄養係数(20/25/30 kcal/kg)の段階開始日 設定。
+  /// イベント日付決定(絶食〜経口リハ)と同じテーブルに行として配置する。
   /// 既定は自動(EN/経口リハ開始日に連動)。チェックを外すと手動設定。
-  Widget _kcalStepColumn() {
+  List<TableRow> _kcalStepTableRows() {
     final enabled = !_kcalStepAuto;
-    Widget stepRow(String label, int value, ValueChanged<int> onCh) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(
-            width: 66,
-            child: Text(label,
+    TableRow dayRow(String label, Color color, int value, ValueChanged<int> onCh) {
+      return TableRow(children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8, bottom: 6),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.trending_up,
+                size: 13, color: enabled ? color : Colors.grey),
+            const SizedBox(width: 4),
+            Text(label,
                 style: TextStyle(
-                    fontSize: 12,
-                    color: enabled ? Colors.green.shade800 : Colors.grey)),
-          ),
-          const Text('Day ', style: TextStyle(fontSize: 12)),
-          SizedBox(
-            width: _dayDropW,
-            child: DropdownButton<int>(
-              value: value.clamp(1, 28),
-              isDense: true,
-              isExpanded: true,
-              items: List.generate(28, (i) => i + 1)
-                  .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
-                  .toList(),
-              onChanged: enabled
-                  ? (v) {
-                      if (v == null) return;
-                      setState(() {
-                        onCh(v);
-                        if (_kcalStep25Day < _kcalStep20Day) {
-                          _kcalStep25Day = _kcalStep20Day;
-                        }
-                        if (_kcalStep30Day < _kcalStep25Day) {
-                          _kcalStep30Day = _kcalStep25Day;
-                        }
-                        _rebuildDays();
-                      });
-                      _saveConfig();
-                      widget.onSettingsChanged?.call();
-                    }
-                  : null,
+                    fontSize: 13, color: enabled ? color : Colors.grey)),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Day ', style: TextStyle(fontSize: 13)),
+            SizedBox(
+              width: _dayDropW,
+              child: DropdownButton<int>(
+                value: value.clamp(1, 28),
+                isDense: true,
+                isExpanded: true,
+                items: List.generate(28, (i) => i + 1)
+                    .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
+                    .toList(),
+                onChanged: enabled
+                    ? (v) {
+                        if (v == null) return;
+                        setState(() {
+                          onCh(v);
+                          if (_kcalStep25Day < _kcalStep20Day) {
+                            _kcalStep25Day = _kcalStep20Day;
+                          }
+                          if (_kcalStep30Day < _kcalStep25Day) {
+                            _kcalStep30Day = _kcalStep25Day;
+                          }
+                          _rebuildDays();
+                        });
+                        _saveConfig();
+                        widget.onSettingsChanged?.call();
+                      }
+                    : null,
+              ),
             ),
-          ),
-        ]),
-      );
+          ]),
+        ),
+      ]);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('簡易式 栄養係数 step up (kcal/kg)',
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Colors.green.shade800)),
-        // 自動連動トグル: EN/経口リハ開始日に係数開始日を追従させる
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(
-            width: 24,
-            height: 24,
-            child: Checkbox(
-              value: _kcalStepAuto,
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              onChanged: (v) {
-                setState(() {
-                  _kcalStepAuto = v ?? true;
-                  if (_kcalStepAuto) _applyAutoKcalSteps();
-                  _rebuildDays();
-                });
-                _saveConfig();
-                widget.onSettingsChanged?.call();
-              },
+    return [
+      // 見出し + 自動連動チェックボックス
+      TableRow(children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8, bottom: 6),
+          child: Text('栄養係数 step up:',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800)),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: Checkbox(
+                value: _kcalStepAuto,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (v) {
+                  setState(() {
+                    _kcalStepAuto = v ?? true;
+                    if (_kcalStepAuto) _applyAutoKcalSteps();
+                    _rebuildDays();
+                  });
+                  _saveConfig();
+                  widget.onSettingsChanged?.call();
+                },
+              ),
             ),
-          ),
-          const SizedBox(width: 2),
-          const Text('自動(EN/リハ連動)', style: TextStyle(fontSize: 10)),
-        ]),
-        const SizedBox(height: 2),
-        stepRow('20 kcal/kg', _kcalStep20Day, (v) => _kcalStep20Day = v),
-        stepRow('25 kcal/kg', _kcalStep25Day, (v) => _kcalStep25Day = v),
-        stepRow('30 kcal/kg', _kcalStep30Day, (v) => _kcalStep30Day = v),
-      ],
-    );
+            const SizedBox(width: 2),
+            const Text('自動(EN/リハ連動)', style: TextStyle(fontSize: 11)),
+          ]),
+        ),
+      ]),
+      dayRow('20 kcal/kg', Colors.green.shade700, _kcalStep20Day,
+          (v) => _kcalStep20Day = v),
+      dayRow('25 kcal/kg', Colors.green.shade700, _kcalStep25Day,
+          (v) => _kcalStep25Day = v),
+      dayRow('30 kcal/kg', Colors.green.shade800, _kcalStep30Day,
+          (v) => _kcalStep30Day = v),
+    ];
   }
 
   /// 食事(経口リハ)用の採用製剤: 濃厚流動食+栄養サポート。未採用なら全食事製剤。
@@ -7372,7 +7385,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   void _applyAutoKcalSteps() {
     _kcalStep20Day = 1;
     _kcalStep25Day = _enStartDay.clamp(1, 28);
-    final oral = _oralRehabStartDay ?? (_enStartDay + _enRampDays);
+    // 経口リハ以降=30(full)。経口リハ未設定ならEN full達成日(=enStart+enRampDays-1)で到達。
+    final oral = _oralRehabStartDay ?? (_enStartDay + _enRampDays - 1);
     _kcalStep30Day = oral.clamp(_kcalStep25Day, 28);
   }
 
@@ -7384,6 +7398,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // 経口リハ開始日+5日(計6日)まで延長
     final mealEnd = oral != null ? oral + _mealRampDays - 1 : 0;
     _totalDays = enEnd > mealEnd ? enEnd : mealEnd;
+    // full達成(step30)が最終日を超えると永遠にfullに到達しないため、最終日までにクランプ。
+    if (_kcalStepAuto && _totalDays > 0 && _kcalStep30Day > _totalDays) {
+      _kcalStep30Day = _totalDays;
+      if (_kcalStep25Day > _kcalStep30Day) _kcalStep25Day = _kcalStep30Day;
+    }
     // 設定変更を親(チャートパネル)に通知
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onSettingsChanged?.call();
@@ -7706,13 +7725,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           ),
                         ),
                       ]),
+                      // 栄養係数 step up(20/25/30 kcal/kg)の段階開始日を同テーブルに配置
+                      ..._kcalStepTableRows(),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  const Divider(height: 1),
-                  const SizedBox(height: 8),
-                  // 簡易式 栄養係数の段階開始日(自動/手動 切替)
-                  _kcalStepColumn(),
                   const SizedBox(height: 4),
                   const Text('★ お気に入り製剤を優先して設計します',
                       style: TextStyle(fontSize: 11, color: Colors.grey)),
