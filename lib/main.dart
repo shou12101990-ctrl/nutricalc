@@ -7935,9 +7935,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rawKcal < cap ? rawKcal : cap;
   }
 
-  /// 各日の目標kcal(full nutrition)= 等差ランプ ∧ 係数上限(ce.acutePhaseTargetKcal)。
-  /// タンパクは permissive underfeeding でも **full を維持**(カロリーのみ制限)する。
-  ///   → 急性期にAA目標が落ち込まない(蛋白は確保するのが臨床的に正しい)。
+  /// 各日の目標。kcal = 等差ランプ ∧ 係数上限(ce.acutePhaseTargetKcal)。
+  /// タンパクも同じ等差ランプ(day1=15〜30%→full達成日で100%)で増やす(係数上限は掛けない)。
+  /// 等差なので単調増加=AAが途中でへこまない。
   ({double kcal, double prot}) _acutePhaseTarget(int i) {
     final realFull = NutritionCalculator.targetEnergy(widget.current);
     final realProt = NutritionCalculator.targetProtein(widget.current);
@@ -7952,7 +7952,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       kcal25UntilDay: _kcalStep25Day,
     );
     final cappedKcal = _refeedCappedKcal(i, raw);
-    return (kcal: cappedKcal, prot: realProt);
+    // タンパクもカロリーと同じ等差ランプ(day1=15〜30%→full達成日で100%)で増やす。
+    final protFrac =
+        ce.acutePhaseRampFraction(day: i + 1, fullAchieveDay: _rampDays);
+    return (kcal: cappedKcal, prot: realProt * protFrac);
   }
 
   /// 1日プランの電解質・微量元素・ビタミンUL超過アラート。

@@ -65,6 +65,32 @@ void main() {
     });
   });
 
+  group('タンパクの等差ランプ(acutePhaseRampFraction: 係数上限なし)', () {
+    test('N=5: day1=20%→ day5=100% を毎日等差', () {
+      expect(acutePhaseRampFraction(day: 1, fullAchieveDay: 5),
+          closeTo(0.20, 0.001));
+      expect(acutePhaseRampFraction(day: 2, fullAchieveDay: 5),
+          closeTo(0.40, 0.001));
+      expect(acutePhaseRampFraction(day: 3, fullAchieveDay: 5),
+          closeTo(0.60, 0.001));
+      expect(acutePhaseRampFraction(day: 5, fullAchieveDay: 5),
+          closeTo(1.00, 0.001));
+    });
+    test('day1割合は[15%,30%]にクランプ(N=12→15%, N=3→30%)', () {
+      expect(acutePhaseRampFraction(day: 1, fullAchieveDay: 12),
+          closeTo(0.15, 0.001));
+      expect(acutePhaseRampFraction(day: 1, fullAchieveDay: 3),
+          closeTo(0.30, 0.001));
+    });
+    test('単調非減少', () {
+      for (var d = 1; d < 8; d++) {
+        expect(acutePhaseRampFraction(day: d + 1, fullAchieveDay: 8),
+            greaterThanOrEqualTo(
+                acutePhaseRampFraction(day: d, fullAchieveDay: 8) - 1e-9));
+      }
+    });
+  });
+
   group('effectiveFullDay(設定上のfull達成と実到達日の分離)', () {
     test('60kg/full1800/N=5/25〜day4 → 実到達day5', () {
       expect(

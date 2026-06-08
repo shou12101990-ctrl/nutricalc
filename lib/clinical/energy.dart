@@ -90,6 +90,15 @@ double mifflinStJeorRee({
 ///
 /// 目標値(kcal/kg)に依らず初日は startFrac(≤30%)<full で、初日からfullにはならない(構造的保証)。
 /// day は栄養開始からの日(1始まり)。Refeeding cap は呼び出し側で別途適用する。
+/// 急性期 等差ランプの割合(0〜1)。day1 = (1/N) を [0.15, 0.30] にクランプ、dayN(=fullAchieveDay) = 1.0。
+/// 係数上限(20/25kcal/kg)は含まない純粋な等差。カロリーとタンパクの両方で共有する。
+double acutePhaseRampFraction({required int day, required int fullAchieveDay}) {
+  final f = fullAchieveDay > 1 ? fullAchieveDay : 2;
+  final startFrac = (1.0 / f).clamp(0.15, 0.30);
+  final t = ((day - 1) / (f - 1)).clamp(0.0, 1.0);
+  return startFrac + (1.0 - startFrac) * t;
+}
+
 double acutePhaseTargetKcal({
   required int day,
   required double feedingWeightKg,
@@ -103,11 +112,9 @@ double acutePhaseTargetKcal({
   // 係数上限を full に対する割合へ換算(本来 full を超えない)
   final ceil20 = (20.0 * fw / realFullKcal).clamp(0.0, 1.0);
   final ceil25 = (25.0 * fw / realFullKcal).clamp(0.0, 1.0);
-  // 真の等差ランプ: day1=startFrac(=1/N を15〜30%にクランプ) → full達成日(N)=1.0。
-  final f = fullAchieveDay > 1 ? fullAchieveDay : 2;
-  final startFrac = (1.0 / f).clamp(0.15, 0.30);
-  final t = ((day - 1) / (f - 1)).clamp(0.0, 1.0);
-  final rampFrac = startFrac + (1.0 - startFrac) * t;
+  // 真の等差ランプ: day1=(1/N を15〜30%にクランプ) → full達成日(N)=1.0。
+  final rampFrac =
+      acutePhaseRampFraction(day: day, fullAchieveDay: fullAchieveDay);
   // permissive underfeeding 上限
   final double ceilFrac;
   if (day <= kcal20UntilDay) {
