@@ -133,24 +133,15 @@ EnergyResult targetEnergy({
         basisLabel: 'Mifflin×AF×SF',
       );
     case EnergyModel.kcalPerKg:
-      if (bmi >= 30 && bmi <= 50) {
-        // BMI 30–50: 実体重 × 11–14（中央12.5）
+      if (bmi >= 30) {
+        // 肥満(BMI≥30, ESPEN): 補正体重 × 20–25 kcal/kg（中央22.5）
+        final abw = adjustedBodyWeight(actualKg: weightKg, ibwKg: ibw);
         return EnergyResult(
-          kcal: weightKg * 12.5,
-          feedingWeightKg: weightKg,
+          kcal: abw * 22.5,
+          feedingWeightKg: abw,
           idealWeightKg: ibw,
           actualWeightKg: weightKg,
-          basisLabel: '肥満 実体重×12.5 (ASPEN)',
-        );
-      }
-      if (bmi > 50) {
-        // BMI>50: IBW × 22–25（中央23.5）
-        return EnergyResult(
-          kcal: ibw * 23.5,
-          feedingWeightKg: ibw,
-          idealWeightKg: ibw,
-          actualWeightKg: weightKg,
-          basisLabel: '高度肥満 理想体重×23.5 (ASPEN)',
+          basisLabel: '肥満 補正体重×22.5 (ESPEN)',
         );
       }
       return EnergyResult(

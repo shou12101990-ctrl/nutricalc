@@ -59,8 +59,8 @@ void main() {
       expect(r.kcal, closeTo(72 * 25, 0.01)); // 正常域→実体重72
     });
 
-    test('kcal/kg 肥満 BMI30–50 → 実体重×12.5', () {
-      // 男170 95kg(BMI32.9)
+    test('kcal/kg 肥満 BMI≥30 → 補正体重×22.5 (ESPEN)', () {
+      // 男170 95kg(BMI32.9) IBW66.2 → ABW=66.2+0.25×28.8=73.4
       final r = targetEnergy(
         model: EnergyModel.kcalPerKg,
         isMale: true,
@@ -70,11 +70,12 @@ void main() {
         activityFactor: 1.0,
         stressFactor: 1.0,
       );
-      expect(r.kcal, closeTo(95 * 12.5, 0.01));
+      expect(r.kcal, closeTo(73.4 * 22.5, 0.5));
+      expect(r.feedingWeightKg, closeTo(73.4, 0.1));
     });
 
-    test('kcal/kg 高度肥満 BMI>50 → IBW×23.5', () {
-      // 男170 150kg(BMI51.9) IBW66.2
+    test('kcal/kg 高度肥満 BMI>50 も補正体重×22.5', () {
+      // 男170 150kg(BMI51.9) IBW66.2 → ABW=66.2+0.25×83.8=87.15
       final r = targetEnergy(
         model: EnergyModel.kcalPerKg,
         isMale: true,
@@ -84,7 +85,7 @@ void main() {
         activityFactor: 1.0,
         stressFactor: 1.0,
       );
-      expect(r.kcal, closeTo(66.2 * 23.5, 0.5));
+      expect(r.kcal, closeTo(87.15 * 22.5, 0.5));
     });
 
     test('間接熱量測定 = 実測REE×AF', () {

@@ -55,8 +55,18 @@ double feedingWeight({
     }
     return actualKg;
   }
-  if (bmi <= 50) return actualKg;
-  return ibw;
+  // 肥満(BMI≥30): ESPEN — 補正体重を使用
+  return adjustedBodyWeight(actualKg: actualKg, ibwKg: ibw);
+}
+
+/// 肥満区分（日本肥満学会基準・BMI）。
+String obesityClass(double bmi) {
+  if (bmi < 18.5) return '低体重';
+  if (bmi < 25) return '普通体重';
+  if (bmi < 30) return '肥満(1度)';
+  if (bmi < 35) return '肥満(2度)';
+  if (bmi < 40) return '肥満(3度)';
+  return '肥満(4度)';
 }
 
 /// 体重の内訳（UI透明性表示用）。

@@ -78,27 +78,36 @@ class MicroAlert {
 
 String _f(double v, [int d = 1]) => v.toStringAsFixed(d);
 
-/// 日次集計から UL 超過等のアラートを生成。
-/// isMale: ULの性差（Zn/Se）に使用。longTermTpn: Mn神経毒性の追加注意。
+/// 日次集計から UL 超過＋病態別ガイダンスのアラートを生成。
+/// isMale: ULの性差(Zn/Se)。longTermTpn: Mn神経毒性。
+/// cholestasis/liver: Mn-free切替・Cu減量。renal: Cr/Mn蓄積。crrt: Se/B1喪失補充。
+/// giLoss: Zn喪失補充。glucoseLoad+wernickeRisk: チアミン×糖負荷の安全インターロック。
 List<MicroAlert> microAlerts(
   MicroTotals t, {
   bool isMale = true,
   bool longTermTpn = false,
+  bool cholestasis = false,
+  bool liver = false,
+  bool renal = false,
+  bool crrt = false,
+  bool giLoss = false,
+  bool glucoseLoad = false,
+  bool wernickeRisk = false,
 }) {
   final out = <MicroAlert>[];
 
   // ── Na（食塩負荷）──
+  // カットオフ: 食塩7 g/日(HTなし成人の目標値)超で黄、9.6 g/日(日本人平均摂取量)以上で赤。
   final na = t.of('elec', 'Na');
-  if (na > ClinicalConst.salt6gNaMEq) {
+  if (na > ClinicalConst.salt7gNaMEq) {
     final saltG = ClinicalConst.naMEqToSaltGrams(na);
-    final level =
-        na > ClinicalConst.salt7_5gNaMEq ? AlertLevel.danger : AlertLevel.caution;
+    final isDanger = na >= ClinicalConst.salt9_6gNaMEq;
     out.add(MicroAlert(
       nutrient: 'Na',
-      level: level,
+      level: isDanger ? AlertLevel.danger : AlertLevel.caution,
       value: na,
-      message:
-          'Na ${_f(na)} mEq/日 = 食塩 ${_f(saltG)} g/日 相当、厚労省の治療目標(6 g/日)を上回る',
+      message: 'Na ${_f(na)} mEq/日 = 食塩 ${_f(saltG)} g/日 相当、'
+          '${isDanger ? '日本人の平均食塩摂取量(9.6 g/日)以上' : 'HTなし成人の目標値(7 g/日)を超過'}',
     ));
   }
 
@@ -180,6 +189,14 @@ List<MicroAlert> microAlerts(
       message:
           'Mn ${_f(mn)} μmol/日 が耐容上限(11 mg)を超過。胆汁うっ滞・長期TPNで神経毒性(淡蒼球蓄積)、減量/中止を検討',
     ));
+  } else if ((cholestasis || liver) && mn > 0) {
+    out.add(MicroAlert(
+      nutrient: 'Mn',
+      level: AlertLevel.danger,
+      value: mn,
+      message:
+          'Mn含有製剤を胆汁うっ滞/肝障害で投与中。胆汁排泄低下で淡蒼球に蓄積(パーキンソン様)。Mn-free製剤(ボルビサール)へ切替を。胆道閉塞ではMn製剤禁忌',
+    ));
   } else if (longTermTpn && mn > 0) {
     out.add(MicroAlert(
       nutrient: 'Mn',
@@ -232,6 +249,54 @@ List<MicroAlert> microAlerts(
       level: AlertLevel.caution,
       value: vd,
       message: 'ビタミンD ${_f(vd)} μg/日 が耐容上限(100 μg=4000 IU)を超過、高Ca血症に注意',
+    ));
+  }
+
+  // ── 病態別ガイダンス（過剰回避・不足の再評価）──
+  final cuCtx = t.of('trace', 'Cu');
+  if ((cholestasis || liver) && cuCtx > 0 && cuCtx <= 110.1) {
+    out.add(MicroAlert(
+      nutrient: 'Cu',
+      level: AlertLevel.caution,
+      value: cuCtx,
+      message:
+          'Cuは胆汁排泄。胆汁うっ滞/肝障害では減量しモニタ(血清Cu・セルロプラスミン)。ただし欠乏回避のためゼロにはしない',
+    ));
+  }
+  if (renal && !crrt) {
+    out.add(const MicroAlert(
+      nutrient: 'Cr/Mn',
+      level: AlertLevel.caution,
+      value: 0,
+      message:
+          '腎不全(非透析): Cr/Mnは蓄積側。Crは輸液汚染で充足し追加不要、複合微量元素は減量し血中濃度をモニタ',
+    ));
+  }
+  if (crrt) {
+    out.add(const MicroAlert(
+      nutrient: 'CRRT',
+      level: AlertLevel.caution,
+      value: 0,
+      message:
+          'CRRTで水溶性微量栄養素(Se/B1/Cu/葉酸/VitC)が喪失。Se・B1は2倍目安で補充し複合traceは継続、血中濃度をモニタ',
+    ));
+  }
+  if (giLoss) {
+    out.add(MicroAlert(
+      nutrient: 'Zn',
+      level: AlertLevel.caution,
+      value: t.of('trace', 'Zn'),
+      message:
+          '高排出消化管/下痢でZn喪失。腸液+12mg/L・便/ストマ+17mg/Lを上乗せ、Mg/K/Naも補充',
+    ));
+  }
+  if (glucoseLoad && wernickeRisk && t.of('vit', 'B1') < 3.0) {
+    out.add(MicroAlert(
+      nutrient: 'B1',
+      level: AlertLevel.danger,
+      value: t.of('vit', 'B1'),
+      message:
+          '糖負荷に対しビタミンB1が不足(≥3mg必要、高リスクは100–300mgを糖の前〜同時に)。Wernicke脳症・乳酸アシドーシスのリスク',
     ));
   }
 

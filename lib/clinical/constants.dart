@@ -45,6 +45,8 @@ class ClinicalConst {
   static const double naMEqToSaltGram = 0.05844; // 1 mEq Na = 0.05844 g 食塩
   static const double salt6gNaMEq = 102.7; // 食塩6 g（高血圧/CKD治療目標）
   static const double salt7_5gNaMEq = 128.3; // 食塩7.5 g（厚労省 男性目標量）
+  static const double salt7gNaMEq = 7 * saltGramToNaMEq; // 食塩7 g（HTなし成人の目標値）≈119.8 mEq
+  static const double salt9_6gNaMEq = 9.6 * saltGramToNaMEq; // 食塩9.6 g（日本人の平均食塩摂取量）≈164.3 mEq
 
   /// Na mEq → 食塩 g 相当
   static double naMEqToSaltGrams(double mEq) => mEq * naMEqToSaltGram;

@@ -19,6 +19,23 @@ void main() {
       expect(totals.of('trace', 'Zn'), closeTo(60, 0.001));
     });
 
+    test('複数ソースの同一栄養素は加算（重複ではなく正しい合算）', () {
+      // EN + 維持輸液 + trace mix が各々 Na/Mg を持つ場合、ソース横断で合算される
+      final t = aggregateMicro([
+        const MicroContribution({
+          'elec': {'Na': 30.0, 'Mg': 4.0}
+        }, 1), // EN
+        const MicroContribution({
+          'elec': {'Na': 50.0}
+        }, 1), // 維持輸液
+        const MicroContribution({
+          'elec': {'Mg': 8.0}
+        }, 1), // trace mix
+      ]);
+      expect(t.of('elec', 'Na'), closeTo(80, 0.001));
+      expect(t.of('elec', 'Mg'), closeTo(12, 0.001));
+    });
+
     test('micro=null や multiplier=0 は無視', () {
       final totals = aggregateMicro([
         const MicroContribution(null, 3),
@@ -31,24 +48,24 @@ void main() {
   });
 
   group('microAlerts UL', () {
-    test('Na 110 mEq → 食塩6g超アラート（caution）', () {
+    test('Na 130 mEq → 食塩7g超アラート（caution）', () {
       final alerts = microAlerts(
-        const MicroTotals(elec: {'Na': 110.0}, trace: {}, vit: {}),
+        const MicroTotals(elec: {'Na': 130.0}, trace: {}, vit: {}),
       );
       final na = alerts.firstWhere((a) => a.nutrient == 'Na');
       expect(na.level, AlertLevel.caution);
       expect(na.message, contains('食塩'));
     });
-    test('Na 130 mEq → danger（7.5g超）', () {
+    test('Na 170 mEq → danger（平均摂取量9.6g以上）', () {
       final alerts = microAlerts(
-        const MicroTotals(elec: {'Na': 130.0}, trace: {}, vit: {}),
+        const MicroTotals(elec: {'Na': 170.0}, trace: {}, vit: {}),
       );
       expect(alerts.firstWhere((a) => a.nutrient == 'Na').level,
           AlertLevel.danger);
     });
-    test('Na 90 mEq → アラートなし', () {
+    test('Na 100 mEq → アラートなし（食塩7g未満）', () {
       final alerts = microAlerts(
-        const MicroTotals(elec: {'Na': 90.0}, trace: {}, vit: {}),
+        const MicroTotals(elec: {'Na': 100.0}, trace: {}, vit: {}),
       );
       expect(alerts.where((a) => a.nutrient == 'Na'), isEmpty);
     });
@@ -79,6 +96,67 @@ void main() {
         const MicroTotals(elec: {}, trace: {}, vit: {'A': 3000.0}),
       );
       expect(alerts.where((a) => a.nutrient == 'VitA'), isNotEmpty);
+    });
+  });
+
+  group('microAlerts 病態別ガイダンス', () {
+    test('胆汁うっ滞 + Mn含有 → danger（Mn-free切替）', () {
+      final alerts = microAlerts(
+        const MicroTotals(elec: {}, trace: {'Mn': 20.0}, vit: {}),
+        cholestasis: true,
+      );
+      final mn = alerts.firstWhere((a) => a.nutrient == 'Mn');
+      expect(mn.level, AlertLevel.danger);
+      expect(mn.message, contains('Mn-free'));
+    });
+    test('肝障害 + Cu含有 → caution（減量・モニタ）', () {
+      final alerts = microAlerts(
+        const MicroTotals(elec: {}, trace: {'Cu': 5.0}, vit: {}),
+        liver: true,
+      );
+      expect(alerts.firstWhere((a) => a.nutrient == 'Cu').level,
+          AlertLevel.caution);
+    });
+    test('腎不全(非CRRT) → Cr/Mn蓄積ガイダンス', () {
+      final alerts = microAlerts(
+        const MicroTotals(elec: {}, trace: {}, vit: {}),
+        renal: true,
+      );
+      expect(alerts.where((a) => a.nutrient == 'Cr/Mn'), isNotEmpty);
+    });
+    test('腎不全 + CRRT → 蓄積でなく補充側（CRRTアラート, Cr/Mnは出さない）', () {
+      final alerts = microAlerts(
+        const MicroTotals(elec: {}, trace: {}, vit: {}),
+        renal: true,
+        crrt: true,
+      );
+      expect(alerts.where((a) => a.nutrient == 'CRRT'), isNotEmpty);
+      expect(alerts.where((a) => a.nutrient == 'Cr/Mn'), isEmpty);
+    });
+    test('高排出消化管 → Zn補充ガイダンス', () {
+      final alerts = microAlerts(
+        const MicroTotals(elec: {}, trace: {}, vit: {}),
+        giLoss: true,
+      );
+      final zn = alerts.firstWhere((a) => a.nutrient == 'Zn');
+      expect(zn.message, contains('12mg/L'));
+    });
+    test('糖負荷 + Wernickeリスク + B1なし → B1 danger', () {
+      final alerts = microAlerts(
+        const MicroTotals(elec: {}, trace: {}, vit: {}),
+        glucoseLoad: true,
+        wernickeRisk: true,
+      );
+      expect(alerts.firstWhere((a) => a.nutrient == 'B1').level,
+          AlertLevel.danger);
+    });
+    test('糖負荷 + B1 3mg投与済み → B1アラートなし', () {
+      final alerts = microAlerts(
+        const MicroTotals(elec: {}, trace: {}, vit: {'B1': 3.0}),
+        glucoseLoad: true,
+        wernickeRisk: true,
+      );
+      expect(alerts.where((a) => a.nutrient == 'B1'), isEmpty);
     });
   });
 }

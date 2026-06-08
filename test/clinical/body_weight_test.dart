@@ -49,15 +49,26 @@ void main() {
       expect(feedingWeight(actualKg: 72, heightCm: 170, isMale: true),
           closeTo(72, 0.001));
     });
-    test('肥満 BMI30–50 →実体重', () {
-      // 男170 実95(BMI32.9)→実体重(kcal/kgは別途11-14)
+    test('肥満 BMI≥30 →補正体重 (ESPEN)', () {
+      // 男170 実95(BMI32.9)→ABW=66.2+0.25×28.8=73.4
       expect(feedingWeight(actualKg: 95, heightCm: 170, isMale: true),
-          closeTo(95, 0.001));
+          closeTo(73.4, 0.05));
     });
-    test('高度肥満 BMI>50 →IBW', () {
-      // 男170 実150(BMI51.9)→IBW66.2
+    test('高度肥満 BMI>50 も補正体重', () {
+      // 男170 実150(BMI51.9)→ABW=66.2+0.25×83.8=87.15
       expect(feedingWeight(actualKg: 150, heightCm: 170, isMale: true),
-          closeTo(66.2, 0.001));
+          closeTo(87.15, 0.05));
+    });
+  });
+
+  group('obesityClass (日本肥満学会)', () {
+    test('区分', () {
+      expect(obesityClass(17), '低体重');
+      expect(obesityClass(22), '普通体重');
+      expect(obesityClass(27), '肥満(1度)');
+      expect(obesityClass(32), '肥満(2度)');
+      expect(obesityClass(37), '肥満(3度)');
+      expect(obesityClass(42), '肥満(4度)');
     });
   });
 

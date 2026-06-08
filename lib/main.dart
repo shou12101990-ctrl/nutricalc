@@ -146,6 +146,13 @@ List<Widget> _energyModelFields({
   required ValueChanged<String> onModel,
   required ValueChanged<double> onKcalPerKg,
 }) {
+  // 簡易式の目標 kcal/kg: 20–30 を1刻み。保存済みの端数値があっても
+  // Dropdownが壊れないよう、現在値も候補に含める。
+  final kkItems = <double>{
+    for (int i = 20; i <= 30; i++) i.toDouble(),
+    kcalPerKgValue,
+  }.toList()
+    ..sort();
   return [
     DropdownButtonFormField<String>(
       initialValue: energyModel,
@@ -171,9 +178,12 @@ List<Widget> _energyModelFields({
         isExpanded: true,
         decoration:
             const InputDecoration(labelText: '目標 kcal/kg/day', isDense: true),
-        items: [for (int i = 0; i <= 10; i++) 25 + i * 0.5]
+        items: kkItems
             .map((v) => DropdownMenuItem(
-                value: v.toDouble(), child: Text(v.toStringAsFixed(1))))
+                value: v,
+                child: Text(v == v.roundToDouble()
+                    ? v.toStringAsFixed(0)
+                    : v.toStringAsFixed(1))))
             .toList(),
         onChanged: (v) {
           if (v != null) onKcalPerKg(v);
@@ -275,6 +285,27 @@ Widget? _proteinSuggestion(Iterable<String> tags, double currentGoal) {
   );
 }
 
+/// 病態タグ→微量栄養素アラートのコンテキストフラグ。
+({
+  bool cholestasis,
+  bool liver,
+  bool renal,
+  bool crrt,
+  bool giLoss,
+  bool wernicke
+}) _microFlags(Iterable<String> tags,
+    {required double bmi, bool refeedingHigh = false}) {
+  final t = tags.toSet();
+  return (
+    cholestasis: t.contains('cholestasis'),
+    liver: t.contains('liver'),
+    renal: t.contains('renal'),
+    crrt: t.contains('crrt'),
+    giLoss: t.contains('gi_loss') || t.contains('malabsorption'),
+    wernicke: t.contains('alcohol') || bmi < 16 || refeedingHigh,
+  );
+}
+
 Future<void> showPatientEditDialog(
     BuildContext context, AppState state, PatientCase current,
     {VoidCallback? onSaved}) async {
@@ -282,7 +313,7 @@ Future<void> showPatientEditDialog(
   double stress = current.stressFactor;
   double protein = current.proteinGoalPerKg;
   String energyModel = current.energyModel;
-  double kcalPerKgValue = current.kcalPerKgValue ?? 25;
+  double kcalPerKgValue = current.kcalPerKgValue ?? 30;
   final reeCtrl =
       TextEditingController(text: current.measuredREE?.toStringAsFixed(0) ?? '');
   final memoCtrl = TextEditingController(text: current.memo);
@@ -384,6 +415,8 @@ Future<void> showPatientEditDialog(
                   onModel: (v) => setLocal(() => energyModel = v),
                   onKcalPerKg: (v) => setLocal(() => kcalPerKgValue = v),
                 ),
+                // 簡易式(kcal/kg)・実測REEではAF/SFを使わないため非表示
+                if (energyModel != 'kcalPerKg') ...[
                 const SizedBox(height: 8),
                 // AF / SF (横並び)
                 Row(children: [
@@ -428,6 +461,7 @@ Future<void> showPatientEditDialog(
                     ),
                   ),
                 ]),
+                ],
                 const SizedBox(height: 8),
                 // 目標タンパク
                 DropdownButtonFormField<double>(
@@ -796,8 +830,8 @@ class CasesPage extends StatelessWidget {
     double activity = 1.2;
     double stress = 1.6;
     double protein = 1.5;
-    String energyModel = 'harrisBenedict';
-    double kcalPerKgValue = 25;
+    String energyModel = 'kcalPerKg';
+    double kcalPerKgValue = 30;
     final reeCtrl = TextEditingController();
     Sex sex = Sex.male;
     DateTime? fastingDate = DateTime.now(); // 絶食開始日(デフォルト=入室日)
@@ -949,6 +983,8 @@ class CasesPage extends StatelessWidget {
                   onModel: (v) => setLocal(() => energyModel = v),
                   onKcalPerKg: (v) => setLocal(() => kcalPerKgValue = v),
                 ),
+                // 簡易式(kcal/kg)・実測REEではAF/SFを使わないため非表示
+                if (energyModel != 'kcalPerKg') ...[
                 const SizedBox(height: 8),
                 // 活動係数・侵害係数 (横並び)
                 Row(
@@ -998,6 +1034,7 @@ class CasesPage extends StatelessWidget {
                     ),
                   ],
                 ),
+                ],
                 const SizedBox(height: 8),
                 // 目標タンパク (ドロップダウン)
                 DropdownButtonFormField<double>(
@@ -1574,7 +1611,7 @@ class _BuilderPageState extends State<BuilderPage>
   int _builderTabIndex = 0;
   bool _builderCardCollapsed = false; // 計算画面の患者カード折りたたみ
   final targetKcalController = TextEditingController(text: '1500');
-  final npcnController = TextEditingController(text: '125');
+  final npcnController = TextEditingController(text: '150');
   double _lipidGPerKg = 0.4;
   String glucoseSource = '70% グルコース';
   // ゼロmenu: 2サブタブ (0:本体, 1:加注) と加注製剤リスト(複数可)
@@ -1712,6 +1749,105 @@ class _BuilderPageState extends State<BuilderPage>
     }
     if (rows.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
+  }
+
+  /// 個別選択の全ソース横断 微量栄養素集計。
+  /// `_aggregateWithRates` と同一のソース集合(EN/EN補助/TPN/PPN/濃厚流動食/栄養サポート/加注)
+  /// と同一の按分係数(投与速度指定時)で集計するため、マクロ集計と整合し各itemは1回のみ計上。
+  cm.MicroTotals _microWithRates(PatientCase current) {
+    final contributions = <cm.MicroContribution>[];
+    int unitsOf(RegimenItem item) => item.hasMealTiming
+        ? (item.morning + item.noon + item.evening)
+        : item.units;
+
+    void addCategory(String categoryKey, double rate) {
+      final selected = current.regimenItems.where((item) {
+        final p = widget.state.catalog.byId(item.productId);
+        if (p == null || unitsOf(item) <= 0) return false;
+        if (categoryKey == 'EN') {
+          return p.category == 'EN' || p.category == 'EN_AUX';
+        }
+        return p.category == categoryKey;
+      }).toList();
+      if (selected.isEmpty) return;
+      double fullIN = 0;
+      for (final item in selected) {
+        final p = widget.state.catalog.byId(item.productId)!;
+        fullIN += (p.volumeMl ?? 0) * unitsOf(item);
+      }
+      final factor = (rate > 0 && fullIN > 0) ? (rate * 24) / fullIN : 1.0;
+      for (final item in selected) {
+        final p = widget.state.catalog.byId(item.productId)!;
+        contributions
+            .add(cm.MicroContribution(p.micro, unitsOf(item) * factor));
+      }
+    }
+
+    final tpnRate = _tpnVolumeMl > 0 ? _tpnVolumeMl / 24 : 0.0;
+    final ppnRate = _ppnVolumeMl > 0 ? _ppnVolumeMl / 24 : 0.0;
+    addCategory('EN', _enRateMlPerHour);
+    addCategory('TPN', tpnRate);
+    addCategory('PPN', ppnRate);
+    addCategory('濃厚流動食', 0);
+    addCategory('栄養サポート食品', 0);
+    for (final name in _selectAdditives) {
+      final p = widget.state.catalog.byName(name);
+      if (p != null) contributions.add(cm.MicroContribution(p.micro, 1));
+    }
+    return cm.aggregateMicro(contributions);
+  }
+
+  /// 微量栄養素のUL超過＋病態別ガイダンスのアラート行（_infusionAlertRow を流用）。
+  List<Widget> _microAlertRows(cm.MicroTotals totals, PatientCase current,
+      {bool glucoseLoad = false}) {
+    final bmi = cbw.bmiOf(current.weightKg, current.heightCm);
+    final f = _microFlags(current.conditionTags, bmi: bmi);
+    return cm
+        .microAlerts(totals,
+            isMale: current.sex == Sex.male,
+            cholestasis: f.cholestasis,
+            liver: f.liver,
+            renal: f.renal,
+            crrt: f.crrt,
+            giLoss: f.giLoss,
+            glucoseLoad: glucoseLoad,
+            wernickeRisk: f.wernicke)
+        .map((a) => _infusionAlertRow(
+            a.level == ci.AlertLevel.danger
+                ? ci.AlertLevel.danger
+                : ci.AlertLevel.caution,
+            a.message))
+        .toList();
+  }
+
+  /// 微量栄養素の日次合計の簡易表示（横断集計の可視化・検証用）。
+  Widget _microTotalsSummary(cm.MicroTotals t) {
+    String f(double v, [int d = 1]) => v.toStringAsFixed(d);
+    final parts = <String>[];
+    void add(String section, String key, String label, String unit,
+        [int d = 1]) {
+      final v = t.of(section, key);
+      if (v > 0.0001) parts.add('$label ${f(v, d)}$unit');
+    }
+
+    add('elec', 'Na', 'Na', 'mEq');
+    add('elec', 'K', 'K', 'mEq');
+    add('elec', 'Cl', 'Cl', 'mEq');
+    add('elec', 'Ca', 'Ca', 'mEq');
+    add('elec', 'Mg', 'Mg', 'mEq');
+    add('elec', 'P', 'P', 'mmol');
+    add('trace', 'Zn', 'Zn', 'μmol');
+    add('trace', 'Fe', 'Fe', 'μmol');
+    add('trace', 'Cu', 'Cu', 'μmol');
+    add('trace', 'Mn', 'Mn', 'μmol');
+    add('trace', 'Se', 'Se', 'μmol', 2);
+    add('trace', 'I', 'I', 'μmol', 2);
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text('微量栄養素計（全ソース）: ${parts.join(' / ')}',
+          style: TextStyle(fontSize: 10.5, color: Colors.blueGrey.shade600)),
+    );
   }
 
   void _snapTo(double target) {
@@ -2355,9 +2491,12 @@ class _BuilderPageState extends State<BuilderPage>
                                           er.actualWeightKg)
                                       .abs() >=
                                   0.1;
+                              final bmi = cbw.bmiOf(
+                                  current.weightKg, current.heightCm);
                               return Text(
                                 '式 ${ce.energyModelFromId(current.energyModel).label}'
-                                '${showW ? ' / 栄養計算体重 ${er.feedingWeightKg.toStringAsFixed(1)}kg（実${er.actualWeightKg.toStringAsFixed(0)}/理想${er.idealWeightKg.toStringAsFixed(0)}）' : ''}',
+                                ' / BMI ${bmi.toStringAsFixed(1)} ${cbw.obesityClass(bmi)}'
+                                '${showW ? ' / 栄養計算体重 ${er.feedingWeightKg.toStringAsFixed(1)}kg（実${er.actualWeightKg.toStringAsFixed(0)}/理想${er.idealWeightKg.toStringAsFixed(0)}/補正適用）' : ''}',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -3205,19 +3344,36 @@ class _BuilderPageState extends State<BuilderPage>
                                                         final pm =
                                                             _parenteralMacros(
                                                                 current);
-                                                        return _infusionAlerts(
-                                                          glucoseGramPerDay:
-                                                              pm.glucoseG,
-                                                          lipidGramPerDay:
-                                                              pm.lipidG,
-                                                          weightKg:
-                                                              current.weightKg,
-                                                          glucoseRestrict: cc
-                                                                  .resolveCoeff(
-                                                                      current
+                                                        final micro =
+                                                            _microWithRates(
+                                                                current);
+                                                        return Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            _infusionAlerts(
+                                                              glucoseGramPerDay:
+                                                                  pm.glucoseG,
+                                                              lipidGramPerDay:
+                                                                  pm.lipidG,
+                                                              weightKg: current
+                                                                  .weightKg,
+                                                              glucoseRestrict: cc
+                                                                      .resolveCoeff(current
                                                                           .conditionTags)
-                                                                  ?.glucoseRestrict ??
-                                                              false,
+                                                                      ?.glucoseRestrict ??
+                                                                  false,
+                                                            ),
+                                                            _microTotalsSummary(
+                                                                micro),
+                                                            ..._microAlertRows(
+                                                                micro,
+                                                                current,
+                                                                glucoseLoad: pm
+                                                                        .glucoseG >
+                                                                    0),
+                                                          ],
                                                         );
                                                       }),
                                                       Text('脂質 ${fatPerKg.toStringAsFixed(1)}g/kg/day', style: ss),
@@ -3905,7 +4061,7 @@ class _NotePageState extends State<NotePage>
       category: '電解質',
       title: '電解質',
       color: Color(0xFF3F51B5),
-      body: '■ Na（ナトリウム）\n・厚労省 食事摂取基準2025 食塩相当量 目標量: 男性<7.5 / 女性<6.5 g/日。高血圧・CKD治療目標<6 g/日。\n・換算: 食塩1 g = Na 17.1 mEq。6 g=102.7 mEq, 7.5 g=128.3 mEq。\n・静脈栄養(ASPEN/JSPEN)標準: 1〜2 mEq/kg/日。本アプリは Na>102.7 mEq/日(食塩6 g相当)で塩分負荷アラート。\n\n■ K（カリウム）\n・食事摂取基準2025 目安量 男2,500/女2,000 mg/日(目標量 男3,000/女2,600 mg以上)。耐容上限なし。\n・PN標準 1〜2 mEq/kg/日。1日100 mEq超は注意。投与速度≤20 mEq/h・濃度≤40 mEq/L(原則中心静脈・心電図監視)。\n\n■ Ca（カルシウム）\n・推奨量 650〜800 mg/日、耐容上限 2,500 mg/日(≒125 mEq)。PN標準 10〜15 mEq/日。P製剤との配合変化(沈殿)に注意。\n\n■ Mg（マグネシウム）\n・推奨量 男340〜380/女280〜290 mg/日(サプリ等の上限350 mg)。PN標準 8〜20 mEq/日。腎機能低下で高Mg血症に注意。\n\n■ P（リン）\n・目安量 男1,000/女800 mg/日、耐容上限 3,000 mg/日(≒97 mmol)。PN標準 20〜40 mmol/日。Refeedingで低下しやすく要モニタ。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN 静脈経腸栄養ガイドライン',
+      body: '■ Na（ナトリウム）\n・厚労省 食事摂取基準2025 食塩相当量 目標量: 男性<7.5 / 女性<6.5 g/日。高血圧・CKD治療目標<6 g/日。\n・換算: 食塩1 g = Na 17.1 mEq。6 g=102.7 mEq, 7.5 g=128.3 mEq。\n・静脈栄養(ASPEN/JSPEN)標準: 1〜2 mEq/kg/日。本アプリは 食塩7 g/日(Na≈119.8 mEq, HTなし成人の目標値)超で黄、9.6 g/日(Na≈164.3 mEq, 日本人の平均食塩摂取量)以上で赤の塩分負荷アラート。\n\n■ K（カリウム）\n・食事摂取基準2025 目安量 男2,500/女2,000 mg/日(目標量 男3,000/女2,600 mg以上)。耐容上限なし。\n・PN標準 1〜2 mEq/kg/日。1日100 mEq超は注意。投与速度≤20 mEq/h・濃度≤40 mEq/L(原則中心静脈・心電図監視)。\n\n■ Ca（カルシウム）\n・推奨量 650〜800 mg/日、耐容上限 2,500 mg/日(≒125 mEq)。PN標準 10〜15 mEq/日。P製剤との配合変化(沈殿)に注意。\n\n■ Mg（マグネシウム）\n・推奨量 男340〜380/女280〜290 mg/日(サプリ等の上限350 mg)。PN標準 8〜20 mEq/日。腎機能低下で高Mg血症に注意。\n\n■ P（リン）\n・目安量 男1,000/女800 mg/日、耐容上限 3,000 mg/日(≒97 mmol)。PN標準 20〜40 mmol/日。Refeedingで低下しやすく要モニタ。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN 静脈経腸栄養ガイドライン',
     ),
     _NoteSection(
       category: 'ビタミン',
@@ -3931,6 +4087,12 @@ class _NotePageState extends State<NotePage>
       color: Color(0xFFC2185B),
       body: '低栄養・絶食後に栄養(特に糖質)を再開すると、細胞内へK・P・Mgが移動し致死的な低下を来す病態。インスリン分泌再開とビタミンB1需要増が引き金。\n\n■ 高リスク基準（NICE CG32, 2006）\n・次のいずれか1つ: BMI<16 / 3〜6か月で>15%体重減 / 10日以上のほぼ絶食 / 投与前からK・P・Mg低値。\n・または次のいずれか2つ: BMI<18.5 / >10%体重減 / 5日以上のほぼ絶食 / アルコール・薬物(インスリン・化学療法・制酸薬・利尿薬)歴。\n・超高リスク: BMI<14 または 15日以上の絶食。\n\n■ 対処\n・開始エネルギー: 高リスク 10 kcal/kg/日(超高リスクは5、心電図監視)。4〜7日かけて必要量へ漸増。\n・チアミン(B1) 200〜300 mg/日を糖負荷の前〜10日。総合ビタミンB群も。\n・電解質は補充しながら投与(正常化を待って開始を遅らせない): K 2〜4 / P 0.3〜0.6 / Mg 0.2〜0.4 mmol/kg/日。\n・血清P≥2.0 mg/dL維持。K・P・Mg・血糖を頻回モニタ。\n\n本アプリは絶食開始日・BMIからリスク階層を判定し、自動設計の初期kcalを上記rampで自動cap、対処サジェストを表示する。\n\n出典: NICE CG32「Nutrition support for adults」(2006) / JSPEN',
     ),
+    _NoteSection(
+      category: '微量元素\n病態調整',
+      title: '微量元素の病態別調整',
+      color: Color(0xFF5E35B1),
+      body: '微量元素・ビタミンは「過剰(蓄積)」と「不足(喪失)」の両方が問題になり、病態で方向が変わる。\n\n■ 通常患者: 非重複が原則\nベースが内蔵する成分は加注しない(二重投与回避)。\n・エルネオパNF/ワンパル(電解質+微量元素+ビタミン内蔵)→加注なし(Seのみ条件付き)\n・フルカリック(ビタミンのみ)→微量元素のみ追加\n・ミキシッド/ゼロmenu→MVI+微量元素\n\n■ 胆汁うっ滞・肝不全・肝性脳症: Cu/Mn過剰回避\nMnは胆汁排泄80%→淡蒼球に蓄積しパーキンソン様(不可逆あり)。胆道閉塞はMn製剤禁忌。\n→標準微量元素(Mn 20μmol)をMn-free「ボルビサール」へ切替。Cuは減量しつつ残す(ゼロにしない)。\nモニタ: 全血Mn(基準0.52–2.4μg/dL)、血清Cu+セルロプラスミン(月2回)。\n\n■ 腎不全(非透析): Cr/Mn蓄積\nCrは輸液汚染で充足し追加不要(腎障害助長)。複合微量元素を減量し血中濃度をモニタ。\n\n■ CRRT・持続透析: 喪失側→補充\n水溶性(Se・B1・Cu・葉酸・VitC・カルニチン)が透析液へ喪失。Se・B1を2倍目安で補充、複合traceは継続。VitC高用量はシュウ酸で避ける。\n\n■ 高排出消化管瘻・大量下痢: Zn喪失\nZn 腸液+12mg/L・便/ストマ+17mg/Lを上乗せ。Mg/K/Na・水分も補正。\n\n■ チアミン×糖負荷(安全インターロック)\nB1欠乏者に糖を先行するとWernicke脳症・乳酸アシドーシス。糖の前〜同時にB1 100–300mg。標準MVIのB1 3mgは予防に不足→高用量B1製剤を別途。\n\n■ 単剤 add / replace\n・ADD: 創傷・高GI損失でZn追加、CRRT/長期でSe(アセレンド)追加。\n・REPLACE: Mn回避が必要な胆汁うっ滞で 標準複合→Mn-free複合+Se単剤。\n・注意: 国内にIV亜鉛単剤がほぼ無く、Zn増量は複合もう1管/院内調製/経口併用。\n\n■ 栄養開始時セット vs 補正後増量セット\n・開始時(refeeding慎重): B1高用量を糖前にフロントロード+標準MVI+標準微量元素(胆汁うっ滞ならMn-free)。Se/Zn追加なし、10–15kcal/kgで慎重、K/PO4/Mg頻回。\n・補正後増量: Se(CRRT/長期/熱傷/創傷)・Zn(高排出/創傷)追加、Mn再評価、採血ベースで増量。\n\n出典: ESPEN micronutrient guideline 2022 / ASPEN / JSPEN / NICE CG32 / 各添付文書',
+    ),
   ];
 
   static final _categoryColors = <String, Color>{
@@ -3942,6 +4104,7 @@ class _NotePageState extends State<NotePage>
     'エネルギー\n算出法': Color(0xFFE67E22),
     'ガイドライン': Color(0xFF6D4C41),
     'Refeeding': Color(0xFFC2185B),
+    '微量元素\n病態調整': Color(0xFF5E35B1),
     '活動係数\n侵害係数': Color(0xFFE91E8C),
     'タンパク': Color(0xFFE53935),
     '炭水化物': Color(0xFF8BC34A),
@@ -5003,6 +5166,29 @@ class ConditionCatalog {
       suggestion: '誤嚥・逆流・注入時間・半固形化の要否に配慮。'
           '液体で問題があれば半固形・とろみへの切替を検討。',
     ),
+    ConditionDef(
+      id: 'cholestasis',
+      label: '胆汁うっ滞・胆道閉塞',
+      suggestion: 'Mnは胆汁排泄のため蓄積し神経毒性(淡蒼球)。Mn含有微量元素はMn-free(ボルビサール)へ切替。'
+          'Cuも減量しつつモニタ(血清Cu・セルロプラスミン)。胆道閉塞ではMn製剤は禁忌。',
+    ),
+    ConditionDef(
+      id: 'crrt',
+      label: 'CRRT・持続透析',
+      suggestion: '水溶性微量栄養素(Se・B1・Cu・葉酸・VitC)が透析液へ喪失。'
+          'Se・B1は2倍目安で補充し複合traceは継続、血中濃度をモニタ(蓄積でなく欠乏側)。',
+    ),
+    ConditionDef(
+      id: 'gi_loss',
+      label: '高排出消化管瘻・大量下痢',
+      suggestion: 'Zn喪失大。腸液+12mg/L・便/ストマ+17mg/Lを上乗せ。Mg/K/Na・水分も補正。',
+    ),
+    ConditionDef(
+      id: 'alcohol',
+      label: 'アルコール多飲・低栄養',
+      suggestion: 'ビタミンB1欠乏のハイリスク。糖負荷の前〜同時にチアミン100–300mgを投与し'
+          'Wernicke脳症・乳酸アシドーシスを予防。Refeedingにも注意。',
+    ),
   ];
 
   static ConditionDef? byId(String id) =>
@@ -5467,7 +5653,7 @@ class NutritionCalculator {
         age: item.age,
         activityFactor: item.activityFactor,
         stressFactor: item.stressFactor,
-        kcalPerKgValue: item.kcalPerKgValue ?? 25,
+        kcalPerKgValue: item.kcalPerKgValue ?? 30,
         measuredREE: item.measuredREE,
       );
 
@@ -6928,11 +7114,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     double prevEnKcal = 0;
     final dayPlans = <DesignPlan>[];
     for (int i = 0; i < pcts.length; i++) {
-      final pct = pcts[i];
+      final phase = _acutePhaseTarget(i);
       final plan = NutritionCalculator.designDay(
         mode: _dayModes[i],
-        dayTargetKcal: _refeedCappedKcal(i, targetKcal * pct / 100),
-        dayTargetProt: targetProt * pct / 100,
+        dayTargetKcal: phase.kcal,
+        dayTargetProt: phase.prot,
         weightKg: widget.current.weightKg,
         enProducts: enList,
         enRateMlH: _rateOf(_dayEnDose[i]),
@@ -7374,22 +7560,97 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rawKcal < cap ? rawKcal : cap;
   }
 
+  /// 急性期ランプ: EN進行に応じ kcal/kg 目標を 20→25→full(既定30) と上げる。
+  /// 急性期(EN前)=20、EN導入(速度)=25、EN朝昼夕1pac以降 or 経口リハ=full。
+  /// タンパクはkcal比に按分。Refeedingリスク時はさらにcap。
+  ({double kcal, double prot}) _acutePhaseTarget(int i) {
+    final fullKcal = NutritionCalculator.targetEnergy(widget.current);
+    final fullProt = NutritionCalculator.targetProtein(widget.current);
+    final fw =
+        NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
+    if (fw <= 0) {
+      final k = _refeedCappedKcal(i, fullKcal);
+      final f = fullKcal > 0 ? k / fullKcal : 1.0;
+      return (kcal: k, prot: fullProt * f);
+    }
+    final fullKpk = fullKcal / fw;
+    final enRate = _rateOf(_dayEnDose[i]);
+    final enPac = _pacOf(_dayEnDose[i]);
+    final mealPac = _dayMealPac[i];
+    double kpk;
+    if (enPac >= 1 || mealPac >= 1) {
+      kpk = fullKpk; // 回復期: EN朝昼夕1pac以降 or 経口リハ
+    } else if (enRate > 0) {
+      kpk = 25.0; // EN導入(速度)期
+    } else {
+      kpk = 20.0; // 急性期(EN前): 抑えめ
+    }
+    if (kpk > fullKpk) kpk = fullKpk;
+    final cappedKcal = _refeedCappedKcal(i, kpk * fw);
+    final frac = fullKcal > 0 ? cappedKcal / fullKcal : 1.0;
+    return (kcal: cappedKcal, prot: fullProt * frac);
+  }
+
   /// 1日プランの電解質・微量元素・ビタミンUL超過アラート。
   List<cm.MicroAlert> _dayMicroAlerts(DesignPlan p) {
     final totals = cm.aggregateMicro(p.items.map((it) {
-      final prod = widget.state.catalog.byName(it.name);
+      var prod = widget.state.catalog.byName(it.name);
       double mult;
-      if ((it.units ?? 0) > 0) {
+      if (prod == null) {
+        // 加注プレースホルダ('電解質製剤'/'微量元素製剤'/'ビタミン製剤')→採用標準製剤に解決
+        prod = _resolveAdditivePlaceholder(it.name);
+        mult = prod != null ? 1.0 : 0.0; // 1日1管相当
+      } else if ((it.units ?? 0) > 0) {
         mult = it.units!.toDouble();
-      } else if (prod != null && (prod.volumeMl ?? 0) > 0) {
+      } else if ((prod.volumeMl ?? 0) > 0) {
         mult = it.volumeMl / prod.volumeMl!;
       } else {
         mult = 0;
       }
       return cm.MicroContribution(prod?.micro, mult);
     }));
+    final bmi = cbw.bmiOf(widget.current.weightKg, widget.current.heightCm);
+    final f = _microFlags(widget.current.conditionTags,
+        bmi: bmi, refeedingHigh: _refeedingTier != cr.RefeedingTier.none);
+    double carb = 0;
+    for (final it in p.items) {
+      final pr = widget.state.catalog.byName(it.name);
+      final base = pr?.carbBase ?? 0;
+      if (base <= 0) continue;
+      carb += (pr?.volumeMl ?? 0) > 0
+          ? base * it.volumeMl / pr!.volumeMl!
+          : base * (it.units ?? 0);
+    }
     return cm.microAlerts(totals,
-        isMale: widget.current.sex == Sex.male, longTermTpn: false);
+        isMale: widget.current.sex == Sex.male,
+        longTermTpn: false,
+        cholestasis: f.cholestasis,
+        liver: f.liver,
+        renal: f.renal,
+        crrt: f.crrt,
+        giLoss: f.giLoss,
+        glucoseLoad: carb > 0,
+        wernickeRisk: f.wernicke);
+  }
+
+  /// 加注プレースホルダ名→採用済み標準製剤(なければ先頭)に解決。
+  Product? _resolveAdditivePlaceholder(String name) {
+    String? cat;
+    if (name == '微量元素製剤') {
+      cat = '微量元素';
+    } else if (name == 'ビタミン製剤') {
+      cat = 'ビタミン';
+    } else if (name == '電解質製剤') {
+      cat = '電解質';
+    }
+    if (cat == null) return null;
+    final adopted = widget.state.catalog
+        .byCategory(cat)
+        .where((p) => widget.state.isAdopted(p.id))
+        .toList();
+    if (adopted.isNotEmpty) return adopted.first;
+    final all = widget.state.catalog.byCategory(cat);
+    return all.isNotEmpty ? all.first : null;
   }
 
   Widget _buildBarCharts(double targetKcal, List<double> pcts,
@@ -7399,10 +7660,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     double prevEnKcalChart = 0;
     final designPlans = <DesignPlan>[];
     for (int i = 0; i < pcts.length; i++) {
+      final phase = _acutePhaseTarget(i);
       final p = NutritionCalculator.designDay(
               mode: _dayModes[i],
-              dayTargetKcal: _refeedCappedKcal(i, targetKcal * pcts[i] / 100),
-              dayTargetProt: targetProt * pcts[i] / 100,
+              dayTargetKcal: phase.kcal,
+              dayTargetProt: phase.prot,
               weightKg: widget.current.weightKg,
               enProducts: en,
               enRateMlH: _rateOf(_dayEnDose[i]),
@@ -7857,10 +8119,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                         FlSpot((inPeakIdx + 1).toDouble(), inPeakVal),
                                       ],
                                       gradient: LinearGradient(colors: [
-                                        Colors.blue.shade700.withValues(alpha: 0.0),
-                                        Colors.blue.shade700.withValues(alpha: 0.85),
-                                        Colors.blue.shade700.withValues(alpha: 0.85),
-                                        Colors.blue.shade700.withValues(alpha: 0.0),
+                                        Colors.black.withValues(alpha: 0.0),
+                                        Colors.black.withValues(alpha: 0.85),
+                                        Colors.black.withValues(alpha: 0.85),
+                                        Colors.black.withValues(alpha: 0.0),
                                       ], stops: const [0.0, 0.35, 0.65, 1.0]),
                                       barWidth: 2,
                                       dotData: const FlDotData(show: false),
@@ -7881,17 +8143,19 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                   left: ((_cachedChartW / n) * inPeakIdx +
                                           (_cachedChartW / n) / 2) -
                                       32,
-                                  top: (plotH * (1.0 - (inPeakVal / maxIn)) - 16)
-                                      .clamp(0.0, plotH - 14),
+                                  // 線とテキストの間隔をグラフ↔日付と同じ8pxにする
+                                  top: (plotH * (1.0 - (inPeakVal / maxIn)) - 22)
+                                      .clamp(0.0, plotH - 16),
                                   child: SizedBox(
                                     width: 64,
                                     child: Text(
                                       '${inPeakVal.round()}ml',
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                          fontSize: 11,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          height: 1.0,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.blue.shade700),
+                                          color: Colors.black),
                                     ),
                                   ),
                                 ),
