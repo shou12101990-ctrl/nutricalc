@@ -1715,7 +1715,7 @@ class _BuilderPageState extends State<BuilderPage>
   }
 
   /// GIR・脂質負荷速度のアラート群（超過時のみ表示。糖質制限病態はGIR上限4）。
-  Widget _infusionAlerts({
+  List<Widget> _infusionAlertList({
     required double glucoseGramPerDay,
     required double lipidGramPerDay,
     required double weightKg,
@@ -1747,8 +1747,44 @@ class _BuilderPageState extends State<BuilderPage>
             '脂質 ${perDay.toStringAsFixed(2)} g/kg/day・${rate.toStringAsFixed(3)} g/kg/h、高TG血症に注意'));
       }
     }
+    return rows;
+  }
+
+  Widget _infusionAlerts({
+    required double glucoseGramPerDay,
+    required double lipidGramPerDay,
+    required double weightKg,
+    required bool glucoseRestrict,
+  }) {
+    final rows = _infusionAlertList(
+      glucoseGramPerDay: glucoseGramPerDay,
+      lipidGramPerDay: lipidGramPerDay,
+      weightKg: weightKg,
+      glucoseRestrict: glucoseRestrict,
+    );
     if (rows.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
+  }
+
+  /// サマリー下部のアラート群（GIR/脂質 + 微量栄養素UL + 病態ガイダンス）。
+  List<Widget> _summaryAlertWidgets({
+    required PatientCase current,
+    required double glucoseGramPerDay,
+    required double lipidGramPerDay,
+    required cm.MicroTotals micro,
+  }) {
+    final restrict =
+        cc.resolveCoeff(current.conditionTags)?.glucoseRestrict ?? false;
+    return [
+      ..._infusionAlertList(
+        glucoseGramPerDay: glucoseGramPerDay,
+        lipidGramPerDay: lipidGramPerDay,
+        weightKg: current.weightKg,
+        glucoseRestrict: restrict,
+      ),
+      ..._microAlertRows(micro, current,
+          glucoseLoad: glucoseGramPerDay > 0),
+    ];
   }
 
   /// 個別選択の全ソース横断 微量栄養素集計。
@@ -2458,6 +2494,29 @@ class _BuilderPageState extends State<BuilderPage>
                                   ),
                                 ] else
                                   const Spacer(),
+                                if (current.conditionTags.isNotEmpty)
+                                  IconButton(
+                                    icon: Icon(Icons.lightbulb,
+                                        size: 20, color: Colors.amber.shade700),
+                                    tooltip: '病態サジェスト',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => showDialog(
+                                      context: context,
+                                      builder: (_) => AlertDialog(
+                                        title: const Text('病態サジェスト'),
+                                        content: SingleChildScrollView(
+                                          child: _conditionSuggestionBanner(
+                                              current, aggregate),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context),
+                                              child: const Text('閉じる')),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 IconButton(
                                   icon: Icon(
                                       _builderCardCollapsed
@@ -2565,8 +2624,6 @@ class _BuilderPageState extends State<BuilderPage>
                       ),
                       ),
                     ),
-                    // ── 病態タグ由来の処方サジェスト(💡, テキストのみ控えめ) ──
-                    _conditionSuggestionBanner(current, aggregate),
                     const SizedBox(height: 12),
                     // 3タブ切替 (個別選択 / ゼロmenu / 自動計算)
                     Center(
@@ -3379,40 +3436,6 @@ class _BuilderPageState extends State<BuilderPage>
                                                       Text('IN ${aggregate.totalVolumeMl.round()}ml, 総カロリー ${aggregate.totalKcal.round()}kcal', style: ss),
                                                       Text('タンパク ${aggregate.totalProteinG.toStringAsFixed(1)}g/day (${protPerKg.toStringAsFixed(1)}g/kg)', style: ss),
                                                       Text('NPC/N比 ${aggregate.npcNText}', style: ss),
-                                                      Builder(builder: (_) {
-                                                        final pm =
-                                                            _parenteralMacros(
-                                                                current);
-                                                        final micro =
-                                                            _microWithRates(
-                                                                current);
-                                                        return Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            _infusionAlerts(
-                                                              glucoseGramPerDay:
-                                                                  pm.glucoseG,
-                                                              lipidGramPerDay:
-                                                                  pm.lipidG,
-                                                              weightKg: current
-                                                                  .weightKg,
-                                                              glucoseRestrict: cc
-                                                                      .resolveCoeff(current
-                                                                          .conditionTags)
-                                                                      ?.glucoseRestrict ??
-                                                                  false,
-                                                            ),
-                                                            ..._microAlertRows(
-                                                                micro,
-                                                                current,
-                                                                glucoseLoad: pm
-                                                                        .glucoseG >
-                                                                    0),
-                                                          ],
-                                                        );
-                                                      }),
                                                       Text('脂質 ${fatPerKg.toStringAsFixed(1)}g/kg/day', style: ss),
                                                     ],
                                                   );
@@ -3601,6 +3624,67 @@ class _BuilderPageState extends State<BuilderPage>
                                   ),   // IntrinsicHeight
                                   );   // ConstrainedBox (return)
                                   }), // LayoutBuilder
+                                // ── アラート（サマリー下部・個別/ゼロ共通）──
+                                Builder(builder: (_) {
+                                  double gluG;
+                                  double lipidG;
+                                  cm.MicroTotals micro;
+                                  if (isScratchMode) {
+                                    final gluProd =
+                                        widget.state.adoptedByBase(glucoseSource);
+                                    final gluKcal = (gluProd != null &&
+                                            (gluProd.volumeMl ?? 0) > 0)
+                                        ? zeroMenu.glucoseVolumeMl *
+                                            (gluProd.kcal ?? 0) /
+                                            gluProd.volumeMl!
+                                        : 0.0;
+                                    gluG = gluKcal / 4;
+                                    lipidG = zeroMenu.lipidGram;
+                                    micro = cm.aggregateMicro([
+                                      for (final n in _zeroAdditives)
+                                        cm.MicroContribution(
+                                            widget.state.catalog.byName(n)?.micro,
+                                            1),
+                                    ]);
+                                  } else {
+                                    final pm = _parenteralMacros(current);
+                                    gluG = pm.glucoseG;
+                                    lipidG = pm.lipidG;
+                                    micro = _microWithRates(current);
+                                  }
+                                  final rows = _summaryAlertWidgets(
+                                    current: current,
+                                    glucoseGramPerDay: gluG,
+                                    lipidGramPerDay: lipidG,
+                                    micro: micro,
+                                  );
+                                  if (rows.isEmpty) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(children: [
+                                          const Icon(
+                                              Icons.notifications_active_outlined,
+                                              size: 16,
+                                              color: Colors.deepOrange),
+                                          const SizedBox(width: 4),
+                                          const Text('リスク・補充サジェスト',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                  color: Colors.black54)),
+                                        ]),
+                                        const SizedBox(height: 4),
+                                        ...rows,
+                                      ],
+                                    ),
+                                  );
+                                }),
                               ],
                             ),
                           ),
