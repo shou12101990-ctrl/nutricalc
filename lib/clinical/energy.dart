@@ -126,11 +126,11 @@ EnergyResult targetEnergy({
       final ree = mifflinStJeorRee(
           isMale: isMale, weightKg: fw, heightCm: heightCm, age: age);
       return EnergyResult(
-        kcal: ree * activityFactor * stressFactor,
+        kcal: ree, // Mifflin REE をそのまま目標とする(AF/SFは用いない)
         feedingWeightKg: fw,
         idealWeightKg: ibw,
         actualWeightKg: weightKg,
-        basisLabel: 'Mifflin×AF×SF',
+        basisLabel: 'Mifflin REE',
       );
     case EnergyModel.kcalPerKg:
       if (bmi >= 30) {
@@ -154,11 +154,11 @@ EnergyResult targetEnergy({
     case EnergyModel.indirectCalorimetry:
       final ree = measuredREE ?? 0;
       return EnergyResult(
-        kcal: ree * activityFactor,
+        kcal: ree, // 実測REEをそのまま目標とする(AF/SFは用いない)
         feedingWeightKg: fw,
         idealWeightKg: ibw,
         actualWeightKg: weightKg,
-        basisLabel: '実測REE×AF',
+        basisLabel: '実測REE',
       );
   }
 }

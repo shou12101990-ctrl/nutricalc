@@ -88,7 +88,7 @@ void main() {
       expect(r.kcal, closeTo(87.15 * 22.5, 0.5));
     });
 
-    test('間接熱量測定 = 実測REE×AF', () {
+    test('間接熱量測定 = 実測REEをそのまま(AF/SF不使用)', () {
       final r = targetEnergy(
         model: EnergyModel.indirectCalorimetry,
         isMale: true,
@@ -99,7 +99,21 @@ void main() {
         stressFactor: 1.5,
         measuredREE: 1500,
       );
-      expect(r.kcal, closeTo(1500 * 1.2, 0.01)); // SFは使わない
+      expect(r.kcal, closeTo(1500, 0.01)); // AF/SFは使わない
+    });
+
+    test('Mifflin = REEをそのまま(AF/SF不使用)', () {
+      final r = targetEnergy(
+        model: EnergyModel.mifflinStJeor,
+        isMale: true,
+        weightKg: 60,
+        heightCm: 170,
+        age: 40,
+        activityFactor: 1.2,
+        stressFactor: 1.5,
+      );
+      // 男 60/170/40 のMifflin REE = 1467.5、AF/SFは掛けない
+      expect(r.kcal, closeTo(1467.5, 0.5));
     });
   });
 

@@ -330,9 +330,7 @@ Future<void> showPatientEditDialog(
       ? '—'
       : (() {
           final p = DateTime.tryParse(admEntry.changedAt);
-          return p == null
-              ? admEntry.changedAt
-              : '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}';
+          return p == null ? admEntry.changedAt : '${p.month}/${p.day}';
         })();
 
   final saved = await showDialog<bool>(
@@ -347,51 +345,68 @@ Future<void> showPatientEditDialog(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 患者 / 入室日 (固定表示)
+                // 患者
                 Row(children: [
                   const Icon(Icons.person, size: 16, color: Colors.black54),
                   const SizedBox(width: 2),
                   Text('患者${current.caseCode}',
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 12),
+                ]),
+                const SizedBox(height: 6),
+                // 入室日 | 絶食開始日 (横並び・mm/dd)
+                Row(children: [
                   Icon(Icons.login, size: 14, color: Colors.green.shade500),
                   const SizedBox(width: 2),
-                  Text('入室日 $admDateStr',
-                      style:
-                          TextStyle(fontSize: 13, color: Colors.green.shade600)),
+                  Text('入室 $admDateStr',
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.green.shade600)),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final picked = await _quickPickDate(
+                            context, fastingDate ?? DateTime.now());
+                        if (picked != null) {
+                          setLocal(() => fastingDate = picked);
+                        }
+                      },
+                      child: Row(children: [
+                        Icon(Icons.no_meals,
+                            size: 16,
+                            color: fastingDate == null
+                                ? Colors.grey.shade600
+                                : Colors.red.shade400),
+                        const SizedBox(width: 2),
+                        Text(
+                          fastingDate == null
+                              ? '絶食 未設定'
+                              : '絶食 ${fastingDate!.month}/${fastingDate!.day}',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: fastingDate == null
+                                  ? Colors.grey
+                                  : Colors.red.shade400),
+                        ),
+                        if (fastingDate != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () =>
+                                setLocal(() => fastingDate = null),
+                          )
+                        else
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.calendar_today, size: 14),
+                          ),
+                      ]),
+                    ),
+                  ),
                 ]),
                 const Divider(height: 16),
-                // 絶食開始日 (編集可)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  leading: Icon(Icons.no_meals,
-                      size: 22,
-                      color: fastingDate == null
-                          ? Colors.grey.shade600
-                          : Colors.red.shade400),
-                  title: Text(
-                    fastingDate == null
-                        ? '絶食開始日: 未設定'
-                        : '絶食開始日: ${fastingDate!.year}/${fastingDate!.month.toString().padLeft(2, '0')}/${fastingDate!.day.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                        fontSize: 14,
-                        color: fastingDate == null
-                            ? Colors.grey
-                            : Colors.red.shade400),
-                  ),
-                  trailing: fastingDate != null
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () => setLocal(() => fastingDate = null))
-                      : const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
-                    final picked = await _quickPickDate(
-                        context, fastingDate ?? DateTime.now());
-                    if (picked != null) setLocal(() => fastingDate = picked);
-                  },
-                ),
                 // ベッド (編集可・移動を反映)
                 Row(children: [
                   Icon(Icons.bed, size: 18, color: Colors.blueGrey.shade600),
@@ -415,8 +430,8 @@ Future<void> showPatientEditDialog(
                   onModel: (v) => setLocal(() => energyModel = v),
                   onKcalPerKg: (v) => setLocal(() => kcalPerKgValue = v),
                 ),
-                // 簡易式(kcal/kg)・実測REEではAF/SFを使わないため非表示
-                if (energyModel != 'kcalPerKg') ...[
+                // AF/SFはHarris-Benedictのみ。簡易式/Mifflin/間接熱量測定では非表示
+                if (energyModel == 'harrisBenedict') ...[
                 const SizedBox(height: 8),
                 // AF / SF (横並び)
                 Row(children: [
@@ -983,8 +998,8 @@ class CasesPage extends StatelessWidget {
                   onModel: (v) => setLocal(() => energyModel = v),
                   onKcalPerKg: (v) => setLocal(() => kcalPerKgValue = v),
                 ),
-                // 簡易式(kcal/kg)・実測REEではAF/SFを使わないため非表示
-                if (energyModel != 'kcalPerKg') ...[
+                // AF/SFはHarris-Benedictのみ。簡易式/Mifflin/間接熱量測定では非表示
+                if (energyModel == 'harrisBenedict') ...[
                 const SizedBox(height: 8),
                 // 活動係数・侵害係数 (横並び)
                 Row(
@@ -3345,7 +3360,7 @@ class _BuilderPageState extends State<BuilderPage>
               padding:
                   const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: _summaryHeight, minHeight: 80),
+                constraints: BoxConstraints(maxHeight: maxSummaryH),
                 child: Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -3356,39 +3371,6 @@ class _BuilderPageState extends State<BuilderPage>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onVerticalDragUpdate: (d) {
-                          final expansion = -d.delta.dy;
-                          setState(() {
-                            _summaryHeight =
-                                (_summaryHeight + expansion).clamp(80.0, maxSummaryH);
-                          });
-                          if (expansion > 0 && _listScroll.hasClients) {
-                            final next = (_listScroll.offset + expansion)
-                                .clamp(0.0, _listScroll.position.maxScrollExtent);
-                            _listScroll.jumpTo(next);
-                          }
-                        },
-                        onVerticalDragEnd: (_) {
-                          // 上端まで引っ張ったら下端に戻す。それ以外は離した位置で止まる。
-                          if (_summaryHeight >= maxSummaryH) _snapTo(80.0);
-                        },
-                      child: Container(
-                        color: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Center(
-                          child: Container(
-                            height: 4,
-                            width: 48,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                     Flexible(
                       fit: FlexFit.loose,
                       child: ClipRect(
@@ -3738,8 +3720,8 @@ class _BuilderPageState extends State<BuilderPage>
       top: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: SizedBox(
-          height: _chartPanelHeight,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxPanel),
           child: Card(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -3751,36 +3733,9 @@ class _BuilderPageState extends State<BuilderPage>
                   width: 0.8),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragUpdate: (d) {
-                    setState(() {
-                      _chartPanelHeight =
-                          (_chartPanelHeight - d.delta.dy)
-                              .clamp(_chartPanelMin, maxPanel);
-                    });
-                  },
-                  onVerticalDragEnd: (_) {
-                    // 上端まで引っ張ったら下端に戻す。それ以外は離した位置で止まる。
-                    if (_chartPanelHeight >= maxPanel) _chartSnapTo(_chartPanelMin);
-                  },
-                  child: Container(
-                    color: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Center(
-                      child: Container(
-                        height: 4,
-                        width: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
+                Flexible(
                   child: ClipRect(
                     child: SingleChildScrollView(
                       controller: _chartScroll,
@@ -7758,17 +7713,17 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final f = fullKcal > 0 ? k / fullKcal : 1.0;
       return (kcal: k, prot: fullProt * f);
     }
-    final fullKpk = fullKcal / fw;
-    // full nutrition達成期間(_dayPercents)に沿って kcal/kg を線形に上げる。
-    // 達成日(pct=100%)で full に到達。初日は急性期で必ず full 未満。
+    // full nutrition達成期間(_dayPercents)に沿って、full の2/3(=full30なら20 kcal/kg相当)
+    // から達成日(pct=100%)の full へ線形に引き上げる。
+    // 「fullまでの割合」で計算するため、目標kcal/kgが低い患者でも初日が必ずfull未満になる。
     final pcts = _dayPercents;
     final pct = i < pcts.length ? pcts[i] : 100.0;
     final firstPct = pcts.isNotEmpty ? pcts.first : 100.0;
-    final startKpk = fullKpk < 20.0 ? fullKpk * 0.67 : 20.0;
+    const startFrac = 0.67; // 急性期 ≈ full の2/3
     final denom = 100.0 - firstPct;
     final t = denom > 0 ? ((pct - firstPct) / denom).clamp(0.0, 1.0) : 1.0;
-    final kpk = startKpk + (fullKpk - startKpk) * t;
-    final cappedKcal = _refeedCappedKcal(i, kpk * fw);
+    final frac0 = startFrac + (1.0 - startFrac) * t;
+    final cappedKcal = _refeedCappedKcal(i, fullKcal * frac0);
     final frac = fullKcal > 0 ? cappedKcal / fullKcal : 1.0;
     return (kcal: cappedKcal, prot: fullProt * frac);
   }
