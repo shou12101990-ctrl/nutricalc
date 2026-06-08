@@ -6491,6 +6491,13 @@ class AppState {
     'メイバランス1.5', 'メイバランス2.0',
   ];
 
+  /// デフォルト採用から外す製剤（同名で容量違いがあるため name+volume で指定）。
+  static const List<(String, double)> _defaultExcluded = [
+    ('メイバランス1.5', 333.0),
+    ('カルチコール注射液8.5%', 5.0),
+    ('グルセルナ-REX', 400.0),
+  ];
+
   final ProductCatalog catalog;
   final LocalStore store;
   final List<PatientCase> cases;
@@ -6764,10 +6771,15 @@ class AppState {
     // デフォルト採用セットを一度だけ既存の採用リストにマージする
     if (!await store.loadDefaultsApplied()) {
       final defaults = _defaultAdoptedNames.map((n) => n.trim()).toSet();
+      bool isExcluded(Product p) => _defaultExcluded
+          .any((e) => e.$1 == p.name.trim() && (p.volumeMl ?? 0) == e.$2);
       final defaultIds = catalog.products
-          .where((p) => defaults.contains(p.name.trim()))
+          .where((p) => defaults.contains(p.name.trim()) && !isExcluded(p))
           .map((p) => p.id);
-      adopted = (<String>{...adopted, ...defaultIds}).toList();
+      final excludedIds =
+          catalog.products.where(isExcluded).map((p) => p.id).toSet();
+      adopted = (<String>{...adopted, ...defaultIds}..removeAll(excludedIds))
+          .toList();
       await store.saveAdoptedProducts(adopted);
       await store.saveDefaultsApplied();
     }
