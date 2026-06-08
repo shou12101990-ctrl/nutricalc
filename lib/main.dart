@@ -7228,7 +7228,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('簡易式 栄養係数',
+        Text('簡易式 栄養係数 step up (kcal/kg)',
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -7494,12 +7494,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 設定: 絶食〜経口リハ(左) + 簡易式栄養係数の段階開始日(右)
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                  // 設定: 絶食〜経口リハ
                   Table(
                     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     columnWidths: const {
@@ -7713,11 +7708,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]),
                     ],
                   ),
-                      const SizedBox(width: 20),
-                      _kcalStepColumn(),
-                    ],
-                    ),
-                  ),
+                  const SizedBox(height: 10),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  // 簡易式 栄養係数の段階開始日(自動/手動 切替)
+                  _kcalStepColumn(),
                   const SizedBox(height: 4),
                   const Text('★ お気に入り製剤を優先して設計します',
                       style: TextStyle(fontSize: 11, color: Colors.grey)),
