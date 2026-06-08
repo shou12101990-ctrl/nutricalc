@@ -6385,21 +6385,30 @@ class NutritionCalculator {
       } else if (pnBases.isEmpty) {
         consider(completePlan(enItems, null), enKcal);
       } else {
-        // PN主剤を1号/2号等で振り、IN・kcalが最適なものを採用
-        // PN使用量が袋の50%未満の場合は別製剤を優先(スコアペナルティ付き)
+        // PN主剤の選定: エルネオパ1号→2号 の導入プロトコルを優先する。
+        //   初期導入は1号、必要量が過大(>2000ml相当)になれば2号へ切替。
+        //   エルネオパ未採用時は従来どおり IN/kcal 最適で選ぶ。
         for (final pb in pnBases) {
           final plan = completePlan(enItems, pb);
-          // プラン内のPNアイテムを特定して使用量比を確認
           double planScore = scoreOf(plan, enKcal);
           final bagVol = pb.volumeMl ?? 1;
+          double pnVol = 0;
           for (final it in plan.items) {
             if (it.units == null && it.name == pb.name) {
+              pnVol = it.volumeMl;
               final usageRatio = it.volumeMl / bagVol;
               if (usageRatio < 0.5) {
                 // 50%未満の端数使用 → 別製剤があれば乗り換えを促す
                 planScore += (0.5 - usageRatio) * 20;
               }
             }
+          }
+          // 導入プロトコル: 1号を強く優先。1号で必要量が過大なら2号を次点優先。
+          if (pb.name == 'エルネオパNF1号') {
+            // 1号(0.56kcal/ml)は希釈。約3000ml(=1.5L×2袋相当)までは1号を優先
+            if (pnVol <= 3000) planScore -= 1000.0;
+          } else if (pb.name == 'エルネオパNF2号') {
+            planScore -= 500.0;
           }
           if (planScore < bestScore) {
             bestScore = planScore;
@@ -7711,30 +7720,17 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rawKcal < cap ? rawKcal : cap;
   }
 
-  /// full nutrition達成期間ランプ: kcal/kg を 急性期(≈20, full未満)から
-  /// full nutrition達成日(_rampDays, pct=100%)に向けて線形に引き上げ、達成日でfull。
-  /// 「full達成までの期間」を尊重し、初日からfullにならない。
+  /// full nutrition達成期間ランプ: 栄養開始から full nutrition 達成日(_rampDays)まで、
+  /// _dayPercents に沿って等差的(線形)に引き上げ、達成日でfull。
+  /// 例: rampDays=5 → 20→40→60→80→100% と毎日 100/rampDays% ずつ増やす。
   /// タンパクはkcal比に按分。Refeedingリスク時はさらにcap。
   ({double kcal, double prot}) _acutePhaseTarget(int i) {
     final fullKcal = NutritionCalculator.targetEnergy(widget.current);
     final fullProt = NutritionCalculator.targetProtein(widget.current);
-    final fw =
-        NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
-    if (fw <= 0) {
-      final k = _refeedCappedKcal(i, fullKcal);
-      final f = fullKcal > 0 ? k / fullKcal : 1.0;
-      return (kcal: k, prot: fullProt * f);
-    }
-    // full nutrition達成期間(_dayPercents)に沿って、full の2/3(=full30なら20 kcal/kg相当)
-    // から達成日(pct=100%)の full へ線形に引き上げる。
-    // 「fullまでの割合」で計算するため、目標kcal/kgが低い患者でも初日が必ずfull未満になる。
+    // _dayPercents（等差ramp: day*100/rampDays）の達成%をそのまま適用する。
     final pcts = _dayPercents;
     final pct = i < pcts.length ? pcts[i] : 100.0;
-    final firstPct = pcts.isNotEmpty ? pcts.first : 100.0;
-    const startFrac = 0.67; // 急性期 ≈ full の2/3
-    final denom = 100.0 - firstPct;
-    final t = denom > 0 ? ((pct - firstPct) / denom).clamp(0.0, 1.0) : 1.0;
-    final frac0 = startFrac + (1.0 - startFrac) * t;
+    final frac0 = (pct / 100.0).clamp(0.0, 1.0);
     final cappedKcal = _refeedCappedKcal(i, fullKcal * frac0);
     final frac = fullKcal > 0 ? cappedKcal / fullKcal : 1.0;
     return (kcal: cappedKcal, prot: fullProt * frac);
