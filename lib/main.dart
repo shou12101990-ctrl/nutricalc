@@ -192,6 +192,46 @@ List<Widget> _energyModelFields({
   ];
 }
 
+/// 過剰栄養アラート（表示のみ・非強制）。
+/// H-B / Mifflin など「基礎代謝×活動係数×侵害係数」のモデルで、侵害係数が高く(≥1.5)、
+/// 目標が 30 kcal/kg/day を超える場合に、過剰栄養(overfeeding)の可能性を控えめに注意する。
+/// 簡易式(kcal/kg)・間接熱量測定は対象外。該当なしは null。
+Widget? _energyOverfeedAlert(PatientCase item) {
+  final model = item.energyModel;
+  if (model != 'harrisBenedict' && model != 'mifflinStJeor') return null;
+  final er = NutritionCalculator.targetEnergyResult(item);
+  if (er.feedingWeightKg <= 0) return null;
+  final kcalPerKg = er.kcal / er.feedingWeightKg;
+  if (!(item.stressFactor >= 1.5 && kcalPerKg > 30)) return null;
+  return Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(top: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+    decoration: BoxDecoration(
+      color: Colors.orange.shade50,
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: Colors.orange.shade300),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.warning_amber_rounded,
+            size: 14, color: Colors.orange.shade800),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            '約${kcalPerKg.round()} kcal/kg/day と過剰栄養の可能性。'
+            '侵害係数が高く H-B×係数は過大評価しがちです。'
+            '25–30 kcal/kg（簡易式）も検討してください。',
+            style: TextStyle(
+                fontSize: 11, color: Colors.orange.shade900, height: 1.3),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 /// 病態に基づくタンパク推奨範囲サジェスト（非強制・表示のみ）。該当なしは null。
 Widget? _proteinSuggestion(Iterable<String> tags, double currentGoal) {
   final ranges = cc.proteinRangesFor(tags);
@@ -580,8 +620,6 @@ class _CaseCard extends StatefulWidget {
 }
 
 class _CaseCardState extends State<_CaseCard> {
-  bool _collapsed = false;
-
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -661,7 +699,7 @@ class _CaseCardState extends State<_CaseCard> {
                             ],
                           ],
                         ),
-                        if (!_collapsed) ...[
+                        ...[
                           const SizedBox(height: 2),
                           Text(item.patientInfoLine,
                               style: const TextStyle(fontSize: 14)),
@@ -677,14 +715,6 @@ class _CaseCardState extends State<_CaseCard> {
                       ],
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(
-                      _collapsed ? Icons.expand_more : Icons.expand_less,
-                      size: 22, color: Colors.grey),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: _collapsed ? '展開' : '折りたたむ',
-                  onPressed: () => setState(() => _collapsed = !_collapsed),
                 ),
                 FilledButton.tonal(
                     onPressed: openBuilder, child: const Text('計算')),
@@ -1542,6 +1572,7 @@ class _BuilderPageState extends State<BuilderPage>
   final ScrollController _chartScroll = ScrollController();
   // Phase 4-③: 処方ビルダーの2タブ状態 (0: EN/TPN/PPN 選択, 1: ゼロからブレンド)
   int _builderTabIndex = 0;
+  bool _builderCardCollapsed = false; // 計算画面の患者カード折りたたみ
   final targetKcalController = TextEditingController(text: '1500');
   final npcnController = TextEditingController(text: '125');
   double _lipidGPerKg = 0.4;
@@ -1549,6 +1580,8 @@ class _BuilderPageState extends State<BuilderPage>
   // ゼロmenu: 2サブタブ (0:本体, 1:加注) と加注製剤リスト(複数可)
   int _zeroSubTab = 0;
   final List<String> _zeroAdditives = [];
+  // 個別選択モードの加注（デフォルト空。ゼロmenuの_zeroAdditivesとは独立）
+  final List<String> _selectAdditives = [];
   final Set<String> expandedProducts = {};
   double _enRateMlPerHour = 0;
   double _tpnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
@@ -1824,8 +1857,8 @@ class _BuilderPageState extends State<BuilderPage>
     processCategory('濃厚流動食', 0);
     processCategory('栄養サポート食品', 0);
 
-    // 加注製剤(電解質/微量元素/ビタミン)を合算
-    for (final name in _zeroAdditives) {
+    // 加注製剤(電解質/微量元素/ビタミン)を合算（個別選択は_selectAdditives）
+    for (final name in _selectAdditives) {
       final p = widget.state.catalog.byName(name);
       if (p == null) continue;
       final prot = p.aminoAcidG ?? 0;
@@ -1893,14 +1926,14 @@ class _BuilderPageState extends State<BuilderPage>
 
   // 加注製剤(電解質/微量元素/ビタミン)を複数追加するピッカー。
   // カテゴリ見出し付きの1リストを最初から展開表示し、各行のステッパーで選ぶ。
-  // ゼロmenu・個別選択 双方で共有 (_zeroAdditives)。
-  Widget _additivePicker() {
+  // target は ゼロmenu(_zeroAdditives) / 個別選択(_selectAdditives) を切替えて渡す。
+  Widget _additivePicker(List<String> target) {
     const cats = [
       ('電解質', '電解質補正'),
       ('微量元素', '微量元素製剤'),
       ('ビタミン', 'ビタミン製剤'),
     ];
-    int countOf(String name) => _zeroAdditives.where((x) => x == name).length;
+    int countOf(String name) => target.where((x) => x == name).length;
 
     Widget header(String label) => Container(
           width: double.infinity,
@@ -1947,7 +1980,7 @@ class _BuilderPageState extends State<BuilderPage>
             visualDensity: VisualDensity.compact,
             color: Colors.red.shade400,
             onPressed:
-                cnt > 0 ? () => setState(() => _zeroAdditives.remove(p.name)) : null,
+                cnt > 0 ? () => setState(() => target.remove(p.name)) : null,
           ),
           SizedBox(
               width: 18,
@@ -1963,7 +1996,7 @@ class _BuilderPageState extends State<BuilderPage>
             constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
             visualDensity: VisualDensity.compact,
             color: Colors.blue.shade600,
-            onPressed: () => setState(() => _zeroAdditives.add(p.name)),
+            onPressed: () => setState(() => target.add(p.name)),
           ),
         ]),
       );
@@ -2149,7 +2182,7 @@ class _BuilderPageState extends State<BuilderPage>
     // 加注製剤の処方表示 (名称 + 合計量, 同一製剤は×本数で集約)
     final scratchAdditiveLines = (() {
       final m = <String, int>{};
-      for (final n in _zeroAdditives) {
+      for (final n in (isScratchMode ? _zeroAdditives : _selectAdditives)) {
         m[n] = (m[n] ?? 0) + 1;
       }
       return m.entries.map((e) {
@@ -2265,6 +2298,28 @@ class _BuilderPageState extends State<BuilderPage>
                                 const SizedBox(width: 2),
                                 Text(current.currentBed,
                                     style: Theme.of(context).textTheme.titleLarge),
+                                const Spacer(),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 20),
+                                  tooltip: '患者情報を編集',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () =>
+                                      _editPatientParams(context, current),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                      _builderCardCollapsed
+                                          ? Icons.expand_more
+                                          : Icons.expand_less,
+                                      size: 22),
+                                  tooltip: _builderCardCollapsed
+                                      ? '展開'
+                                      : '折りたたむ',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => setState(() =>
+                                      _builderCardCollapsed =
+                                          !_builderCardCollapsed),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 4),
@@ -2275,6 +2330,7 @@ class _BuilderPageState extends State<BuilderPage>
                               '栄養開始日 ${_mmdd(_nutritionStart)}',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
+                            if (!_builderCardCollapsed) ...[
                             const SizedBox(height: 4),
                             Text(
                               current.patientInfoLine,
@@ -2308,6 +2364,11 @@ class _BuilderPageState extends State<BuilderPage>
                                     ?.copyWith(color: Colors.blueGrey),
                               );
                             }),
+                            // 過剰栄養アラート (H-B×係数 + 高SF + >30kcal/kg)
+                            Builder(
+                                builder: (_) =>
+                                    _energyOverfeedAlert(current) ??
+                                    const SizedBox.shrink()),
                             if (current.memo.isNotEmpty) ...[
                               const SizedBox(height: 2),
                               Text(current.memo,
@@ -2342,6 +2403,7 @@ class _BuilderPageState extends State<BuilderPage>
                                     ),
                                 ],
                               ),
+                            ],
                             ],
                           ],
                         ),
@@ -2558,7 +2620,7 @@ class _BuilderPageState extends State<BuilderPage>
                                     style:
                                         Theme.of(context).textTheme.titleSmall),
                                 const Divider(),
-                                _additivePicker(),
+                                _additivePicker(_zeroAdditives),
                               ],
                             ),
                           ),
@@ -2769,7 +2831,7 @@ class _BuilderPageState extends State<BuilderPage>
                               }),
                               if (category == '加注') ...[
                                 const SizedBox(height: 8),
-                                _additivePicker(),
+                                _additivePicker(_selectAdditives),
                               ],
                               if (category == '食事') ...[
                                 const SizedBox(height: 4),
@@ -3206,7 +3268,7 @@ class _BuilderPageState extends State<BuilderPage>
                                                         child: Text('$label  $desc', style: ts),
                                                       );
                                                     }
-                                                    final hasAny = enItems.isNotEmpty || tpnUnits > 0 || ppnUnits > 0 || foodItems.isNotEmpty || _zeroAdditives.isNotEmpty;
+                                                    final hasAny = enItems.isNotEmpty || tpnUnits > 0 || ppnUnits > 0 || foodItems.isNotEmpty || (isScratchMode ? _zeroAdditives : _selectAdditives).isNotEmpty;
                                                     if (!hasAny) return const Text('(未選択)', style: TextStyle(fontSize: 12.5, color: Colors.grey));
                                                     return Column(
                                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3728,13 +3790,26 @@ class _NotePageState extends State<NotePage>
           '　PPN単独での栄養状態の改善は難しいので経口やENとの併用をする.',
     ),
     _NoteSection(
-      category: 'Harris-Benedict',
-      title: 'Harris-Benedictの式',
+      category: 'エネルギー\n算出法',
+      title: 'エネルギー算出法',
       color: Color(0xFFE67E22),
-      body: '必要エネルギー量 = 基礎代謝 (BEE) × 活動係数 × 侵害係数 (ストレス係数)\n\n'
-          '　女性 BEE = 665 + 9.6×体重kg + 1.8×身長cm − 4.7×年齢\n'
-          '　男性 BEE =  66 + 13.7×体重kg + 5.0×身長cm − 6.8×年齢\n\n'
-          '適応条件: 体重 25〜125kg, 身長 151〜200cm, 年齢 21〜70歳',
+      body: '目標エネルギー量をどう決めるか――その考え方は歴史的に変遷してきた。\n\n'
+          '■ Harris-Benedictの式 (1919)\n'
+          '基礎代謝量(BEE)を体重・身長・年齢から推定する古典的回帰式。健常者の実測がもとで、臨床では Long(1979) が「BEE×活動係数×侵害(ストレス)係数」を掛けて必要量とする方法を広めた。\n'
+          '　女性 BEE = 655 + 9.6×体重kg + 1.8×身長cm − 4.7×年齢\n'
+          '　男性 BEE =  66 + 13.7×体重kg + 5.0×身長cm − 6.8×年齢\n'
+          '　（※女性定数は 655。665 は広く出回る誤記）\n'
+          '長所: 個別の体格を反映。短所: もとが健常者由来で、重症・浮腫・肥満では系統的に過大評価しやすく、係数の掛け算がさらに過剰栄養を招くとされ、ICUでは支持を失っていった。\n\n'
+          '■ 簡易式 (25〜30 kcal/kg/day)\n'
+          '「複雑な式でも実測より正確とは限らない」という反省から、体重あたりの簡便な目安が普及。ASPEN/SCCM 2016・ESPEN 2019・JSPEN が採用。肥満では低めの係数(11〜14 kcal/kg)や理想体重を用いる。\n'
+          '長所: 簡便で過剰栄養を避けやすい。短所: 体組成や代謝亢進の個別差は反映しにくい。\n\n'
+          '■ 間接熱量測定 (indirect calorimetry)\n'
+          '呼気のO₂消費・CO₂産生から実際の安静時エネルギー消費(REE)を測る、現在のゴールドスタンダード。ESPEN/ASPEN は「可能なら測定」を推奨。機器・人手・リーク等の制約で全例には使えないのが現実。\n\n'
+          '■ いま何がエビデンスか\n'
+          '・正確さ: 間接熱量測定 ＞ 体重あたり簡易式 ≧ 予測式(H-B等)。予測式は誤差が大きい。\n'
+          '・急性期はむしろ不足を許容(permissive underfeeding)し過剰栄養を避けるのが主流(ESPEN)。\n'
+          '・どの式でも、重症・浮腫・肥満では体重指標(実体重/理想体重/補正体重)の選択が結果を大きく左右する。\n\n'
+          '本アプリでは患者情報編集で式を選べ(H-B / Mifflin-St Jeor / 簡易kcal·kg / 間接熱量測定)、補正体重は内部で自動採用する。',
     ),
     _NoteSection(
       category: '活動係数\n侵害係数',
