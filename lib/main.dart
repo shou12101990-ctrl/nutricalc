@@ -3143,11 +3143,54 @@ class _BuilderPageState extends State<BuilderPage>
                                               },
                                             )
                                           : SizedBox(
-                                              width: 120,
+                                              width: ((product.category == 'TPN' ||
+                                                          product.category == 'PPN') &&
+                                                      (product.volumeMl ?? 0) > 100)
+                                                  ? 196
+                                                  : 120,
                                               child: Row(
                                                 mainAxisAlignment: MainAxisAlignment.end,
                                                 children: [
+                                                  // 部分量(100ml単位): 本数指定の左に配置
+                                                  if ((product.category == 'TPN' ||
+                                                          product.category == 'PPN') &&
+                                                      (product.volumeMl ?? 0) > 100)
+                                                    Builder(builder: (_) {
+                                                      final bagVol =
+                                                          (product.volumeMl ?? 0).round();
+                                                      final maxPartial = bagVol > 100
+                                                          ? ((bagVol - 1) ~/ 100) * 100
+                                                          : 0;
+                                                      final opts = <int>[
+                                                        0,
+                                                        for (int v = 100; v <= maxPartial; v += 100) v
+                                                      ];
+                                                      final cur =
+                                                          partialMl.clamp(0, maxPartial);
+                                                      return DropdownButton<int>(
+                                                        value: cur,
+                                                        isDense: true,
+                                                        underline: const SizedBox.shrink(),
+                                                        items: opts
+                                                            .map((v) => DropdownMenuItem(
+                                                                value: v,
+                                                                child: Text(
+                                                                    v == 0 ? '+0' : '+${v}ml',
+                                                                    style: const TextStyle(
+                                                                        fontSize: 13))))
+                                                            .toList(),
+                                                        onChanged: (v) async {
+                                                          await widget.state.setPartialMl(
+                                                              current.id, product, v ?? 0);
+                                                          setState(() {});
+                                                        },
+                                                      );
+                                                    }),
                                                   IconButton(
+                                                    visualDensity: VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints: const BoxConstraints(
+                                                        minWidth: 32, minHeight: 32),
                                                     onPressed: () async {
                                                       await widget.state.setUnits(current.id, product, (units - 1).clamp(0, 99));
                                                       setState(() {});
@@ -3156,6 +3199,10 @@ class _BuilderPageState extends State<BuilderPage>
                                                   ),
                                                   Text('$units', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                                                   IconButton(
+                                                    visualDensity: VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints: const BoxConstraints(
+                                                        minWidth: 32, minHeight: 32),
                                                     onPressed: () async {
                                                       await widget.state.setUnits(current.id, product, units + 1);
                                                       setState(() {});
@@ -3172,53 +3219,6 @@ class _BuilderPageState extends State<BuilderPage>
                                           expandedProducts.add(product.id);
                                       }),
                                     ),
-                                    // TPN/PPN: 本数に上乗せする部分使用量(100ml単位)
-                                    if (product.category == 'TPN' ||
-                                        product.category == 'PPN')
-                                      Builder(builder: (_) {
-                                        final bagVol =
-                                            (product.volumeMl ?? 0).round();
-                                        final maxPartial = bagVol > 100
-                                            ? ((bagVol - 1) ~/ 100) * 100
-                                            : 0;
-                                        final opts = <int>[
-                                          0,
-                                          for (int v = 100; v <= maxPartial; v += 100) v
-                                        ];
-                                        final cur =
-                                            partialMl.clamp(0, maxPartial);
-                                        final totalMl = units * bagVol + cur;
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                              left: 56.0, right: 8.0, bottom: 6.0),
-                                          child: Row(children: [
-                                            const Text('部分量 ',
-                                                style: TextStyle(fontSize: 12)),
-                                            DropdownButton<int>(
-                                              value: cur,
-                                              isDense: true,
-                                              items: opts
-                                                  .map((v) => DropdownMenuItem(
-                                                      value: v,
-                                                      child: Text(
-                                                          v == 0 ? '+0ml' : '+${v}ml',
-                                                          style: const TextStyle(
-                                                              fontSize: 13))))
-                                                  .toList(),
-                                              onChanged: (v) async {
-                                                await widget.state.setPartialMl(
-                                                    current.id, product, v ?? 0);
-                                                setState(() {});
-                                              },
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Text('計 ${totalMl}ml',
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.grey.shade700)),
-                                          ]),
-                                        );
-                                      }),
                                     if (expandedProducts.contains(product.id) &&
                                         product.notes?.trim().isNotEmpty ==
                                             true)
@@ -7926,18 +7926,19 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final fullProt = NutritionCalculator.targetProtein(widget.current);
     final fw =
         NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
-    final fullKpk = fw > 0 ? fullKcal / fw : 30.0;
     final day = i + 1;
-    double kpk;
+    double rawKcal;
     if (day >= _kcalStep30Day) {
-      kpk = 30.0;
+      // 最終段階 = full nutrition。目標が30kcal/kg超でも必ず100%に到達させる。
+      rawKcal = fullKcal;
     } else if (day >= _kcalStep25Day) {
-      kpk = 25.0;
+      final k = 25.0 * fw; // 25kcal/kg。ただし目標を超えない。
+      rawKcal = k < fullKcal ? k : fullKcal;
     } else {
-      kpk = 20.0;
+      final k = 20.0 * fw; // 20kcal/kg。ただし目標を超えない。
+      rawKcal = k < fullKcal ? k : fullKcal;
     }
-    if (kpk > fullKpk) kpk = fullKpk;
-    final cappedKcal = _refeedCappedKcal(i, kpk * fw);
+    final cappedKcal = _refeedCappedKcal(i, rawKcal);
     final frac = fullKcal > 0 ? cappedKcal / fullKcal : 1.0;
     return (kcal: cappedKcal, prot: fullProt * frac);
   }
