@@ -8761,6 +8761,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final isZero = mode == 'ZERO' || plan.label == 'ZERO';
     const ts = TextStyle(fontSize: 12.5);
     final children = <Widget>[];
+    double pnRoundDelta = 0; // PNを10ml丸めしたことによるIN補正
     Widget line(String s, {TextStyle style = ts}) => Padding(
         padding: const EdgeInsets.only(bottom: 2),
         child: Text(s, style: style));
@@ -8770,7 +8771,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         children.add(line('${it.name}  ${it.volumeMl.round()}ml'));
       }
     } else {
-      double tpnVol = 0, ppnVol = 0;
+      double tpnVol = 0, ppnVol = 0; // 10ml丸め後
+      double tpnOrig = 0, ppnOrig = 0;
+      double r10(double v) => (v / 10).round() * 10.0;
       final tpnNames = <String>[], ppnNames = <String>[];
       for (final it in plan.items) {
         final p = widget.state.catalog.byName(it.name);
@@ -8793,17 +8796,22 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 '${it.name}  ${rateMlH.toStringAsFixed(0)}ml/h  朝昼夕${pacPerExchange}pac'));
           }
         } else if (cat == 'TPN') {
-          tpnVol += it.volumeMl;
+          final v10 = r10(it.volumeMl);
+          tpnVol += v10;
+          tpnOrig += it.volumeMl;
           final u = it.units != null ? '${it.units}本 ' : '';
-          tpnNames.add('${it.name}  $u(${it.volumeMl.round()}ml)');
+          tpnNames.add('${it.name}  $u(${v10.round()}ml)');
         } else if (cat == 'PPN') {
-          ppnVol += it.volumeMl;
+          final v10 = r10(it.volumeMl);
+          ppnVol += v10;
+          ppnOrig += it.volumeMl;
           final u = it.units != null ? '${it.units}本 ' : '';
-          ppnNames.add('${it.name}  $u(${it.volumeMl.round()}ml)');
+          ppnNames.add('${it.name}  $u(${v10.round()}ml)');
         } else {
           children.add(line(it.name));
         }
       }
+      pnRoundDelta = (tpnVol + ppnVol) - (tpnOrig + ppnOrig);
       // TPN / PPN はそれぞれまとめて別々に流量表記
       if (tpnVol > 0) {
         children.add(line(
@@ -8830,7 +8838,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     }
     children.add(const SizedBox(height: 4));
     children.add(Text(
-      'IN ${plan.totalVolumeMl.round()}ml, 熱量 ${plan.totalKcal.round()}kcal, '
+      'IN ${(plan.totalVolumeMl + pnRoundDelta).round()}ml, 熱量 ${plan.totalKcal.round()}kcal, '
       'タンパク ${plan.totalProteinG.toStringAsFixed(1)}g (${protPerKg.toStringAsFixed(1)}g/kg)',
       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
     ));
