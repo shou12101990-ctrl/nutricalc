@@ -3819,7 +3819,14 @@ class _NotePageState extends State<NotePage>
           '寝たきり体動あり            1.1 – 1.2\n'
           'ベッド外活動 (車椅子)   1.2 – 1.3\n'
           'ベッド外活動 (歩行)       1.3 – 1.4\n'
-          '積極的なリハビリ            1.5以上',
+          '積極的なリハビリ            1.5以上\n'
+          '\n'
+          '■背景\n'
+          '・Harris-Benedictは基礎代謝量(BEE)の推定式。これに活動係数(AF)×侵害係数(SF)を掛けて'
+          '1日の総エネルギー消費量(TEE)を概算する(Longの式, 1979)。\n'
+          '・AFは身体活動による上乗せ分。ICUでは安静〜リハ進行に応じて概ね1.0〜1.4。\n'
+          '・AFとSFを掛け合わせるほど推定値は大きくなるため、両係数が高いと過大評価に傾く'
+          '(→侵害係数の項を参照)。',
     ),
     _NoteSection(
       category: '活動係数\n侵害係数',
@@ -3831,7 +3838,26 @@ class _NotePageState extends State<NotePage>
           '癌                                                                   1.1 – 1.3\n'
           '感染症                                                            1.2 – 1.5　(敗血症 1.6)\n'
           '発熱                                                                1.2 – 1.5\n'
-          '熱傷                                                                1.2 – 2.0　(広範囲熱傷 2.1)',
+          '熱傷                                                                1.2 – 2.0　(広範囲熱傷 2.1)\n'
+          '\n'
+          '■背景\n'
+          '・SFは疾患・侵襲による代謝亢進(hypermetabolism)の上乗せ係数(Longの式, 1979)。'
+          '敗血症・外傷・熱傷などで基礎代謝が増える。\n'
+          '\n'
+          '■「SF≧1.5で過大栄養になりうる」根拠\n'
+          '・BEE×AF×SFの予測式は、重症患者では実測エネルギー消費量(間接熱量測定)を'
+          '過大評価しやすいことが報告されている。\n'
+          '・急性期は異化による内因性エネルギー供給があるため、計算値どおりフル投与すると'
+          '過剰栄養(overfeeding)になりやすい。\n'
+          '・過剰栄養は高血糖・高TG血症・脂肪肝・CO2産生増加(換気負担)・感染・'
+          '人工呼吸期間の延長などのリスクと関連する。\n'
+          '・ASPEN/SCCM(2016)・ESPEN(2019)は、間接熱量測定が使えない場合は'
+          '25–30 kcal/kg/day を目安とし、急性期は計算値の100%投与を急がない'
+          '(段階的に増量)ことを推奨している。\n'
+          '・目安として、侵害係数が高い(SF≧1.5)とAFと相まって目標が概ね'
+          '>30 kcal/kg/day に達し、過剰栄養域に入りやすい'
+          '(本アプリも該当時に注意表示)。\n'
+          '※いずれも目安であり、最終判断は患者の病態と主治医の評価による。',
     ),
     _NoteSection(
       category: 'タンパク',
@@ -3879,25 +3905,31 @@ class _NotePageState extends State<NotePage>
       category: '電解質',
       title: '電解質',
       color: Color(0xFF3F51B5),
-      body: '■ Na\n'
-          '・不可避損失量: 食塩 1.5g = Na 600mg = Na 25.5 mEq\n'
-          '・高血圧ガイドラインの 6g (Na 102 mEq) を超えないように投与.\n\n'
-          '他記載中',
+      body: '■ Na（ナトリウム）\n・厚労省 食事摂取基準2025 食塩相当量 目標量: 男性<7.5 / 女性<6.5 g/日。高血圧・CKD治療目標<6 g/日。\n・換算: 食塩1 g = Na 17.1 mEq。6 g=102.7 mEq, 7.5 g=128.3 mEq。\n・静脈栄養(ASPEN/JSPEN)標準: 1〜2 mEq/kg/日。本アプリは Na>102.7 mEq/日(食塩6 g相当)で塩分負荷アラート。\n\n■ K（カリウム）\n・食事摂取基準2025 目安量 男2,500/女2,000 mg/日(目標量 男3,000/女2,600 mg以上)。耐容上限なし。\n・PN標準 1〜2 mEq/kg/日。1日100 mEq超は注意。投与速度≤20 mEq/h・濃度≤40 mEq/L(原則中心静脈・心電図監視)。\n\n■ Ca（カルシウム）\n・推奨量 650〜800 mg/日、耐容上限 2,500 mg/日(≒125 mEq)。PN標準 10〜15 mEq/日。P製剤との配合変化(沈殿)に注意。\n\n■ Mg（マグネシウム）\n・推奨量 男340〜380/女280〜290 mg/日(サプリ等の上限350 mg)。PN標準 8〜20 mEq/日。腎機能低下で高Mg血症に注意。\n\n■ P（リン）\n・目安量 男1,000/女800 mg/日、耐容上限 3,000 mg/日(≒97 mmol)。PN標準 20〜40 mmol/日。Refeedingで低下しやすく要モニタ。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN 静脈経腸栄養ガイドライン',
     ),
     _NoteSection(
       category: 'ビタミン',
       title: 'ビタミン',
       color: Color(0xFF9C27B0),
-      body: '■ ビタミンB1\n'
-          '・体内貯蔵量が 30mg と少なく早期に欠乏症を呈する.\n'
-          '・1日に 3mg 程度補う.\n\n'
-          '他記載中',
+      body: '■ ビタミンB1（チアミン）\n・体内貯蔵量が約30 mgと少なく早期に欠乏。糖負荷で需要増。Refeeding/Wernicke予防に投与前〜10日 200〜300 mg/日(NICE/JSPEN)。\n\n■ 耐容上限(UL)が臨床上重要なもの（食事摂取基準2025）\n・ビタミンA: 推奨 650〜900 µgRAE、UL 2,700 µgRAE/日。過剰で肝障害・頭蓋内圧亢進。\n・ビタミンD: 目安 9.0 µg、UL 100 µg(4,000 IU)/日。過剰で高Ca血症。\n・ビタミンB6: 推奨 1.2〜1.5 mg、UL 45〜60 mg/日。過剰で感覚性ニューロパチー。\n・葉酸(強化食品/サプリ) UL 900〜1,000 µg/日。ナイアシン UL 300〜350 mg/日。\n\n■ 静脈栄養の総合ビタミン(ASPEN成人/国内オーツカMV・ビタジェクト相当・1日量)\n・B1 3〜6・B2 3.6・B6 4〜6 mg, B12 5 µg, ナイアシン 40 mg, 葉酸 400〜600 µg, C 100〜200 mg, A 3,300 IU, D 200 IU, E 10 mg, K 150 µg。\n・TPNでは水溶性ビタミンが不足しやすく、毎日の総合ビタミン投与が基本。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN',
     ),
     _NoteSection(
       category: '微量元素',
       title: '微量元素',
       color: Color(0xFFFF7043),
-      body: '記載中',
+      body: '微量元素は長期TPNで欠乏・過剰の両方が問題になる。経口/経腸はDRI、静脈はASPEN/JSPENで必要量が異なる。\n\n■ 必要量と耐容上限（食事摂取基準2025 / 括弧は内部単位µmol）\n・亜鉛 Zn: 推奨 8〜9.5 mg、UL 男45/女35 mg(≒688/535 µmol)。創傷治癒・味覚に重要。\n・銅 Cu: 推奨 0.7〜0.9 mg、UL 7 mg(≒110 µmol)。Zn過剰投与でCu欠乏を招く。\n・セレン Se: 推奨 25〜35 µg、UL 男450/女350 µg(≒5.7/4.4 µmol)。長期TPNで欠乏(心筋症)。\n・マンガン Mn: 目安 3〜3.5 mg、UL 11 mg(≒200 µmol)。胆汁うっ滞・長期TPNで脳(淡蒼球)蓄積→パーキンソン様神経毒性。減量/中止を検討。\n・ヨウ素 I: 推奨 140 µg、UL 3,000 µg(≒23.6 µmol)。\n・鉄 Fe: 推奨 男7.5/女(月経)10.5 mg。PNには通常ルーチン添加しない(鉄過剰リスク)。\n\n■ 静脈栄養の標準（ASPEN成人 / 国内エレジェクト等・1日量）\n・Zn 3〜5 mg, Cu 0.3〜0.5 mg, Se 60〜100 µg。Mn 国内製剤は約1.1 mg(ASPEN推奨55 µgの約20倍→長期は要注意)。\n・1,000 kcal/日未満が長期化すると不足しやすく、採血で過不足を確認し補正。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN / 食品安全委員会(Mn)',
+    ),
+    _NoteSection(
+      category: 'ガイドライン',
+      title: 'ASPEN/SCCM・ESPEN 概説',
+      color: Color(0xFF6D4C41),
+      body: 'ICU栄養の二大ガイドライン。要点を対比して概説する。\n\n■ ASPEN/SCCM 2016（米・McClaveら, 2022更新）\n・開始: 血行動態が安定すれば 24〜48時間以内に経腸栄養(EN)を開始。\n・エネルギー: 間接熱量測定が第一。なければ 25〜30 kcal/kg/日。\n・タンパク: 1.2〜2.0 g/kg/日。肥満は BMI30〜40で2.0、≥40で2.5 g/kg(理想体重)。\n・肥満の許容的低カロリー: BMI30〜50は11〜14 kcal/kg(実体重)、>50は22〜25 kcal/kg(理想体重)。\n・第1週はEN優先、栄養リスクが低ければ早期PNは急がない。\n\n■ ESPEN 2019（欧・Singerら, 2023実践版）\n・エネルギー: 間接熱量測定を推奨。なければ 20〜25 kcal/kg/日。\n・急性期早期(〜3日)は permissive underfeeding（目標の<70%）→以後80〜100%へ漸増。過剰栄養を避ける。\n・タンパク: 1.3 g/kg/日を漸増。糖質≤5 mg/kg/min、脂質≤1.5 g/kg/日。\n\n■ 近年の潮流\n・「早期の積極的フルフィード」より「過剰栄養を避け漸増」へ。\n・精度は 間接熱量測定 ＞ 体重あたり簡易式 ＞ 予測式。\n・電解質(特にRefeeding)・血糖(140〜180 mg/dL)を厳格に管理。\n\n出典: McClave et al. JPEN 2016 / Compher et al. JPEN 2022 / Singer et al. Clin Nutr 2019・2023',
+    ),
+    _NoteSection(
+      category: 'Refeeding',
+      title: 'Refeeding症候群 (NICE)',
+      color: Color(0xFFC2185B),
+      body: '低栄養・絶食後に栄養(特に糖質)を再開すると、細胞内へK・P・Mgが移動し致死的な低下を来す病態。インスリン分泌再開とビタミンB1需要増が引き金。\n\n■ 高リスク基準（NICE CG32, 2006）\n・次のいずれか1つ: BMI<16 / 3〜6か月で>15%体重減 / 10日以上のほぼ絶食 / 投与前からK・P・Mg低値。\n・または次のいずれか2つ: BMI<18.5 / >10%体重減 / 5日以上のほぼ絶食 / アルコール・薬物(インスリン・化学療法・制酸薬・利尿薬)歴。\n・超高リスク: BMI<14 または 15日以上の絶食。\n\n■ 対処\n・開始エネルギー: 高リスク 10 kcal/kg/日(超高リスクは5、心電図監視)。4〜7日かけて必要量へ漸増。\n・チアミン(B1) 200〜300 mg/日を糖負荷の前〜10日。総合ビタミンB群も。\n・電解質は補充しながら投与(正常化を待って開始を遅らせない): K 2〜4 / P 0.3〜0.6 / Mg 0.2〜0.4 mmol/kg/日。\n・血清P≥2.0 mg/dL維持。K・P・Mg・血糖を頻回モニタ。\n\n本アプリは絶食開始日・BMIからリスク階層を判定し、自動設計の初期kcalを上記rampで自動cap、対処サジェストを表示する。\n\n出典: NICE CG32「Nutrition support for adults」(2006) / JSPEN',
     ),
   ];
 
@@ -3907,7 +3939,9 @@ class _NotePageState extends State<NotePage>
     'EN': Color(0xFF2E7D32),
     'TPN': Color(0xFF1565C0),
     'PPN': Color(0xFF00838F),
-    'Harris-Benedict': Color(0xFFE67E22),
+    'エネルギー\n算出法': Color(0xFFE67E22),
+    'ガイドライン': Color(0xFF6D4C41),
+    'Refeeding': Color(0xFFC2185B),
     '活動係数\n侵害係数': Color(0xFFE91E8C),
     'タンパク': Color(0xFFE53935),
     '炭水化物': Color(0xFF8BC34A),
@@ -4023,6 +4057,7 @@ class _NotePageState extends State<NotePage>
             padding:
                 const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: SizedBox(
+              width: double.infinity,
               height: _panelHeight,
               child: Card(
                 shape: RoundedRectangleBorder(
@@ -7504,6 +7539,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final maxKcal =
         plans.map((p) => p.totalKcal).fold<double>(1, (a, b) => a > b ? a : b) * 1.1;
     final maxIn = ins.fold<double>(1, (a, b) => a > b ? a : b) * 1.1;
+    // IN(水分量)のピーク値とそのDay（ピーク注記線・ラベル用）
+    double inPeakVal = 0;
+    int inPeakIdx = 0;
+    for (var i = 0; i < ins.length; i++) {
+      if (ins[i] > inPeakVal) {
+        inPeakVal = ins[i];
+        inPeakIdx = i;
+      }
+    }
     final maxAA = prots.fold<double>(1, (a, b) => a > b ? a : b) * 1.15;
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
     // 特別日インデックス
@@ -7798,6 +7842,60 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               )),
                               // ② 合計IN ③ AA — 棒と同じ箱に重ねる
                               lineLayer(ins, maxIn, Colors.blue.shade600),
+                              // IN最高点の注記: ±1日分の淡い水平線 + _ml ラベル
+                              if (inPeakVal > 0) ...[
+                                LineChart(LineChartData(
+                                  minX: -0.5,
+                                  maxX: n - 0.5,
+                                  minY: 0,
+                                  maxY: maxIn,
+                                  lineBarsData: [
+                                    LineChartBarData(
+                                      spots: [
+                                        FlSpot((inPeakIdx - 1).toDouble(), inPeakVal),
+                                        FlSpot(inPeakIdx.toDouble(), inPeakVal),
+                                        FlSpot((inPeakIdx + 1).toDouble(), inPeakVal),
+                                      ],
+                                      gradient: LinearGradient(colors: [
+                                        Colors.blue.shade700.withValues(alpha: 0.0),
+                                        Colors.blue.shade700.withValues(alpha: 0.85),
+                                        Colors.blue.shade700.withValues(alpha: 0.85),
+                                        Colors.blue.shade700.withValues(alpha: 0.0),
+                                      ], stops: const [0.0, 0.35, 0.65, 1.0]),
+                                      barWidth: 2,
+                                      dotData: const FlDotData(show: false),
+                                    ),
+                                  ],
+                                  titlesData: const FlTitlesData(
+                                    bottomTitles: hidden,
+                                    leftTitles: hidden,
+                                    topTitles: hidden,
+                                    rightTitles: hidden,
+                                  ),
+                                  gridData: const FlGridData(show: false),
+                                  borderData: FlBorderData(show: false),
+                                  clipData: const FlClipData.all(),
+                                  lineTouchData: const LineTouchData(enabled: false),
+                                )),
+                                Positioned(
+                                  left: ((_cachedChartW / n) * inPeakIdx +
+                                          (_cachedChartW / n) / 2) -
+                                      32,
+                                  top: (plotH * (1.0 - (inPeakVal / maxIn)) - 16)
+                                      .clamp(0.0, plotH - 14),
+                                  child: SizedBox(
+                                    width: 64,
+                                    child: Text(
+                                      '${inPeakVal.round()}ml',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade700),
+                                    ),
+                                  ),
+                                ),
+                              ],
                               lineLayer(prots, maxAA, Colors.red.shade400),
                               // フローター: タップ固定優先、次いでホバー
                               Builder(builder: (ctx) {
