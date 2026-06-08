@@ -78,6 +78,40 @@ double mifflinStJeorRee({
 }) =>
     10 * weightKg + 6.25 * heightCm - 5 * age + (isMale ? 5 : -161);
 
+/// 急性期の各日目標kcal(full nutrition) = 等差ランプ ∧ 係数上限。
+///  ・等差ランプ: day1=20kcal/kg相当 → full達成日(fullAchieveDay)で realFull へ線形。
+///  ・係数上限(permissive underfeeding): 20kcal/kg(day≤kcal20UntilDay)、25kcal/kg(≤kcal25UntilDay)、
+///    それ以降は上限解除(realFullまで)。いずれも realFull を超えない。
+/// day は栄養開始からの日(1始まり)。Refeeding cap は呼び出し側で別途適用する。
+double acutePhaseTargetKcal({
+  required int day,
+  required double feedingWeightKg,
+  required double realFullKcal,
+  required int fullAchieveDay,
+  required int kcal20UntilDay,
+  required int kcal25UntilDay,
+}) {
+  final fw = feedingWeightKg;
+  var cap20 = 20.0 * fw;
+  var cap25 = 25.0 * fw;
+  if (cap20 > realFullKcal) cap20 = realFullKcal;
+  if (cap25 > realFullKcal) cap25 = realFullKcal;
+  final f = fullAchieveDay > 1 ? fullAchieveDay : 1;
+  final t = f > 1 ? ((day - 1) / (f - 1)).clamp(0.0, 1.0) : 1.0;
+  final linear = cap20 + (realFullKcal - cap20) * t;
+  final double ceiling;
+  if (day <= kcal20UntilDay) {
+    ceiling = cap20;
+  } else if (day <= kcal25UntilDay) {
+    ceiling = cap25;
+  } else {
+    ceiling = realFullKcal;
+  }
+  var raw = linear < ceiling ? linear : ceiling;
+  if (raw > realFullKcal) raw = realFullKcal;
+  return raw;
+}
+
 class EnergyResult {
   final double kcal;
   final double feedingWeightKg;

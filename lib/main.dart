@@ -7082,12 +7082,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   bool _alertsExpanded = false; // 栄養管理アラートの展開状態(既定=折り畳み)
   bool _trendCollapsed = false; // トレンド(栄養の推移)折りたたみ
   double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
-  int _rampDays = 5; // PNでfull nutritionまで漸増する日数
-  // 簡易式の栄養係数を段階的に上げる開始日(栄養開始からのDay, 1始まり)
-  int _kcalStep20Day = 1;
-  int _kcalStep25Day = 3;
-  int _kcalStep30Day = 5;
-  // true: EN/経口リハ開始日に連動して係数開始日を自動設定(既定)
+  int _rampDays = 5; // full nutrition達成日(栄養開始からのDay)。この日に等差ランプでfullへ到達。
+  // 簡易式の栄養係数の上限を使う「最終日」(until, 栄養開始からのDay)。permissive underfeeding。
+  int _kcalStep20Day = 2; // 20kcal/kgを上限とする最終日(これ以前は20上限)
+  int _kcalStep25Day = 4; // 25kcal/kgを上限とする最終日(20最終日の翌日〜この日は25上限)
+  // true: EN/経口リハ開始日に連動して係数の最終日を自動設定(既定)
   bool _kcalStepAuto = true;
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
   int? _oralRehabStartDay; // 経口リハ開始Day (null=未設定)
@@ -7114,7 +7113,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final cfg = widget.current.autoDesignConfig;
     if (cfg != null) {
       // 保存済み設定を復元 (rampDays・開始日・PN製剤のみ。日別は固定シーケンスから再生成)
-      _rampDays = ((cfg['rampDays'] as num?)?.toInt() ?? 5).clamp(2, 6);
+      _rampDays = ((cfg['rampDays'] as num?)?.toInt() ?? 5).clamp(2, 28);
       _enStartDay = (cfg['enStartDay'] as num?)?.toInt() ?? (_rampDays + 1);
       // 経口リハ導入の既定値: EN導入＋7日(EN食上げ完了の翌日)。未保存/未設定でも選択済みにし、
       // 「未選択(—)」でドロップダウンが横長になるのを防ぐ。
@@ -7122,9 +7121,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           (_enStartDay + _enRampDays).clamp(1, 28);
       _startDate =
           DateTime.tryParse(cfg['startDate'] as String? ?? '') ?? DateTime.now();
-      _kcalStep20Day = (cfg['kcalStep20Day'] as num?)?.toInt() ?? 1;
-      _kcalStep25Day = (cfg['kcalStep25Day'] as num?)?.toInt() ?? 3;
-      _kcalStep30Day = (cfg['kcalStep30Day'] as num?)?.toInt() ?? 5;
+      _kcalStep20Day = (cfg['kcalStep20Day'] as num?)?.toInt() ?? 2;
+      _kcalStep25Day = (cfg['kcalStep25Day'] as num?)?.toInt() ?? 4;
       _kcalStepAuto = (cfg['kcalStepAuto'] as bool?) ?? true;
       final pid = cfg['pnProductId'] as String?;
       _pnProduct = pid != null ? widget.state.catalog.byId(pid) : (tpn.isNotEmpty ? tpn.first : null);
@@ -7165,7 +7163,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       'startDate': _startDate.toIso8601String(),
       'kcalStep20Day': _kcalStep20Day,
       'kcalStep25Day': _kcalStep25Day,
-      'kcalStep30Day': _kcalStep30Day,
       'kcalStepAuto': _kcalStepAuto,
     };
     widget.state.persist();
@@ -7197,7 +7194,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Day ', style: TextStyle(fontSize: 13)),
+            const Text('〜Day ', style: TextStyle(fontSize: 13)),
             SizedBox(
               width: _dayDropW,
               child: DropdownButton<int>(
@@ -7212,11 +7209,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                         if (v == null) return;
                         setState(() {
                           onCh(v);
+                          // 単調性: 20上限の最終日 ≤ 25上限の最終日
                           if (_kcalStep25Day < _kcalStep20Day) {
                             _kcalStep25Day = _kcalStep20Day;
                           }
-                          if (_kcalStep30Day < _kcalStep25Day) {
-                            _kcalStep30Day = _kcalStep25Day;
+                          if (_kcalStep20Day > _kcalStep25Day) {
+                            _kcalStep20Day = _kcalStep25Day;
                           }
                           _rebuildDays();
                         });
@@ -7236,7 +7234,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       TableRow(children: [
         Padding(
           padding: const EdgeInsets.only(right: 8, bottom: 6),
-          child: Text('栄養係数 step up:',
+          child: Text('栄養係数上限:',
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -7272,8 +7270,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           (v) => _kcalStep20Day = v),
       dayRow('25 kcal/kg', Colors.green.shade700, _kcalStep25Day,
           (v) => _kcalStep25Day = v),
-      dayRow('30 kcal/kg', Colors.green.shade800, _kcalStep30Day,
-          (v) => _kcalStep30Day = v),
     ];
   }
 
@@ -7383,11 +7379,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   //   EN食上げ(enStartDay以降7日): 10→20→30→40ml/h → 1pac→2pac朝昼夕、PNは自動減量、最終日はEN単独full
   /// 自動連動: 栄養開始〜EN開始前=20, EN開始〜経口リハ前=25, 経口リハ以降=30 kcal/kg。
   void _applyAutoKcalSteps() {
-    _kcalStep20Day = 1;
-    _kcalStep25Day = _enStartDay.clamp(1, 28);
-    // 経口リハ以降=30(full)。経口リハ未設定ならEN full達成日(=enStart+enRampDays-1)で到達。
-    final oral = _oralRehabStartDay ?? (_enStartDay + _enRampDays - 1);
-    _kcalStep30Day = oral.clamp(_kcalStep25Day, 28);
+    // 20kcal/kg上限はEN開始日まで、25kcal/kg上限は経口リハ開始日まで(以降はfull)。
+    _kcalStep20Day = _enStartDay.clamp(1, 28);
+    final oral = _oralRehabStartDay ?? (_enStartDay + _enRampDays);
+    _kcalStep25Day = oral.clamp(_kcalStep20Day, 28);
   }
 
   void _rebuildDays() {
@@ -7398,10 +7393,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // 経口リハ開始日+5日(計6日)まで延長
     final mealEnd = oral != null ? oral + _mealRampDays - 1 : 0;
     _totalDays = enEnd > mealEnd ? enEnd : mealEnd;
-    // full達成(step30)が最終日を超えると永遠にfullに到達しないため、最終日までにクランプ。
-    if (_kcalStepAuto && _totalDays > 0 && _kcalStep30Day > _totalDays) {
-      _kcalStep30Day = _totalDays;
-      if (_kcalStep25Day > _kcalStep30Day) _kcalStep25Day = _kcalStep30Day;
+    // full達成(_rampDays)・25上限が最終日を超えると最終段階に到達しないため最終日までにクランプ。
+    if (_totalDays > 0) {
+      if (_rampDays > _totalDays) _rampDays = _totalDays;
+      if (_kcalStepAuto && _kcalStep25Day > _totalDays) {
+        _kcalStep25Day = _totalDays;
+        if (_kcalStep20Day > _kcalStep25Day) _kcalStep20Day = _kcalStep25Day;
+      }
     }
     // 設定変更を親(チャートパネル)に通知
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -7627,20 +7625,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               SizedBox(
                                 width: _dayDropW,
                                 child: DropdownButton<int>(
-                                  value: _rampDays,
+                                  value: _rampDays.clamp(2, 28),
                                   isDense: true,
                                   isExpanded: true,
-                                  items: List.generate(5, (i) => i + 2)
+                                  items: List.generate(27, (i) => i + 2)
                                       .map((d) => DropdownMenuItem(
                                           value: d, child: Text('$d')))
                                       .toList(),
-                                  onChanged: (v) => setState(() {
-                                    _rampDays = v ?? _rampDays;
-                                    // full達成の変更でEN導入日を強制的に動かさない
-                                    // (同じ日数に揃えられるようにするため)。
-                                    // 初期値の「full+1」はロード時/プロトコル選択時に設定済み。
-                                    _rebuildDays();
-                                  }),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _rampDays = v ?? _rampDays;
+                                      _rebuildDays();
+                                    });
+                                    _saveConfig();
+                                    widget.onSettingsChanged?.call();
+                                  },
                                 ),
                               ),
                             ],
@@ -7933,30 +7932,27 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rawKcal < cap ? rawKcal : cap;
   }
 
-  /// 簡易式の栄養係数を段階開始日(_kcalStep20/25/30Day)で段階的に上げるランプ。
-  /// 20→25→30 kcal/kg。30はfull相当(目標fullKpkでクランプ)。初日は20で必ずfull未満。
-  /// 自動(=_kcalStepAuto)では開始日はEN/経口リハ開始日に連動(_applyAutoKcalSteps)。
+  /// 各日の目標kcal(full nutrition)= 等差ランプ ∧ 係数上限。
+  ///  ・等差ランプ: full nutrition達成日(_rampDays)に本来full(realFull)へ線形到達。起点は20kcal/kg相当。
+  ///  ・係数上限(permissive underfeeding): 20kcal/kg(〜_kcalStep20Day)・25kcal/kg(〜_kcalStep25Day)で上限キャップ。
+  ///    _kcalStep25Day を過ぎたら上限解除(realFullまで)。
   /// タンパクはkcal比に按分。Refeedingリスク時はさらにcap。
   ({double kcal, double prot}) _acutePhaseTarget(int i) {
-    final fullKcal = NutritionCalculator.targetEnergy(widget.current);
-    final fullProt = NutritionCalculator.targetProtein(widget.current);
+    final realFull = NutritionCalculator.targetEnergy(widget.current);
+    final realProt = NutritionCalculator.targetProtein(widget.current);
     final fw =
         NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
-    final day = i + 1;
-    double rawKcal;
-    if (day >= _kcalStep30Day) {
-      // 最終段階 = full nutrition。目標が30kcal/kg超でも必ず100%に到達させる。
-      rawKcal = fullKcal;
-    } else if (day >= _kcalStep25Day) {
-      final k = 25.0 * fw; // 25kcal/kg。ただし目標を超えない。
-      rawKcal = k < fullKcal ? k : fullKcal;
-    } else {
-      final k = 20.0 * fw; // 20kcal/kg。ただし目標を超えない。
-      rawKcal = k < fullKcal ? k : fullKcal;
-    }
-    final cappedKcal = _refeedCappedKcal(i, rawKcal);
-    final frac = fullKcal > 0 ? cappedKcal / fullKcal : 1.0;
-    return (kcal: cappedKcal, prot: fullProt * frac);
+    final raw = ce.acutePhaseTargetKcal(
+      day: i + 1,
+      feedingWeightKg: fw,
+      realFullKcal: realFull,
+      fullAchieveDay: _rampDays,
+      kcal20UntilDay: _kcalStep20Day,
+      kcal25UntilDay: _kcalStep25Day,
+    );
+    final cappedKcal = _refeedCappedKcal(i, raw);
+    final frac = realFull > 0 ? cappedKcal / realFull : 1.0;
+    return (kcal: cappedKcal, prot: realProt * frac);
   }
 
   /// 1日プランの電解質・微量元素・ビタミンUL超過アラート。
@@ -8210,15 +8206,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final admissionIdxClamped =
         (admissionIdx >= 0 && admissionIdx < n) ? admissionIdx : -1;
     final nutritionIdx = preDays;
-    // full nutrition達成日: 簡易式係数ステップ(20/25/30)がfullKpkに到達する日。
-    final _fwRef =
-        NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
-    final _fullKpkRef = _fwRef > 0
-        ? NutritionCalculator.targetEnergy(widget.current) / _fwRef
-        : 30.0;
-    final int _fullDay = _fullKpkRef <= 20.0
-        ? 1
-        : (_fullKpkRef <= 25.0 ? _kcalStep25Day : _kcalStep30Day);
+    // full nutrition達成日: 各日目標が本来full(realFull)に到達する最初の日。
+    final _realFullRef = NutritionCalculator.targetEnergy(widget.current);
+    int _fullDay = _totalDays > 0 ? _totalDays : 1;
+    for (int d = 1; d <= _totalDays; d++) {
+      if (_acutePhaseTarget(d - 1).kcal >= _realFullRef * 0.995) {
+        _fullDay = d;
+        break;
+      }
+    }
     final fullIdx      = (preDays + _fullDay - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
     final oralIdx      = (_oralRehabStartDay != null &&
