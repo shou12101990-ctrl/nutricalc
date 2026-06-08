@@ -6400,11 +6400,14 @@ class NutritionCalculator {
 
     // PN主剤候補: 導入プロトコルの 1号/2号(エルネオパ or ネオパレン)のみを使用。
     // どちらも未採用ならゼロmenuで構築する(他TPNは自動設計のPN主剤に使わない)。
-    bool isProtoBase(Product p) =>
-        p.name == 'エルネオパNF1号' ||
-        p.name == 'エルネオパNF2号' ||
-        p.name == 'ネオパレン1号' ||
-        p.name == 'ネオパレン2号';
+    // マスタ名は末尾空白や容量サフィックス付きの場合があるため productBaseName で正規化して判定。
+    bool isProtoBase(Product p) {
+      final b = productBaseName(p.name);
+      return b == 'エルネオパNF1号' ||
+          b == 'エルネオパNF2号' ||
+          b == 'ネオパレン1号' ||
+          b == 'ネオパレン2号';
+    }
     final pnBases = tpnProducts
         .where((p) =>
             isProtoBase(p) && (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
@@ -6450,10 +6453,11 @@ class NutritionCalculator {
             }
           }
           // 導入プロトコル: 1号を強く優先。1号で必要量が過大なら2号を次点優先。
+          final pbBase = productBaseName(pb.name);
           final is1go =
-              pb.name == 'エルネオパNF1号' || pb.name == 'ネオパレン1号';
+              pbBase == 'エルネオパNF1号' || pbBase == 'ネオパレン1号';
           final is2go =
-              pb.name == 'エルネオパNF2号' || pb.name == 'ネオパレン2号';
+              pbBase == 'エルネオパNF2号' || pbBase == 'ネオパレン2号';
           if (is1go) {
             // 1号は希釈。約3000ml(輸液上限)までは1号を優先、超えれば2号へ
             if (pnVol <= 3000) planScore -= 1000.0;
