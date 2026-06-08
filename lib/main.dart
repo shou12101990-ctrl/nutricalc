@@ -1610,6 +1610,7 @@ class _BuilderPageState extends State<BuilderPage>
   // Phase 4-③: 処方ビルダーの2タブ状態 (0: EN/TPN/PPN 選択, 1: ゼロからブレンド)
   int _builderTabIndex = 0;
   bool _builderCardCollapsed = false; // 計算画面の患者カード折りたたみ
+  bool _summaryCollapsed = false; // サマリーパネル折りたたみ
   final targetKcalController = TextEditingController(text: '1500');
   final npcnController = TextEditingController(text: '150');
   double _lipidGPerKg = 0.4;
@@ -2549,9 +2550,12 @@ class _BuilderPageState extends State<BuilderPage>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '活動係数 ${current.activityFactor.toStringAsFixed(1)}, '
-                              '侵害係数 ${current.stressFactor.toStringAsFixed(1)}, '
-                              'タンパク目標 ${current.proteinGoalPerKg.toStringAsFixed(1)}g/kg',
+                              current.energyModel == 'kcalPerKg'
+                                  ? '${(current.kcalPerKgValue ?? 25).toStringAsFixed(0)} kcal/kg, '
+                                      'タンパク目標 ${current.proteinGoalPerKg.toStringAsFixed(1)}g/kg'
+                                  : '活動係数 ${current.activityFactor.toStringAsFixed(1)}, '
+                                      '侵害係数 ${current.stressFactor.toStringAsFixed(1)}, '
+                                      'タンパク目標 ${current.proteinGoalPerKg.toStringAsFixed(1)}g/kg',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             Text(
@@ -3395,9 +3399,28 @@ class _BuilderPageState extends State<BuilderPage>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('サマリー', style: Theme.of(context).textTheme.titleMedium),
-                                const SizedBox(height: 8),
+                                Row(children: [
+                                  Text('サマリー',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium),
+                                  const Spacer(),
+                                  IconButton(
+                                    icon: Icon(
+                                        _summaryCollapsed
+                                            ? Icons.expand_more
+                                            : Icons.expand_less,
+                                        size: 22),
+                                    tooltip:
+                                        _summaryCollapsed ? '展開' : '折りたたむ',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => setState(() =>
+                                        _summaryCollapsed = !_summaryCollapsed),
+                                  ),
+                                ]),
+                                if (!_summaryCollapsed) const SizedBox(height: 8),
                                 // ── 2カード: 処方+サマリー | 円グラフ（画面幅に応じてレスポンシブ）──
+                                if (!_summaryCollapsed)
                                 LayoutBuilder(
                                   builder: (context, constraints) {
                                   final availW = constraints.maxWidth;
@@ -3625,6 +3648,7 @@ class _BuilderPageState extends State<BuilderPage>
                                   );   // ConstrainedBox (return)
                                   }), // LayoutBuilder
                                 // ── アラート（サマリー下部・個別/ゼロ共通）──
+                                if (!_summaryCollapsed)
                                 Builder(builder: (_) {
                                   double gluG;
                                   double lipidG;
@@ -7001,6 +7025,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   int _hoveredBarIdx = -1;  // グラフホバー中のバーインデックス (-1=なし)
   int _selectedBarIdx = -1; // タップ固定のバーインデックス (-1=なし)
   bool _alertsExpanded = false; // 栄養管理アラートの展開状態(既定=折り畳み)
+  bool _trendCollapsed = false; // トレンド(栄養の推移)折りたたみ
   double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
@@ -7529,9 +7554,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               scrollDirection: Axis.horizontal,
               children: [
           ...List.generate(pcts.length, (i) {
-            final pct = pcts[i];
-            final dayKcal = targetKcal * pct / 100;
-            final dayProt = targetProt * pct / 100;
+            final phase = _acutePhaseTarget(i);
+            final dayKcal = phase.kcal;
+            final dayProt = phase.prot;
+            final pctOfFull =
+                targetKcal > 0 ? dayKcal / targetKcal * 100 : 0.0;
             final mode = _dayModes[i];
             final showEn = mode == 'EN' || mode == 'TPN+EN';
             final showPn = mode == 'TPN' || mode == 'TPN+EN';
@@ -7573,9 +7600,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              pct >= 100
+                              pctOfFull >= 99
                                   ? 'full nutrition'
-                                  : '目標 ${pct.toStringAsFixed(0)}%',
+                                  : '目標 ${pctOfFull.round()}%',
                               style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.green.shade800),
@@ -8181,8 +8208,22 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('栄養の推移', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+            Row(children: [
+              const Text('トレンド',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(
+                icon: Icon(
+                    _trendCollapsed ? Icons.expand_more : Icons.expand_less,
+                    size: 22),
+                tooltip: _trendCollapsed ? '展開' : '折りたたむ',
+                visualDensity: VisualDensity.compact,
+                onPressed: () =>
+                    setState(() => _trendCollapsed = !_trendCollapsed),
+              ),
+            ]),
+            if (!_trendCollapsed) const SizedBox(height: 8),
+            if (!_trendCollapsed)
             TapRegion(
               // チャート外タップでフローターを消去
               onTapOutside: (_) {
