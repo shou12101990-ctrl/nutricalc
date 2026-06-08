@@ -78,11 +78,17 @@ double mifflinStJeorRee({
 }) =>
     10 * weightKg + 6.25 * heightCm - 5 * age + (isMale ? 5 : -161);
 
-/// 急性期の各日目標kcal(full nutrition) = 等差ランプ ∧ 係数上限。
-///  ・等差ランプ: day1=20kcal/kg相当 → full達成日(fullAchieveDay)で realFull へ線形。
-///  ・係数上限(permissive underfeeding): 20kcal/kg(day≤kcal20UntilDay)、25kcal/kg(≤kcal25UntilDay)、
-///    それ以降は上限解除(realFullまで)。いずれも realFull を超えない。
+/// 急性期の各日目標kcal(full nutrition)。
+/// すべて「realFull に対する割合(frac)」で計算し、target = realFull × frac とする。
+/// これにより目標値(kcal/kg)に依らず **初日は必ず full 未満** になる(構造的保証)。
+///
+///   frac(day) = min( rampFrac(day), ceilFrac(day) )
+///    ・rampFrac: 等差ランプ。day1 = startFraction(<1) → full達成日(fullAchieveDay) = 1.0。
+///    ・ceilFrac: permissive underfeeding 上限。20kcal/kg(day≤kcal20UntilDay)・25kcal/kg(≤kcal25UntilDay)を
+///      full比に換算(>fullなら1.0でクランプ)、それ以降は 1.0(上限解除)。
+///
 /// day は栄養開始からの日(1始まり)。Refeeding cap は呼び出し側で別途適用する。
+/// startFraction は初日の割合(permissive underfeeding の開始点, 既定0.7)。0<startFraction<1。
 double acutePhaseTargetKcal({
   required int day,
   required double feedingWeightKg,
@@ -90,26 +96,31 @@ double acutePhaseTargetKcal({
   required int fullAchieveDay,
   required int kcal20UntilDay,
   required int kcal25UntilDay,
+  double startFraction = 0.7,
 }) {
+  if (realFullKcal <= 0) return 0;
   final fw = feedingWeightKg;
-  var cap20 = 20.0 * fw;
-  var cap25 = 25.0 * fw;
-  if (cap20 > realFullKcal) cap20 = realFullKcal;
-  if (cap25 > realFullKcal) cap25 = realFullKcal;
-  final f = fullAchieveDay > 1 ? fullAchieveDay : 1;
-  final t = f > 1 ? ((day - 1) / (f - 1)).clamp(0.0, 1.0) : 1.0;
-  final linear = cap20 + (realFullKcal - cap20) * t;
-  final double ceiling;
+  // 係数上限を full に対する割合へ換算(本来 full を超えない)
+  final ceil20 = (20.0 * fw / realFullKcal).clamp(0.0, 1.0);
+  final ceil25 = (25.0 * fw / realFullKcal).clamp(0.0, 1.0);
+  // 等差ランプ: day1=startFraction → full達成日=1.0。fullAchieveDay は最低2日。
+  final f = fullAchieveDay > 1 ? fullAchieveDay : 2;
+  final s = startFraction.clamp(0.0, 0.999);
+  final t = ((day - 1) / (f - 1)).clamp(0.0, 1.0);
+  final rampFrac = s + (1.0 - s) * t;
+  // permissive underfeeding 上限
+  final double ceilFrac;
   if (day <= kcal20UntilDay) {
-    ceiling = cap20;
+    ceilFrac = ceil20;
   } else if (day <= kcal25UntilDay) {
-    ceiling = cap25;
+    ceilFrac = ceil25;
   } else {
-    ceiling = realFullKcal;
+    ceilFrac = 1.0;
   }
-  var raw = linear < ceiling ? linear : ceiling;
-  if (raw > realFullKcal) raw = realFullKcal;
-  return raw;
+  var frac = rampFrac < ceilFrac ? rampFrac : ceilFrac;
+  if (frac > 1.0) frac = 1.0;
+  if (frac < 0.0) frac = 0.0;
+  return realFullKcal * frac;
 }
 
 class EnergyResult {

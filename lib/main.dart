@@ -7234,11 +7234,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       TableRow(children: [
         Padding(
           padding: const EdgeInsets.only(right: 8, bottom: 6),
-          child: Text('栄養係数上限:',
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green.shade800)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(width: 17), // アイコン分(13+4)の空きでテキスト開始を揃える
+            Text('栄養係数上限:',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800)),
+          ]),
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
@@ -7262,7 +7265,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               ),
             ),
             const SizedBox(width: 2),
-            const Text('自動(EN/リハ連動)', style: TextStyle(fontSize: 11)),
+            const Text('自動', style: TextStyle(fontSize: 11)),
           ]),
         ),
       ]),
@@ -7511,7 +7514,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 設定: 絶食〜経口リハ
+                  // 設定: 絶食〜経口リハ(左) + 栄養係数上限(右)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                   Table(
                     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     columnWidths: const {
@@ -7613,8 +7621,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       TableRow(children: [
                         Padding(
                           padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Text('full nutrition達成:',
-                              style: TextStyle(fontSize: 13, color: Colors.green.shade800)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.flag,
+                                size: 13, color: Colors.green.shade800),
+                            const SizedBox(width: 4),
+                            Text('full達成:',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.green.shade800)),
+                          ]),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -7724,9 +7738,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           ),
                         ),
                       ]),
-                      // 栄養係数 step up(20/25/30 kcal/kg)の段階開始日を同テーブルに配置
-                      ..._kcalStepTableRows(),
                     ],
+                  ),
+                      const SizedBox(width: 16),
+                      // 栄養係数上限(絶食〜経口リハの右側)
+                      Table(
+                        defaultVerticalAlignment:
+                            TableCellVerticalAlignment.middle,
+                        columnWidths: const {
+                          0: IntrinsicColumnWidth(),
+                          1: IntrinsicColumnWidth(),
+                        },
+                        children: _kcalStepTableRows(),
+                      ),
+                    ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   const Text('★ お気に入り製剤を優先して設計します',
