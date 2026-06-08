@@ -2503,18 +2503,18 @@ class _BuilderPageState extends State<BuilderPage>
                                     visualDensity: VisualDensity.compact,
                                     onPressed: () => showDialog(
                                       context: context,
-                                      builder: (_) => AlertDialog(
-                                        title: const Text('病態サジェスト'),
-                                        content: SingleChildScrollView(
-                                          child: _conditionSuggestionBanner(
-                                              current, aggregate),
+                                      builder: (_) => Dialog(
+                                        backgroundColor: Colors.transparent,
+                                        elevation: 0,
+                                        insetPadding: const EdgeInsets.symmetric(
+                                            horizontal: 24, vertical: 80),
+                                        child: GestureDetector(
+                                          onTap: () => Navigator.pop(context),
+                                          child: SingleChildScrollView(
+                                            child: _conditionSuggestionBanner(
+                                                current, aggregate),
+                                          ),
                                         ),
-                                        actions: [
-                                          TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(context),
-                                              child: const Text('閉じる')),
-                                        ],
                                       ),
                                     ),
                                   ),
