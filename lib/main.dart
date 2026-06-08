@@ -1637,11 +1637,9 @@ class _BuilderPageState extends State<BuilderPage>
   final List<String> _selectAdditives = [];
   final Set<String> expandedProducts = {};
   double _enRateMlPerHour = 0;
-  double _tpnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
-  double _ppnRateMlPerHour = 0; // 後方互換: processCategory で使用 (内部のみ)
-  // PN使用量指定 (0 = 全量, >0 = ml指定)
-  double _tpnVolumeMl = 0;
-  double _ppnVolumeMl = 0;
+  // TPN/PPN 流量(ml/h)。0 = 「24hかけて」(=総量÷24)、>0 = 固定速度。表示・処方箋用。
+  double _tpnRateMlPerHour = 0;
+  double _ppnRateMlPerHour = 0;
 
   @override
   void initState() {
@@ -1812,34 +1810,43 @@ class _BuilderPageState extends State<BuilderPage>
         ? (item.morning + item.noon + item.evening)
         : item.units;
 
+    // 製剤の実効本数: EN=本数(rate按分対象)、TPN/PPN=units+部分ml/bagVol(per-product ml)。
+    double effOf(RegimenItem item, Product p, String categoryKey) {
+      if (categoryKey == 'EN') return unitsOf(item).toDouble();
+      final bagVol = p.volumeMl ?? 0;
+      return item.units + (bagVol > 0 ? item.partialMl / bagVol : 0);
+    }
+
     void addCategory(String categoryKey, double rate) {
       final selected = current.regimenItems.where((item) {
         final p = widget.state.catalog.byId(item.productId);
-        if (p == null || unitsOf(item) <= 0) return false;
+        if (p == null) return false;
         if (categoryKey == 'EN') {
-          return p.category == 'EN' || p.category == 'EN_AUX';
+          if (!(p.category == 'EN' || p.category == 'EN_AUX')) return false;
+          return unitsOf(item) > 0;
         }
-        return p.category == categoryKey;
+        if (p.category != categoryKey) return false;
+        return item.units > 0 || item.partialMl > 0;
       }).toList();
       if (selected.isEmpty) return;
       double fullIN = 0;
       for (final item in selected) {
         final p = widget.state.catalog.byId(item.productId)!;
-        fullIN += (p.volumeMl ?? 0) * unitsOf(item);
+        fullIN += (p.volumeMl ?? 0) * effOf(item, p, categoryKey);
       }
-      final factor = (rate > 0 && fullIN > 0) ? (rate * 24) / fullIN : 1.0;
+      // ENのみ投与速度で按分。TPN/PPNはper-product mlがそのまま日量。
+      final factor =
+          (categoryKey == 'EN' && rate > 0 && fullIN > 0) ? (rate * 24) / fullIN : 1.0;
       for (final item in selected) {
         final p = widget.state.catalog.byId(item.productId)!;
-        contributions
-            .add(cm.MicroContribution(p.micro, unitsOf(item) * factor));
+        contributions.add(
+            cm.MicroContribution(p.micro, effOf(item, p, categoryKey) * factor));
       }
     }
 
-    final tpnRate = _tpnVolumeMl > 0 ? _tpnVolumeMl / 24 : 0.0;
-    final ppnRate = _ppnVolumeMl > 0 ? _ppnVolumeMl / 24 : 0.0;
     addCategory('EN', _enRateMlPerHour);
-    addCategory('TPN', tpnRate);
-    addCategory('PPN', ppnRate);
+    addCategory('TPN', 0);
+    addCategory('PPN', 0);
     addCategory('濃厚流動食', 0);
     addCategory('栄養サポート食品', 0);
     for (final name in _selectAdditives) {
@@ -1969,23 +1976,6 @@ class _BuilderPageState extends State<BuilderPage>
     }
   }
 
-  /// TPN/PPN使用量ml指定時にpac数を更新 (EN同様の自動調整)
-  void _adjustPnUnitsForVolume(PatientCase current, String cat, double volumeMl) {
-    for (final item in current.regimenItems.toList()) {
-      final product = widget.state.catalog.byId(item.productId);
-      if (product == null || product.category != cat) continue;
-      final vol = product.volumeMl ?? 0;
-      if (vol <= 0) continue;
-      final needed = volumeMl <= 0
-          ? item.units // 全量 → 変更なし(現在のpac数を維持)
-          : (volumeMl / vol).ceil().clamp(1, 20);
-      if (item.units > 0 && item.units != needed && volumeMl > 0) {
-        widget.state.setUnits(current.id, product, needed);
-      }
-    }
-    setState(() {});
-  }
-
   AggregateResult _aggregateWithRates(PatientCase current) {
     double totalVolumeMl = 0;
     double totalKcal = 0;
@@ -2008,21 +1998,32 @@ class _BuilderPageState extends State<BuilderPage>
       final selectedItems = activeItems.where((item) {
         final product = widget.state.catalog.byId(item.productId);
         if (product == null) return false;
-        if (unitsOf(item) <= 0) return false;
         if (categoryKey == 'EN') {
-          return product.category == 'EN' || product.category == 'EN_AUX';
+          if (!(product.category == 'EN' || product.category == 'EN_AUX')) {
+            return false;
+          }
+          return unitsOf(item) > 0;
         }
-        return product.category == categoryKey;
+        if (product.category != categoryKey) return false;
+        // TPN/PPN/食事: 本数>0 または 部分ml>0
+        return item.units > 0 || item.partialMl > 0;
       }).toList();
 
       // 製剤が選ばれていなければ投与速度を動かしても何も加算しない
       if (selectedItems.isEmpty) return;
 
-      // 全量での集計（本数ベース）— Excel T19/T20/T21/T23 に対応
+      // 実効本数: EN=本数、TPN/PPN=units+部分ml/bagVol(per-product ml指定)。
+      double effOf(RegimenItem item, Product product) {
+        if (categoryKey == 'EN') return unitsOf(item).toDouble();
+        final bagVol = product.volumeMl ?? 0;
+        return item.units + (bagVol > 0 ? item.partialMl / bagVol : 0);
+      }
+
+      // 集計（本数/ml ベース）— Excel T19/T20/T21/T23 に対応
       double fullIN = 0, fullKcal = 0, fullProt = 0, fullFatG = 0, fullCarbG = 0;
       for (final item in selectedItems) {
         final product = widget.state.catalog.byId(item.productId)!;
-        final n = unitsOf(item);
+        final n = effOf(item, product);
         fullIN += (product.volumeMl ?? 0) * n;
         fullKcal += (product.kcal ?? 0) * n;
         fullProt += (product.aminoAcidG ?? 0) * n;
@@ -2030,8 +2031,9 @@ class _BuilderPageState extends State<BuilderPage>
         fullCarbG += (product.carbBase ?? 0) * n;
       }
 
-      // 投与速度指定時は「一部投与」の按分係数をかける（Excel T26/T19）
-      final factor = (rate > 0 && fullIN > 0) ? (rate * 24) / fullIN : 1.0;
+      // ENのみ投与速度で「一部投与」按分。TPN/PPN/食事はper-product mlがそのまま日量。
+      final factor =
+          (categoryKey == 'EN' && rate > 0 && fullIN > 0) ? (rate * 24) / fullIN : 1.0;
 
       totalVolumeMl += fullIN * factor;
       totalKcal += fullKcal * factor;
@@ -2042,12 +2044,10 @@ class _BuilderPageState extends State<BuilderPage>
       proteinKcal += fullProt * 4 * factor;
     }
 
-    // TPN/PPNは使用量ml指定(0=全量)を速度換算して按分
-    _tpnRateMlPerHour = _tpnVolumeMl > 0 ? _tpnVolumeMl / 24 : 0;
-    _ppnRateMlPerHour = _ppnVolumeMl > 0 ? _ppnVolumeMl / 24 : 0;
+    // TPN/PPNはper-product ml指定(本数+部分ml)がそのまま日量。流量は表示用。
     processCategory('EN', _enRateMlPerHour);
-    processCategory('TPN', _tpnRateMlPerHour);
-    processCategory('PPN', _ppnRateMlPerHour);
+    processCategory('TPN', 0);
+    processCategory('PPN', 0);
     // 食事(濃厚流動食・栄養サポート食品)を本数ベースで合算 (rate=0 → 全量)
     processCategory('濃厚流動食', 0);
     processCategory('栄養サポート食品', 0);
@@ -2388,57 +2388,6 @@ class _BuilderPageState extends State<BuilderPage>
       }).toList();
     })();
 
-    int _actualCategoryUnits(String categoryKey) {
-      return current.regimenItems.fold<int>(0, (sum, item) {
-        final product = widget.state.catalog.byId(item.productId);
-        if (product == null) return sum;
-        if (categoryKey == 'EN') {
-          if (product.category != 'EN' && product.category != 'EN_AUX')
-            return sum;
-        } else if (product.category != categoryKey) {
-          return sum;
-        }
-        return sum + item.units;
-      });
-    }
-
-    Product? _categoryRepresentativeProduct(String categoryKey) {
-      final selected = _selectedProductsForCategory(categoryKey);
-      if (selected.isEmpty) return null;
-      final items = current.regimenItems
-          .where((item) => selected.any((p) => p.id == item.productId))
-          .where((item) => item.units > 0)
-          .toList();
-      if (items.isNotEmpty) {
-        return widget.state.catalog.byId(items.first.productId);
-      }
-      return selected.first;
-    }
-
-    int _rateCategoryUnits(String categoryKey, double rate) {
-      if (rate <= 0) return _actualCategoryUnits(categoryKey);
-      final product = _categoryRepresentativeProduct(categoryKey);
-      if (product == null || (product.volumeMl ?? 0) <= 0) return 0;
-      final dailyVolume = rate * 24;
-      return (dailyVolume / (product.volumeMl ?? 1)).ceil();
-    }
-
-    double _rateCategoryDailyVolume(String categoryKey, double rate) {
-      if (rate <= 0) {
-        return current.regimenItems.fold<double>(0, (sum, item) {
-          final product = widget.state.catalog.byId(item.productId);
-          if (product == null) return sum;
-          if (categoryKey == 'EN') {
-            if (product.category != 'EN' && product.category != 'EN_AUX')
-              return sum;
-          } else if (product.category != categoryKey) {
-            return sum;
-          }
-          return sum + (product.volumeMl ?? 0) * item.units;
-        });
-      }
-      return rate * 24;
-    }
 
     final screenH = MediaQuery.of(context).size.height;
     final _mqPad = MediaQuery.of(context).padding;
@@ -2977,15 +2926,15 @@ class _BuilderPageState extends State<BuilderPage>
                                       (_) => setState(
                                           () => category = effectiveCategory));
                                 }
-                                // EN/TPN/PPN タブ + 流量ドロップダウン（選択中カテゴリに対応）
-                                // PN使用量オプション: 全量 + 200-2000ml (100ml刻み)
-                                final pnVolumeOptions = <double>[0,
-                                  ...List.generate(19, (i) => (i + 2) * 100.0)];
-                                String pnVolLabel(double v) =>
-                                    v <= 0 ? '全量' : '${v.toInt()}ml';
-                                final curPnVol = effectiveCategory == 'TPN'
-                                    ? _tpnVolumeMl
-                                    : _ppnVolumeMl;
+                                // EN/TPN/PPN タブ + ドロップダウン（選択中カテゴリに対応）
+                                // TPN/PPN流量オプション: 24hかけて(0) + 5〜60ml/h(5刻み)
+                                final pnRateOptions = <double>[0,
+                                  ...List.generate(12, (i) => (i + 1) * 5.0)];
+                                String pnRateLabel(double v) =>
+                                    v <= 0 ? '24hかけて' : '${v.toInt()}ml/h';
+                                final curPnRate = effectiveCategory == 'TPN'
+                                    ? _tpnRateMlPerHour
+                                    : _ppnRateMlPerHour;
                                 // スイッチを画面中央、DDをスイッチ右端〜右壁の中間に配置
                                 return Row(
                                   children: [
@@ -3035,23 +2984,23 @@ class _BuilderPageState extends State<BuilderPage>
                                               },
                                             )
                                             : DropdownButton<double>(
-                                              value: curPnVol,
+                                              value: curPnRate,
                                               isDense: true,
-                                              items: pnVolumeOptions
+                                              items: pnRateOptions
                                                   .map((v) => DropdownMenuItem(
                                                       value: v,
-                                                      child: Text(pnVolLabel(v),
+                                                      child: Text(pnRateLabel(v),
                                                           style: const TextStyle(fontSize: 13))))
                                                   .toList(),
                                               onChanged: (v) {
-                                                final vol = v ?? 0;
-                                                if (effectiveCategory == 'TPN') {
-                                                  setState(() => _tpnVolumeMl = vol);
-                                                  _adjustPnUnitsForVolume(current, 'TPN', vol);
-                                                } else {
-                                                  setState(() => _ppnVolumeMl = vol);
-                                                  _adjustPnUnitsForVolume(current, 'PPN', vol);
-                                                }
+                                                final rate = v ?? 0;
+                                                setState(() {
+                                                  if (effectiveCategory == 'TPN') {
+                                                    _tpnRateMlPerHour = rate;
+                                                  } else {
+                                                    _ppnRateMlPerHour = rate;
+                                                  }
+                                                });
                                               },
                                             ),
                                         ),
@@ -3129,6 +3078,7 @@ class _BuilderPageState extends State<BuilderPage>
                                     .where((e) => e.productId == product.id)
                                     .firstOrNull;
                                 final units = existing?.units ?? 0;
+                                final partialMl = existing?.partialMl ?? 0;
                                 final isFavorite =
                                     widget.state.isFavorite(product.id);
                                 final isAutoFav = widget.state
@@ -3179,7 +3129,7 @@ class _BuilderPageState extends State<BuilderPage>
                                       ),
                                       subtitle: Text(
                                           '${product.volumeMlString} / ${product.kcalString} / ${product.aminoString}'),
-                                      tileColor: units >= 1
+                                      tileColor: (units >= 1 || partialMl > 0)
                                           ? Colors.blue.shade100
                                           : null,
                                       trailing: (product.category == 'EN' || product.category == 'EN_AUX')
@@ -3222,6 +3172,53 @@ class _BuilderPageState extends State<BuilderPage>
                                           expandedProducts.add(product.id);
                                       }),
                                     ),
+                                    // TPN/PPN: 本数に上乗せする部分使用量(100ml単位)
+                                    if (product.category == 'TPN' ||
+                                        product.category == 'PPN')
+                                      Builder(builder: (_) {
+                                        final bagVol =
+                                            (product.volumeMl ?? 0).round();
+                                        final maxPartial = bagVol > 100
+                                            ? ((bagVol - 1) ~/ 100) * 100
+                                            : 0;
+                                        final opts = <int>[
+                                          0,
+                                          for (int v = 100; v <= maxPartial; v += 100) v
+                                        ];
+                                        final cur =
+                                            partialMl.clamp(0, maxPartial);
+                                        final totalMl = units * bagVol + cur;
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                              left: 56.0, right: 8.0, bottom: 6.0),
+                                          child: Row(children: [
+                                            const Text('部分量 ',
+                                                style: TextStyle(fontSize: 12)),
+                                            DropdownButton<int>(
+                                              value: cur,
+                                              isDense: true,
+                                              items: opts
+                                                  .map((v) => DropdownMenuItem(
+                                                      value: v,
+                                                      child: Text(
+                                                          v == 0 ? '+0ml' : '+${v}ml',
+                                                          style: const TextStyle(
+                                                              fontSize: 13))))
+                                                  .toList(),
+                                              onChanged: (v) async {
+                                                await widget.state.setPartialMl(
+                                                    current.id, product, v ?? 0);
+                                                setState(() {});
+                                              },
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text('計 ${totalMl}ml',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey.shade700)),
+                                          ]),
+                                        );
+                                      }),
                                     if (expandedProducts.contains(product.id) &&
                                         product.notes?.trim().isNotEmpty ==
                                             true)
@@ -3463,10 +3460,19 @@ class _BuilderPageState extends State<BuilderPage>
                                                 ] else ...[
                                                   Builder(builder: (c) {
                                                     final ts = TextStyle(fontSize: labelFs);
-                                                    final tpnUnits = _rateCategoryUnits('TPN', _tpnRateMlPerHour);
-                                                    final ppnUnits = _rateCategoryUnits('PPN', _ppnRateMlPerHour);
-                                                    final tpnVolume = _rateCategoryDailyVolume('TPN', _tpnRateMlPerHour);
-                                                    final ppnVolume = _rateCategoryDailyVolume('PPN', _ppnRateMlPerHour);
+                                                    final tpnItems = current.regimenItems.where((i) {
+                                                      final p = widget.state.catalog.byId(i.productId);
+                                                      return p != null && p.category == 'TPN' && (i.units > 0 || i.partialMl > 0);
+                                                    }).toList();
+                                                    final ppnItems = current.regimenItems.where((i) {
+                                                      final p = widget.state.catalog.byId(i.productId);
+                                                      return p != null && p.category == 'PPN' && (i.units > 0 || i.partialMl > 0);
+                                                    }).toList();
+                                                    String pnAmt(RegimenItem i) {
+                                                      if (i.units > 0 && i.partialMl > 0) return '${i.units}本+${i.partialMl}ml';
+                                                      if (i.units > 0) return '${i.units}本';
+                                                      return '${i.partialMl}ml';
+                                                    }
                                                     // EN朝昼夕 (meal timingが設定されているもののみ)
                                                     final enItems = current.regimenItems.where((item) {
                                                       final p = widget.state.catalog.byId(item.productId);
@@ -3489,7 +3495,7 @@ class _BuilderPageState extends State<BuilderPage>
                                                         child: Text('$label  $desc', style: ts),
                                                       );
                                                     }
-                                                    final hasAny = enItems.isNotEmpty || tpnUnits > 0 || ppnUnits > 0 || foodItems.isNotEmpty || (isScratchMode ? _zeroAdditives : _selectAdditives).isNotEmpty;
+                                                    final hasAny = enItems.isNotEmpty || tpnItems.isNotEmpty || ppnItems.isNotEmpty || foodItems.isNotEmpty || (isScratchMode ? _zeroAdditives : _selectAdditives).isNotEmpty;
                                                     if (!hasAny) return const Text('(未選択)', style: TextStyle(fontSize: 12.5, color: Colors.grey));
                                                     return Column(
                                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3499,29 +3505,17 @@ class _BuilderPageState extends State<BuilderPage>
                                                           mealRow('昼', (i) => i.noon),
                                                           mealRow('夕', (i) => i.evening),
                                                         ],
-                                                        if (tpnUnits > 0) ...current.regimenItems.where((i) {
-                                                          final p = widget.state.catalog.byId(i.productId);
-                                                          return p != null && p.category == 'TPN' && i.units > 0;
-                                                        }).map((i) {
+                                                        ...tpnItems.map((i) {
                                                           final p = widget.state.catalog.byId(i.productId)!;
-                                                          final pacs = (_tpnVolumeMl > 0)
-                                                              ? ((_tpnVolumeMl / (p.volumeMl ?? 1)).ceil())
-                                                              : i.units;
-                                                          final volMl = _tpnVolumeMl > 0 ? _tpnVolumeMl : (p.volumeMl ?? 0) * i.units.toDouble();
-                                                          final rateMlH = (volMl / 24).round();
-                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('TPN  ${p.name} ${pacs}本  ${rateMlH}ml/h', style: ts));
+                                                          final volMl = (p.volumeMl ?? 0) * i.units + i.partialMl;
+                                                          final rateMlH = (_tpnRateMlPerHour > 0 ? _tpnRateMlPerHour : volMl / 24).round();
+                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('TPN  ${p.name} ${pnAmt(i)}  ${rateMlH}ml/h', style: ts));
                                                         }),
-                                                        if (ppnUnits > 0) ...current.regimenItems.where((i) {
-                                                          final p = widget.state.catalog.byId(i.productId);
-                                                          return p != null && p.category == 'PPN' && i.units > 0;
-                                                        }).map((i) {
+                                                        ...ppnItems.map((i) {
                                                           final p = widget.state.catalog.byId(i.productId)!;
-                                                          final pacs = (_ppnVolumeMl > 0)
-                                                              ? ((_ppnVolumeMl / (p.volumeMl ?? 1)).ceil())
-                                                              : i.units;
-                                                          final volMl = _ppnVolumeMl > 0 ? _ppnVolumeMl : (p.volumeMl ?? 0) * i.units.toDouble();
-                                                          final rateMlH = (volMl / 24).round();
-                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('PPN  ${p.name} ${pacs}本  ${rateMlH}ml/h', style: ts));
+                                                          final volMl = (p.volumeMl ?? 0) * i.units + i.partialMl;
+                                                          final rateMlH = (_ppnRateMlPerHour > 0 ? _ppnRateMlPerHour : volMl / 24).round();
+                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('PPN  ${p.name} ${pnAmt(i)}  ${rateMlH}ml/h', style: ts));
                                                         }),
                                                         ...foodItems.map((i) {
                                                           final p = widget.state.catalog.byId(i.productId)!;
@@ -5452,12 +5446,15 @@ class RegimenItem {
     this.morning = 0,
     this.noon = 0,
     this.evening = 0,
+    this.partialMl = 0,
   });
   final String productId;
   int units;
   int morning;
   int noon;
   int evening;
+  // TPN/PPN: 本数(units)に上乗せする部分使用量(ml, 100ml単位)。実投与量=units×bagVol+partialMl。
+  int partialMl;
 
   bool get hasMealTiming => morning > 0 || noon > 0 || evening > 0;
 
@@ -5467,6 +5464,7 @@ class RegimenItem {
         'morning': morning,
         'noon': noon,
         'evening': evening,
+        'partialMl': partialMl,
       };
   factory RegimenItem.fromMap(Map<String, dynamic> map) => RegimenItem(
         productId: map['productId'] as String,
@@ -5474,6 +5472,7 @@ class RegimenItem {
         morning: (map['morning'] as int?) ?? 0,
         noon: (map['noon'] as int?) ?? 0,
         evening: (map['evening'] as int?) ?? 0,
+        partialMl: (map['partialMl'] as int?) ?? 0,
       );
 }
 
@@ -6060,6 +6059,7 @@ class NutritionCalculator {
     int mealPac = 0, // 食事 朝昼夕あたりpac数(1..3, 経口リハ期に使用)
     double? girLimitMgKgMin, // 自動設計: GIR上限(糖質制限病態は4, 既定5)
     double? maxLipidGramPerKgDay, // 脂質再配分の上限
+    bool allowZeroMenu = false, // ゼロmenu許可(PNのみ7日目以降・EN未開始時のみtrue)
   }) {
     // ゼロmenu(静注ブレンド)のitem群を構築
     List<DesignItem> buildZeroItems(double tKcal) {
@@ -6099,31 +6099,31 @@ class NutritionCalculator {
       return DesignPlan(label: 'Day', items: buildZeroItems(dayTargetKcal));
     }
 
-    // タンパク不足を高濃度AA(PPN)で補正してitemsに追加するヘルパー
-    //   (kcal・タンパクとも当日目標を超えない範囲で本数を足す)
+    // タンパク不足を高濃度AA製剤で補正してitemsに追加するヘルパー。
+    //   AAが目標未満なら、高濃度AA(aminoProduct=純AA, アミパレンfallback)で
+    //   「目標まで一旦全部埋める」。INやkcalが多少増えてもタンパクを優先する。
     void addPpnProtein(List<DesignItem> items, double curKcal, double curProt) {
-      if (curProt >= dayTargetProt * 0.9) return;
-      final aminos = ppnProducts.where((p) => (p.aminoAcidG ?? 0) > 0).toList()
-        ..sort((a, b) => ((b.aminoAcidG ?? 0) / (b.volumeMl ?? 1))
-            .compareTo((a.aminoAcidG ?? 0) / (a.volumeMl ?? 1)));
-      if (aminos.isEmpty) return;
-      final pp = aminos.first;
-      int add = 0;
-      while (curProt < dayTargetProt * 0.9 &&
-          curProt + (pp.aminoAcidG ?? 0) <= dayTargetProt &&
-          curKcal + (pp.kcal ?? 0) <= dayTargetKcal) {
-        curProt += pp.aminoAcidG ?? 0;
-        curKcal += pp.kcal ?? 0;
-        add++;
+      if (curProt >= dayTargetProt) return;
+      // 高濃度AA製剤: 純AA(aminoProduct) > 採用PPNの最高AA密度。
+      Product? aa = (aminoProduct != null && (aminoProduct.aminoAcidG ?? 0) > 0)
+          ? aminoProduct
+          : null;
+      if (aa == null) {
+        final aminos = ppnProducts.where((p) => (p.aminoAcidG ?? 0) > 0).toList()
+          ..sort((a, b) => ((b.aminoAcidG ?? 0) / (b.volumeMl ?? 1))
+              .compareTo((a.aminoAcidG ?? 0) / (a.volumeMl ?? 1)));
+        aa = aminos.isNotEmpty ? aminos.first : null;
       }
-      if (add > 0) {
-        items.add(DesignItem(
-            name: pp.name,
-            units: add,
-            volumeMl: (pp.volumeMl ?? 0) * add,
-            kcal: (pp.kcal ?? 0) * add,
-            proteinG: (pp.aminoAcidG ?? 0) * add));
-      }
+      final aaG = aa?.aminoAcidG ?? 0;
+      if (aa == null || aaG <= 0) return;
+      // 不足分を満たす最小本数(端数切り上げ=目標到達優先)。安全上限20本。
+      final add = ((dayTargetProt - curProt) / aaG).ceil().clamp(1, 20);
+      items.add(DesignItem(
+          name: aa.name,
+          units: add,
+          volumeMl: (aa.volumeMl ?? 0) * add,
+          kcal: (aa.kcal ?? 0) * add,
+          proteinG: aaG * add));
     }
 
     // 食事(経口リハ): 食事製剤を朝昼夕 mealPac本ずつ(=計3×mealPac本)投与。
@@ -6167,8 +6167,35 @@ class NutritionCalculator {
             ppnProducts, ppnProducts, restKcal, restProt, 'PPN',
             maxBase: 2);
         if (sub != null) items.addAll(sub.items);
-      } else {
-        addPpnProtein(items, mealKcal, mealProt);
+      }
+      // 経口リハ期はタンパクが落ち込みやすい(エルネオパ等のPN中止+食事は低タンパク)。
+      // → 高濃度AA製剤で「目標タンパクまで」確実に補充する(kcal超過は許容しタンパク優先)。
+      //   AA源は ゼロmenuと同じ純AA製剤(aminoProduct, アミパレンfallback)を最優先。
+      //   PPN未採用の施設(エルネオパ中心)でも補充が効くようにする。
+      {
+        final curProt = items.fold(0.0, (s, it) => s + it.proteinG);
+        // 高濃度AA製剤の選定: 純AA(aminoProduct) > 採用PPNの最高AA密度。
+        Product? aa = (aminoProduct != null && (aminoProduct.aminoAcidG ?? 0) > 0)
+            ? aminoProduct
+            : null;
+        if (aa == null) {
+          final aminos =
+              ppnProducts.where((p) => (p.aminoAcidG ?? 0) > 0).toList()
+                ..sort((a, b) => ((b.aminoAcidG ?? 0) / (b.volumeMl ?? 1))
+                    .compareTo((a.aminoAcidG ?? 0) / (a.volumeMl ?? 1)));
+          aa = aminos.isNotEmpty ? aminos.first : null;
+        }
+        final aaG = aa?.aminoAcidG ?? 0;
+        if (aa != null && aaG > 0 && curProt < dayTargetProt) {
+          // 不足分を満たす最小本数(端数切り上げ=目標到達優先)。安全上限20本。
+          final add = ((dayTargetProt - curProt) / aaG).ceil().clamp(1, 20);
+          items.add(DesignItem(
+              name: aa.name,
+              units: add,
+              volumeMl: (aa.volumeMl ?? 0) * add,
+              kcal: (aa.kcal ?? 0) * add,
+              proteinG: aaG * add));
+        }
       }
       return DesignPlan(label: 'Day', items: items);
     }
@@ -6261,6 +6288,8 @@ class NutritionCalculator {
           proteinG: (p.aminoAcidG ?? 0) * vol / (p.volumeMl ?? 1));
     }
 
+    // EN製剤名の集合(輸液=経静脈分の容量を切り分けるために使用)
+    final enNameSet = enProducts.map((p) => p.name).toSet();
     // 評価(under feeding基準): kcalは当日目標の90-100%、タンパク90-100%、
     //   over nutritionは厳禁、INは~1000ml/dayを確保したい。スコア小が良。
     //   planEnKcal: ENアイテム由来kcal（候補ループ側で計算して渡す）
@@ -6295,6 +6324,16 @@ class NutritionCalculator {
         s += (vol - 1000) / 1000 * 1;
       } else {
         s += 1.5 + (vol - 2500) / 1000 * 50;
+      }
+      // 輸液(経静脈)上限: 3000ml/day を超えないようハードキャップ。
+      //   EN(経腸)分は含めず、PN/PPN/IV分のみで判定する。
+      double ivVol = 0;
+      for (final it in plan.items) {
+        if (!enNameSet.contains(it.name)) ivVol += it.volumeMl;
+      }
+      if (ivVol > 3000) {
+        // 実質的に3000ml超を回避(代替が無い場合のみ許容＝段階的劣化)
+        s += 1000 + (ivVol - 3000) * 2;
       }
       // 単調増加制約: ENカロリーが前日より少ない場合は重くペナルティ
       if (minEnKcal > 0 && planEnKcal < minEnKcal * 0.98) {
@@ -6359,9 +6398,16 @@ class NutritionCalculator {
       return [<DesignItem>[]];
     }
 
-    // PN主剤候補(採用TPN全て)。日ごとに密度の違う製剤(エルネオパ1号/2号等)から最適を選ぶ
+    // PN主剤候補: 導入プロトコルの 1号/2号(エルネオパ or ネオパレン)のみを使用。
+    // どちらも未採用ならゼロmenuで構築する(他TPNは自動設計のPN主剤に使わない)。
+    bool isProtoBase(Product p) =>
+        p.name == 'エルネオパNF1号' ||
+        p.name == 'エルネオパNF2号' ||
+        p.name == 'ネオパレン1号' ||
+        p.name == 'ネオパレン2号';
     final pnBases = tpnProducts
-        .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
+        .where((p) =>
+            isProtoBase(p) && (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
         .toList();
 
     DesignPlan? best;
@@ -6404,10 +6450,14 @@ class NutritionCalculator {
             }
           }
           // 導入プロトコル: 1号を強く優先。1号で必要量が過大なら2号を次点優先。
-          if (pb.name == 'エルネオパNF1号') {
-            // 1号(0.56kcal/ml)は希釈。約3000ml(=1.5L×2袋相当)までは1号を優先
+          final is1go =
+              pb.name == 'エルネオパNF1号' || pb.name == 'ネオパレン1号';
+          final is2go =
+              pb.name == 'エルネオパNF2号' || pb.name == 'ネオパレン2号';
+          if (is1go) {
+            // 1号は希釈。約3000ml(輸液上限)までは1号を優先、超えれば2号へ
             if (pnVol <= 3000) planScore -= 1000.0;
-          } else if (pb.name == 'エルネオパNF2号') {
+          } else if (is2go) {
             planScore -= 500.0;
           }
           if (planScore < bestScore) {
@@ -6418,8 +6468,11 @@ class NutritionCalculator {
         }
       }
     }
-    // PNのみ(TPN)でINが過大になる時の代替: ゼロmenu(高濃度静注ブレンド)
-    if (mode == 'TPN') {
+    // ゼロmenu(高濃度静注ブレンド)の使用制限:
+    //  ・エルネオパ/ネオパレン 1号/2号 が未採用の施設のみ(採用施設は1号→2号を使用)。
+    //  ・PNのみの栄養が6日続いた翌日(7日目)以降のPN専用日のみ(allowZeroMenu)。
+    //  ・ENを開始していれば採用しない(mode=='TPN'のPN専用日に限る)。
+    if (allowZeroMenu && pnBases.isEmpty && mode == 'TPN') {
       consider(DesignPlan(label: 'ZERO', items: buildZeroItems(dayTargetKcal)), 0);
     }
     // 勝者のEN kcalをDesignPlanに記録して返す（逐次生成時の単調増加追跡に使用）
@@ -6844,10 +6897,11 @@ class AppState {
       current.regimenItems
           .add(RegimenItem(productId: product.id, units: units));
     } else if (existingIndex != -1) {
-      if (units <= 0) {
+      final partial = current.regimenItems[existingIndex].partialMl;
+      if (units <= 0 && partial <= 0) {
         current.regimenItems.removeAt(existingIndex);
       } else {
-        current.regimenItems[existingIndex].units = units;
+        current.regimenItems[existingIndex].units = units < 0 ? 0 : units;
         // 朝昼夕をリセット（シンプルカウントに戻す）
         current.regimenItems[existingIndex].morning = 0;
         current.regimenItems[existingIndex].noon = 0;
@@ -6879,6 +6933,27 @@ class AppState {
           ..morning = morning
           ..noon = noon
           ..evening = evening;
+      }
+    }
+    await persist();
+  }
+
+  /// TPN/PPN製剤の部分使用量(ml)を設定。本数(units)はそのまま、部分量のみ更新。
+  /// units==0 かつ partialMl==0 になったらアイテム削除。
+  Future<void> setPartialMl(String caseId, Product product, int partialMl) async {
+    final current = cases.firstWhere((e) => e.id == caseId);
+    final idx =
+        current.regimenItems.indexWhere((e) => e.productId == product.id);
+    final ml = partialMl < 0 ? 0 : partialMl;
+    if (idx == -1) {
+      if (ml > 0) {
+        current.regimenItems
+            .add(RegimenItem(productId: product.id, units: 0, partialMl: ml));
+      }
+    } else {
+      current.regimenItems[idx].partialMl = ml;
+      if (current.regimenItems[idx].units <= 0 && ml <= 0) {
+        current.regimenItems.removeAt(idx);
       }
     }
     await persist();
@@ -7004,6 +7079,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   bool _trendCollapsed = false; // トレンド(栄養の推移)折りたたみ
   double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
   int _rampDays = 5; // PNでfull nutritionまで漸増する日数
+  // 簡易式の栄養係数を段階的に上げる開始日(栄養開始からのDay, 1始まり)
+  int _kcalStep20Day = 1;
+  int _kcalStep25Day = 3;
+  int _kcalStep30Day = 5;
+  // true: EN/経口リハ開始日に連動して係数開始日を自動設定(既定)
+  bool _kcalStepAuto = true;
   int _enStartDay = 6; // EN導入するDay番号(食上げ開始日)
   int? _oralRehabStartDay; // 経口リハ開始Day (null=未設定)
   int _totalDays = 5; // シミュレーション全体の日数 (= _enStartDay + EN食上げ7日 -1)
@@ -7037,6 +7118,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           (_enStartDay + _enRampDays).clamp(1, 28);
       _startDate =
           DateTime.tryParse(cfg['startDate'] as String? ?? '') ?? DateTime.now();
+      _kcalStep20Day = (cfg['kcalStep20Day'] as num?)?.toInt() ?? 1;
+      _kcalStep25Day = (cfg['kcalStep25Day'] as num?)?.toInt() ?? 3;
+      _kcalStep30Day = (cfg['kcalStep30Day'] as num?)?.toInt() ?? 5;
+      _kcalStepAuto = (cfg['kcalStepAuto'] as bool?) ?? true;
       final pid = cfg['pnProductId'] as String?;
       _pnProduct = pid != null ? widget.state.catalog.byId(pid) : (tpn.isNotEmpty ? tpn.first : null);
     } else {
@@ -7074,6 +7159,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       'oralRehabStartDay': _oralRehabStartDay,
       'pnProductId': _pnProduct?.id,
       'startDate': _startDate.toIso8601String(),
+      'kcalStep20Day': _kcalStep20Day,
+      'kcalStep25Day': _kcalStep25Day,
+      'kcalStep30Day': _kcalStep30Day,
+      'kcalStepAuto': _kcalStepAuto,
     };
     widget.state.persist();
   }
@@ -7082,6 +7171,94 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       .byCategory(cat)
       .where((p) => widget.state.isAdopted(p.id))
       .toList();
+
+  /// 簡易式 栄養係数(20/25/30 kcal/kg)の段階開始日 設定列。
+  /// 既定は自動(EN/経口リハ開始日に連動)。チェックを外すと手動設定。
+  Widget _kcalStepColumn() {
+    final enabled = !_kcalStepAuto;
+    Widget stepRow(String label, int value, ValueChanged<int> onCh) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(
+            width: 66,
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: enabled ? Colors.green.shade800 : Colors.grey)),
+          ),
+          const Text('Day ', style: TextStyle(fontSize: 12)),
+          SizedBox(
+            width: _dayDropW,
+            child: DropdownButton<int>(
+              value: value.clamp(1, 28),
+              isDense: true,
+              isExpanded: true,
+              items: List.generate(28, (i) => i + 1)
+                  .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
+                  .toList(),
+              onChanged: enabled
+                  ? (v) {
+                      if (v == null) return;
+                      setState(() {
+                        onCh(v);
+                        if (_kcalStep25Day < _kcalStep20Day) {
+                          _kcalStep25Day = _kcalStep20Day;
+                        }
+                        if (_kcalStep30Day < _kcalStep25Day) {
+                          _kcalStep30Day = _kcalStep25Day;
+                        }
+                        _rebuildDays();
+                      });
+                      _saveConfig();
+                      widget.onSettingsChanged?.call();
+                    }
+                  : null,
+            ),
+          ),
+        ]),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('簡易式 栄養係数',
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade800)),
+        // 自動連動トグル: EN/経口リハ開始日に係数開始日を追従させる
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: Checkbox(
+              value: _kcalStepAuto,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onChanged: (v) {
+                setState(() {
+                  _kcalStepAuto = v ?? true;
+                  if (_kcalStepAuto) _applyAutoKcalSteps();
+                  _rebuildDays();
+                });
+                _saveConfig();
+                widget.onSettingsChanged?.call();
+              },
+            ),
+          ),
+          const SizedBox(width: 2),
+          const Text('自動(EN/リハ連動)', style: TextStyle(fontSize: 10)),
+        ]),
+        const SizedBox(height: 2),
+        stepRow('20 kcal/kg', _kcalStep20Day, (v) => _kcalStep20Day = v),
+        stepRow('25 kcal/kg', _kcalStep25Day, (v) => _kcalStep25Day = v),
+        stepRow('30 kcal/kg', _kcalStep30Day, (v) => _kcalStep30Day = v),
+      ],
+    );
+  }
 
   /// 食事(経口リハ)用の採用製剤: 濃厚流動食+栄養サポート。未採用なら全食事製剤。
   List<Product> _adoptedMeals() {
@@ -7187,8 +7364,17 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   // 全期間を固定シーケンスで自動生成:
   //   目標%(総カロリー)はrampDaysで100%まで等差で漸増し、以降100%を維持(EN導入とは独立)
   //   EN食上げ(enStartDay以降7日): 10→20→30→40ml/h → 1pac→2pac朝昼夕、PNは自動減量、最終日はEN単独full
+  /// 自動連動: 栄養開始〜EN開始前=20, EN開始〜経口リハ前=25, 経口リハ以降=30 kcal/kg。
+  void _applyAutoKcalSteps() {
+    _kcalStep20Day = 1;
+    _kcalStep25Day = _enStartDay.clamp(1, 28);
+    final oral = _oralRehabStartDay ?? (_enStartDay + _enRampDays);
+    _kcalStep30Day = oral.clamp(_kcalStep25Day, 28);
+  }
+
   void _rebuildDays() {
     if (_enStartDay < 1) _enStartDay = 1;
+    if (_kcalStepAuto) _applyAutoKcalSteps();
     final enEnd = _enStartDay + _enRampDays - 1;
     final oral = _oralRehabStartDay;
     // 経口リハ開始日+5日(計6日)まで延長
@@ -7279,6 +7465,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         mealPac: _dayMealPac[i],
         girLimitMgKgMin: _girLimit,
         maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
+        // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
+        allowZeroMenu: _dayModes[i] == 'TPN' && i >= 6,
       );
       dayPlans.add(plan);
       if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
@@ -7302,7 +7490,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 設定を3行テーブル形式（ラベル列を固定幅で揃える）
+                  // 設定: 絶食〜経口リハ(左) + 簡易式栄養係数の段階開始日(右)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                   Table(
                     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     columnWidths: const {
@@ -7516,6 +7709,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]),
                     ],
                   ),
+                      const SizedBox(width: 20),
+                      _kcalStepColumn(),
+                    ],
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   const Text('★ お気に入り製剤を優先して設計します',
                       style: TextStyle(fontSize: 11, color: Colors.grey)),
@@ -7720,18 +7918,27 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rawKcal < cap ? rawKcal : cap;
   }
 
-  /// full nutrition達成期間ランプ: 栄養開始から full nutrition 達成日(_rampDays)まで、
-  /// _dayPercents に沿って等差的(線形)に引き上げ、達成日でfull。
-  /// 例: rampDays=5 → 20→40→60→80→100% と毎日 100/rampDays% ずつ増やす。
+  /// 簡易式の栄養係数を段階開始日(_kcalStep20/25/30Day)で段階的に上げるランプ。
+  /// 20→25→30 kcal/kg。30はfull相当(目標fullKpkでクランプ)。初日は20で必ずfull未満。
+  /// 自動(=_kcalStepAuto)では開始日はEN/経口リハ開始日に連動(_applyAutoKcalSteps)。
   /// タンパクはkcal比に按分。Refeedingリスク時はさらにcap。
   ({double kcal, double prot}) _acutePhaseTarget(int i) {
     final fullKcal = NutritionCalculator.targetEnergy(widget.current);
     final fullProt = NutritionCalculator.targetProtein(widget.current);
-    // _dayPercents（等差ramp: day*100/rampDays）の達成%をそのまま適用する。
-    final pcts = _dayPercents;
-    final pct = i < pcts.length ? pcts[i] : 100.0;
-    final frac0 = (pct / 100.0).clamp(0.0, 1.0);
-    final cappedKcal = _refeedCappedKcal(i, fullKcal * frac0);
+    final fw =
+        NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
+    final fullKpk = fw > 0 ? fullKcal / fw : 30.0;
+    final day = i + 1;
+    double kpk;
+    if (day >= _kcalStep30Day) {
+      kpk = 30.0;
+    } else if (day >= _kcalStep25Day) {
+      kpk = 25.0;
+    } else {
+      kpk = 20.0;
+    }
+    if (kpk > fullKpk) kpk = fullKpk;
+    final cappedKcal = _refeedCappedKcal(i, kpk * fw);
     final frac = fullKcal > 0 ? cappedKcal / fullKcal : 1.0;
     return (kcal: cappedKcal, prot: fullProt * frac);
   }
@@ -7837,6 +8044,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               mealPac: _dayMealPac[i],
               girLimitMgKgMin: _girLimit,
               maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
+              // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
+              allowZeroMenu: _dayModes[i] == 'TPN' && i >= 6,
             );
       if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
       designPlans.add(p);
@@ -7985,7 +8194,16 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final admissionIdxClamped =
         (admissionIdx >= 0 && admissionIdx < n) ? admissionIdx : -1;
     final nutritionIdx = preDays;
-    final fullIdx      = (preDays + _rampDays - 1).clamp(0, n - 1);
+    // full nutrition達成日: 簡易式係数ステップ(20/25/30)がfullKpkに到達する日。
+    final _fwRef =
+        NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg;
+    final _fullKpkRef = _fwRef > 0
+        ? NutritionCalculator.targetEnergy(widget.current) / _fwRef
+        : 30.0;
+    final int _fullDay = _fullKpkRef <= 20.0
+        ? 1
+        : (_fullKpkRef <= 25.0 ? _kcalStep25Day : _kcalStep30Day);
+    final fullIdx      = (preDays + _fullDay - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
     final oralIdx      = (_oralRehabStartDay != null &&
             preDays + _oralRehabStartDay! - 1 < n)
