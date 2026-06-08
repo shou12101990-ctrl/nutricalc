@@ -6804,34 +6804,7 @@ class AppState {
         p.carbBase = (ov['carb_g_or_kcal_basis'] as num).toDouble();
       }
     }
-    if (cases.isEmpty) {
-      cases.add(
-        PatientCase(
-          id: 'seed-1',
-          caseCode: '01',
-          currentBed: '01',
-          age: 60,
-          heightCm: 150,
-          weightKg: 50,
-          sex: Sex.male,
-          activityFactor: 1.2,
-          stressFactor: 1.6,
-          proteinGoalPerKg: 1.5,
-          createdAt: DateTime.now().toIso8601String(),
-          bedHistory: [
-            BedAssignment(
-                changedAt: DateTime.now().toIso8601String().split('T').first,
-                fromBed: null,
-                toBed: '01',
-                note: '初期登録')
-          ],
-          regimenItems: [],
-          selectedProtocolId: 'five_day',
-          zeroMenuConfig: ZeroMenuConfig.defaultConfig(),
-        ),
-      );
-      await store.saveCases(cases);
-    }
+    // 初期患者は作らない(患者数0がデフォルト)。新規入室で追加する。
 
     var adopted = await store.loadAdoptedProducts();
     // デフォルト採用セットを一度だけ既存の採用リストにマージする
@@ -6872,7 +6845,7 @@ class AppState {
             percentages: [20, 40, 60, 80, 100],
             description: 'ICU重症例向けの5日階段導入'),
       ],
-      selectedCaseId: cases.first.id,
+      selectedCaseId: cases.isNotEmpty ? cases.first.id : null,
       favoriteProductIds: favorites,
       adoptedProductIds: adopted,
       noteText: note,
@@ -7176,21 +7149,32 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   /// 簡易式 栄養係数(20/25/30 kcal/kg)の段階開始日 設定。
   /// イベント日付決定(絶食〜経口リハ)と同じテーブルに行として配置する。
   /// 既定は自動(EN/経口リハ開始日に連動)。チェックを外すと手動設定。
+  /// 設定テーブルのラベルセル。アイコン有無に依らず固定幅スロット(18px)でテキスト開始位置を揃える。
+  /// 全設定行をこのヘルパーで生成し、ラベルのズレを構造的に防止する。
+  Widget _settingLabelCell(IconData? icon, String label, Color color,
+      {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 10, bottom: 6),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          width: 18,
+          child: icon == null ? null : Icon(icon, size: 14, color: color),
+        ),
+        Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+      ]),
+    );
+  }
+
   List<TableRow> _kcalStepTableRows() {
     final enabled = !_kcalStepAuto;
     TableRow dayRow(String label, Color color, int value, ValueChanged<int> onCh) {
       return TableRow(children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8, bottom: 6),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.trending_up,
-                size: 13, color: enabled ? color : Colors.grey),
-            const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 13, color: enabled ? color : Colors.grey)),
-          ]),
-        ),
+        _settingLabelCell(
+            Icons.trending_up, label, enabled ? color : Colors.grey),
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -7232,17 +7216,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return [
       // 見出し + 自動連動チェックボックス
       TableRow(children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8, bottom: 6),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const SizedBox(width: 17), // アイコン分(13+4)の空きでテキスト開始を揃える
-            Text('栄養係数上限:',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade800)),
-          ]),
-        ),
+        _settingLabelCell(null, '栄養係数上限:', Colors.green.shade800,
+            bold: true),
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -7386,6 +7361,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     _kcalStep20Day = _enStartDay.clamp(1, 28);
     final oral = _oralRehabStartDay ?? (_enStartDay + _enRampDays);
     _kcalStep25Day = oral.clamp(_kcalStep20Day, 28);
+    // full達成は25kcal/kg終了の翌日に連動(設定と実到達日を一致させる)。
+    _rampDays = (_kcalStep25Day + 1).clamp(2, 28);
   }
 
   void _rebuildDays() {
@@ -7529,18 +7506,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     children: [
                       // 行0: 絶食日（常時表示・タップで設定）
                       TableRow(children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.no_meals, size: 13, color: Colors.red.shade400),
-                              const SizedBox(width: 4),
-                              Text('絶食日:',
-                                  style: TextStyle(fontSize: 13, color: Colors.red.shade400)),
-                            ],
-                          ),
-                        ),
+                        _settingLabelCell(
+                            Icons.no_meals, '絶食日:', Colors.red.shade400),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
@@ -7587,18 +7554,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]),
                       // 行1: 栄養開始日
                       TableRow(children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.water_drop, size: 13, color: Colors.blue.shade600),
-                            const SizedBox(width: 4),
-                            Text('栄養開始日:',
-                                style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
-                          ]),
-                        ),
+                        _settingLabelCell(
+                            Icons.water_drop, '栄養開始日:', Colors.blue.shade600),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
-                          child: TextButton(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
                             style: TextButton.styleFrom(
                                 padding: EdgeInsets.zero,
                                 minimumSize: const Size(0, 0),
@@ -7614,22 +7576,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                             child: Text(
                                 '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
                                 style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
-                          ),
+                          )),
                         ),
                       ]),
                       // 行2: full nutrition達成
                       TableRow(children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.flag,
-                                size: 13, color: Colors.green.shade800),
-                            const SizedBox(width: 4),
-                            Text('full達成:',
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.green.shade800)),
-                          ]),
-                        ),
+                        _settingLabelCell(Icons.flag, 'full達成:',
+                            _kcalStepAuto ? Colors.grey : Colors.green.shade800),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
@@ -7646,14 +7599,17 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       .map((d) => DropdownMenuItem(
                                           value: d, child: Text('$d')))
                                       .toList(),
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _rampDays = v ?? _rampDays;
-                                      _rebuildDays();
-                                    });
-                                    _saveConfig();
-                                    widget.onSettingsChanged?.call();
-                                  },
+                                  // 自動連携時は 25kcal/kg終了の翌日に連動(編集不可)
+                                  onChanged: _kcalStepAuto
+                                      ? null
+                                      : (v) {
+                                          setState(() {
+                                            _rampDays = v ?? _rampDays;
+                                            _rebuildDays();
+                                          });
+                                          _saveConfig();
+                                          widget.onSettingsChanged?.call();
+                                        },
                                 ),
                               ),
                             ],
@@ -7662,12 +7618,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]),
                       // 行3: EN導入 (色はグラフのEN(アンバー)と統一)
                       TableRow(children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Text('EN導入:',
-                              style: TextStyle(
-                                  fontSize: 13, color: Colors.amber.shade500)),
-                        ),
+                        _settingLabelCell(
+                            Icons.lunch_dining, 'EN導入:', Colors.amber.shade700),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
@@ -7696,17 +7648,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]),
                       // 行4: 経口リハ導入 (EN導入行と同一レイアウト)
                       TableRow(children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8, bottom: 6),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.restaurant,
-                                size: 13, color: Colors.red.shade400),
-                            const SizedBox(width: 4),
-                            Text('経口リハ導入:',
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.red.shade400)),
-                          ]),
-                        ),
+                        _settingLabelCell(
+                            Icons.restaurant, '経口リハ導入:', Colors.red.shade400),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
@@ -7958,11 +7901,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rawKcal < cap ? rawKcal : cap;
   }
 
-  /// 各日の目標kcal(full nutrition)= 等差ランプ ∧ 係数上限。
-  ///  ・等差ランプ: full nutrition達成日(_rampDays)に本来full(realFull)へ線形到達。起点は20kcal/kg相当。
-  ///  ・係数上限(permissive underfeeding): 20kcal/kg(〜_kcalStep20Day)・25kcal/kg(〜_kcalStep25Day)で上限キャップ。
-  ///    _kcalStep25Day を過ぎたら上限解除(realFullまで)。
-  /// タンパクはkcal比に按分。Refeedingリスク時はさらにcap。
+  /// 各日の目標kcal(full nutrition)= 等差ランプ ∧ 係数上限(ce.acutePhaseTargetKcal)。
+  /// タンパクは permissive underfeeding でも **full を維持**(カロリーのみ制限)する。
+  ///   → 急性期にAA目標が落ち込まない(蛋白は確保するのが臨床的に正しい)。
   ({double kcal, double prot}) _acutePhaseTarget(int i) {
     final realFull = NutritionCalculator.targetEnergy(widget.current);
     final realProt = NutritionCalculator.targetProtein(widget.current);
@@ -7977,8 +7918,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       kcal25UntilDay: _kcalStep25Day,
     );
     final cappedKcal = _refeedCappedKcal(i, raw);
-    final frac = realFull > 0 ? cappedKcal / realFull : 1.0;
-    return (kcal: cappedKcal, prot: realProt * frac);
+    return (kcal: cappedKcal, prot: realProt);
   }
 
   /// 1日プランの電解質・微量元素・ビタミンUL超過アラート。
