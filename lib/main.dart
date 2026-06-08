@@ -7744,8 +7744,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rawKcal < cap ? rawKcal : cap;
   }
 
-  /// 急性期ランプ: EN進行に応じ kcal/kg 目標を 20→25→full(既定30) と上げる。
-  /// 急性期(EN前)=20、EN導入(速度)=25、EN朝昼夕1pac以降 or 経口リハ=full。
+  /// full nutrition達成期間ランプ: kcal/kg を 急性期(≈20, full未満)から
+  /// full nutrition達成日(_rampDays, pct=100%)に向けて線形に引き上げ、達成日でfull。
+  /// 「full達成までの期間」を尊重し、初日からfullにならない。
   /// タンパクはkcal比に按分。Refeedingリスク時はさらにcap。
   ({double kcal, double prot}) _acutePhaseTarget(int i) {
     final fullKcal = NutritionCalculator.targetEnergy(widget.current);
@@ -7758,18 +7759,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       return (kcal: k, prot: fullProt * f);
     }
     final fullKpk = fullKcal / fw;
-    final enRate = _rateOf(_dayEnDose[i]);
-    final enPac = _pacOf(_dayEnDose[i]);
-    final mealPac = _dayMealPac[i];
-    double kpk;
-    if (enPac >= 1 || mealPac >= 1) {
-      kpk = fullKpk; // 回復期: EN朝昼夕1pac以降 or 経口リハ
-    } else if (enRate > 0) {
-      kpk = 25.0; // EN導入(速度)期
-    } else {
-      kpk = 20.0; // 急性期(EN前): 抑えめ
-    }
-    if (kpk > fullKpk) kpk = fullKpk;
+    // full nutrition達成期間(_dayPercents)に沿って kcal/kg を線形に上げる。
+    // 達成日(pct=100%)で full に到達。初日は急性期で必ず full 未満。
+    final pcts = _dayPercents;
+    final pct = i < pcts.length ? pcts[i] : 100.0;
+    final firstPct = pcts.isNotEmpty ? pcts.first : 100.0;
+    final startKpk = fullKpk < 20.0 ? fullKpk * 0.67 : 20.0;
+    final denom = 100.0 - firstPct;
+    final t = denom > 0 ? ((pct - firstPct) / denom).clamp(0.0, 1.0) : 1.0;
+    final kpk = startKpk + (fullKpk - startKpk) * t;
     final cappedKcal = _refeedCappedKcal(i, kpk * fw);
     final frac = fullKcal > 0 ? cappedKcal / fullKcal : 1.0;
     return (kcal: cappedKcal, prot: fullProt * frac);
