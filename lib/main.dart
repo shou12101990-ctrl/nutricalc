@@ -849,7 +849,9 @@ class CasesPage extends StatelessWidget {
     double kcalPerKgValue = 30;
     final reeCtrl = TextEditingController();
     Sex sex = Sex.male;
-    DateTime? fastingDate = DateTime.now(); // 絶食開始日(デフォルト=入室日)
+    // 絶食開始日 デフォルト=入室日-4日(テスト用)
+    DateTime? fastingDate =
+        DateTime.now().subtract(const Duration(days: 4));
     final List<String> selectedTags = []; // 病態タグ
     bool showConditions = false; // 病態追加の展開状態
 
@@ -3143,66 +3145,76 @@ class _BuilderPageState extends State<BuilderPage>
                                               },
                                             )
                                           : SizedBox(
-                                              width: ((product.category == 'TPN' ||
-                                                          product.category == 'PPN') &&
-                                                      (product.volumeMl ?? 0) > 100)
-                                                  ? 196
-                                                  : 120,
+                                              // 全非EN行で固定幅。部分量スロット(固定80)+本数ステッパー(固定)を
+                                              // 同じ並びで配置し、行ごとの横位置のガタつきを構造的に無くす。
+                                              width: 176,
                                               child: Row(
                                                 mainAxisAlignment: MainAxisAlignment.end,
                                                 children: [
-                                                  // 部分量(100ml単位): 本数指定の左に配置
-                                                  if ((product.category == 'TPN' ||
-                                                          product.category == 'PPN') &&
-                                                      (product.volumeMl ?? 0) > 100)
-                                                    Builder(builder: (_) {
-                                                      final bagVol =
-                                                          (product.volumeMl ?? 0).round();
-                                                      final maxPartial = bagVol > 100
-                                                          ? ((bagVol - 1) ~/ 100) * 100
-                                                          : 0;
-                                                      final opts = <int>[
-                                                        0,
-                                                        for (int v = 100; v <= maxPartial; v += 100) v
-                                                      ];
-                                                      final cur =
-                                                          partialMl.clamp(0, maxPartial);
-                                                      return DropdownButton<int>(
-                                                        value: cur,
-                                                        isDense: true,
-                                                        underline: const SizedBox.shrink(),
-                                                        items: opts
-                                                            .map((v) => DropdownMenuItem(
-                                                                value: v,
-                                                                child: Text(
-                                                                    v == 0 ? '+0' : '+${v}ml',
-                                                                    style: const TextStyle(
-                                                                        fontSize: 13))))
-                                                            .toList(),
-                                                        onChanged: (v) async {
-                                                          await widget.state.setPartialMl(
-                                                              current.id, product, v ?? 0);
-                                                          setState(() {});
-                                                        },
-                                                      );
-                                                    }),
+                                                  // 部分量スロット(固定幅80): 該当しない行は空でも幅を確保して位置を保持
+                                                  SizedBox(
+                                                    width: 80,
+                                                    child: ((product.category == 'TPN' ||
+                                                                product.category == 'PPN') &&
+                                                            (product.volumeMl ?? 0) > 100)
+                                                        ? Builder(builder: (_) {
+                                                            final bagVol =
+                                                                (product.volumeMl ?? 0).round();
+                                                            final maxPartial =
+                                                                ((bagVol - 1) ~/ 100) * 100;
+                                                            final opts = <int>[
+                                                              0,
+                                                              for (int v = 100; v <= maxPartial; v += 100) v
+                                                            ];
+                                                            final cur =
+                                                                partialMl.clamp(0, maxPartial);
+                                                            return DropdownButton<int>(
+                                                              value: cur,
+                                                              isDense: true,
+                                                              isExpanded: true, // スロット幅いっぱい=内容で幅が変わらない
+                                                              underline:
+                                                                  const SizedBox.shrink(),
+                                                              items: opts
+                                                                  .map((v) => DropdownMenuItem(
+                                                                      value: v,
+                                                                      child: Text(
+                                                                          v == 0 ? '+0' : '+${v}ml',
+                                                                          style: const TextStyle(
+                                                                              fontSize: 13))))
+                                                                  .toList(),
+                                                              onChanged: (v) async {
+                                                                await widget.state.setPartialMl(
+                                                                    current.id, product, v ?? 0);
+                                                                setState(() {});
+                                                              },
+                                                            );
+                                                          })
+                                                        : null,
+                                                  ),
                                                   IconButton(
                                                     visualDensity: VisualDensity.compact,
                                                     padding: EdgeInsets.zero,
                                                     constraints: const BoxConstraints(
-                                                        minWidth: 32, minHeight: 32),
+                                                        minWidth: 28, minHeight: 32),
                                                     onPressed: () async {
                                                       await widget.state.setUnits(current.id, product, (units - 1).clamp(0, 99));
                                                       setState(() {});
                                                     },
                                                     icon: const Icon(Icons.remove_circle_outline),
                                                   ),
-                                                  Text('$units', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                                  SizedBox(
+                                                    width: 24,
+                                                    child: Text('$units',
+                                                        textAlign: TextAlign.center,
+                                                        style: const TextStyle(
+                                                            fontSize: 16,
+                                                            fontWeight: FontWeight.bold)),
+                                                  ),
                                                   IconButton(
                                                     visualDensity: VisualDensity.compact,
                                                     padding: EdgeInsets.zero,
                                                     constraints: const BoxConstraints(
-                                                        minWidth: 32, minHeight: 32),
+                                                        minWidth: 28, minHeight: 32),
                                                     onPressed: () async {
                                                       await widget.state.setUnits(current.id, product, units + 1);
                                                       setState(() {});
@@ -7086,7 +7098,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final cfg = widget.current.autoDesignConfig;
     if (cfg != null) {
       // 保存済み設定を復元 (rampDays・開始日・PN製剤のみ。日別は固定シーケンスから再生成)
-      _rampDays = ((cfg['rampDays'] as num?)?.toInt() ?? 5).clamp(2, 28);
+      _rampDays = ((cfg['rampDays'] as num?)?.toInt() ?? 5).clamp(2, 12);
       _enStartDay = (cfg['enStartDay'] as num?)?.toInt() ?? (_rampDays + 1);
       // 経口リハ導入の既定値: EN導入＋7日(EN食上げ完了の翌日)。未保存/未設定でも選択済みにし、
       // 「未選択(—)」でドロップダウンが横長になるのを防ぐ。
@@ -7361,8 +7373,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     _kcalStep20Day = _enStartDay.clamp(1, 28);
     final oral = _oralRehabStartDay ?? (_enStartDay + _enRampDays);
     _kcalStep25Day = oral.clamp(_kcalStep20Day, 28);
-    // full達成は25kcal/kg終了の翌日に連動(設定と実到達日を一致させる)。
-    _rampDays = (_kcalStep25Day + 1).clamp(2, 28);
+    // full達成(_rampDays)は強制連動しない(傾きと実到達点は別概念)。
+    // 実到達日は effectiveFullDay() で算出し UI に並記する。
   }
 
   void _rebuildDays() {
@@ -7373,14 +7385,16 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // 経口リハ開始日+5日(計6日)まで延長
     final mealEnd = oral != null ? oral + _mealRampDays - 1 : 0;
     _totalDays = enEnd > mealEnd ? enEnd : mealEnd;
-    // full達成(_rampDays)・25上限が最終日を超えると最終段階に到達しないため最終日までにクランプ。
-    if (_totalDays > 0) {
-      if (_rampDays > _totalDays) _rampDays = _totalDays;
-      if (_kcalStepAuto && _kcalStep25Day > _totalDays) {
-        _kcalStep25Day = _totalDays;
-        if (_kcalStep20Day > _kcalStep25Day) _kcalStep20Day = _kcalStep25Day;
-      }
-    }
+    // 実到達日(係数上限でfullが遅れうる)まで表示期間を拡張し、必ずfull到達を含める。
+    final effFull = ce.effectiveFullDay(
+      feedingWeightKg:
+          NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg,
+      realFullKcal: NutritionCalculator.targetEnergy(widget.current),
+      fullAchieveDay: _rampDays,
+      kcal20UntilDay: _kcalStep20Day,
+      kcal25UntilDay: _kcalStep25Day,
+    );
+    if (effFull > _totalDays) _totalDays = effFull;
     // 設定変更を親(チャートパネル)に通知
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onSettingsChanged?.call();
@@ -7581,8 +7595,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       ]),
                       // 行2: full nutrition達成
                       TableRow(children: [
-                        _settingLabelCell(Icons.flag, 'full達成:',
-                            _kcalStepAuto ? Colors.grey : Colors.green.shade800),
+                        _settingLabelCell(
+                            Icons.flag, 'full達成:', Colors.green.shade800),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
@@ -7592,26 +7606,46 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               SizedBox(
                                 width: _dayDropW,
                                 child: DropdownButton<int>(
-                                  value: _rampDays.clamp(2, 28),
+                                  value: _rampDays.clamp(2, 12),
                                   isDense: true,
                                   isExpanded: true,
-                                  items: List.generate(27, (i) => i + 2)
+                                  items: List.generate(11, (i) => i + 2)
                                       .map((d) => DropdownMenuItem(
                                           value: d, child: Text('$d')))
                                       .toList(),
-                                  // 自動連携時は 25kcal/kg終了の翌日に連動(編集不可)
-                                  onChanged: _kcalStepAuto
-                                      ? null
-                                      : (v) {
-                                          setState(() {
-                                            _rampDays = v ?? _rampDays;
-                                            _rebuildDays();
-                                          });
-                                          _saveConfig();
-                                          widget.onSettingsChanged?.call();
-                                        },
+                                  // 自動時も編集可能(傾きの終点)。実到達日は別途並記。
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _rampDays = v ?? _rampDays;
+                                      _rebuildDays();
+                                    });
+                                    _saveConfig();
+                                    widget.onSettingsChanged?.call();
+                                  },
                                 ),
                               ),
+                              // 実到達日(係数上限で設定値と乖離しうるため並記)
+                              Builder(builder: (_) {
+                                final effFull = ce.effectiveFullDay(
+                                  feedingWeightKg: NutritionCalculator
+                                      .targetEnergyResult(widget.current)
+                                      .feedingWeightKg,
+                                  realFullKcal: NutritionCalculator.targetEnergy(
+                                      widget.current),
+                                  fullAchieveDay: _rampDays,
+                                  kcal20UntilDay: _kcalStep20Day,
+                                  kcal25UntilDay: _kcalStep25Day,
+                                );
+                                return Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: Text('実到達 Day$effFull',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: effFull == _rampDays
+                                              ? Colors.grey
+                                              : Colors.deepOrange.shade400)),
+                                );
+                              }),
                             ],
                           ),
                         ),
@@ -8172,15 +8206,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final admissionIdxClamped =
         (admissionIdx >= 0 && admissionIdx < n) ? admissionIdx : -1;
     final nutritionIdx = preDays;
-    // full nutrition達成日: 各日目標が本来full(realFull)に到達する最初の日。
-    final _realFullRef = NutritionCalculator.targetEnergy(widget.current);
-    int _fullDay = _totalDays > 0 ? _totalDays : 1;
-    for (int d = 1; d <= _totalDays; d++) {
-      if (_acutePhaseTarget(d - 1).kcal >= _realFullRef * 0.995) {
-        _fullDay = d;
-        break;
-      }
-    }
+    // full nutrition実到達日(設定上のfull達成=傾き終点とは別。係数上限で遅れうる)。
+    final _fullDay = ce.effectiveFullDay(
+      feedingWeightKg:
+          NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg,
+      realFullKcal: NutritionCalculator.targetEnergy(widget.current),
+      fullAchieveDay: _rampDays,
+      kcal20UntilDay: _kcalStep20Day,
+      kcal25UntilDay: _kcalStep25Day,
+    );
     final fullIdx      = (preDays + _fullDay - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
     final oralIdx      = (_oralRehabStartDay != null &&
