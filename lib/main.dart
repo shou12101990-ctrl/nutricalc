@@ -1820,34 +1820,41 @@ class _BuilderPageState extends State<BuilderPage>
         .toList();
   }
 
-  /// 微量栄養素の日次合計の簡易表示（横断集計の可視化・検証用）。
-  Widget _microTotalsSummary(cm.MicroTotals t) {
-    String f(double v, [int d = 1]) => v.toStringAsFixed(d);
-    final parts = <String>[];
-    void add(String section, String key, String label, String unit,
-        [int d = 1]) {
-      final v = t.of(section, key);
-      if (v > 0.0001) parts.add('$label ${f(v, d)}$unit');
-    }
+  /// 採用済み(なければ全体)から条件に合う製剤を1つ選ぶ。
+  Product? _pickAdoptedProduct(bool Function(Product) test) {
+    final all = widget.state.catalog.products.where(test).toList();
+    final adopted =
+        all.where((p) => widget.state.isAdopted(p.id)).toList();
+    if (adopted.isNotEmpty) return adopted.first;
+    return all.isNotEmpty ? all.first : null;
+  }
 
-    add('elec', 'Na', 'Na', 'mEq');
-    add('elec', 'K', 'K', 'mEq');
-    add('elec', 'Cl', 'Cl', 'mEq');
-    add('elec', 'Ca', 'Ca', 'mEq');
-    add('elec', 'Mg', 'Mg', 'mEq');
-    add('elec', 'P', 'P', 'mmol');
-    add('trace', 'Zn', 'Zn', 'μmol');
-    add('trace', 'Fe', 'Fe', 'μmol');
-    add('trace', 'Cu', 'Cu', 'μmol');
-    add('trace', 'Mn', 'Mn', 'μmol');
-    add('trace', 'Se', 'Se', 'μmol', 2);
-    add('trace', 'I', 'I', 'μmol', 2);
-    if (parts.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Text('微量栄養素計（全ソース）: ${parts.join(' / ')}',
-          style: TextStyle(fontSize: 10.5, color: Colors.blueGrey.shade600)),
-    );
+  /// ベース製剤の内蔵成分に応じた非重複の推奨加注（胆汁うっ滞/肝障害ならMn-free）。
+  List<String> _recommendedSelectAdditives(PatientCase current) {
+    final bases = <Product>[];
+    for (final it in current.regimenItems) {
+      final p = widget.state.catalog.byId(it.productId);
+      final n =
+          it.hasMealTiming ? (it.morning + it.noon + it.evening) : it.units;
+      if (p != null && n > 0) bases.add(p);
+    }
+    final hasVit = bases.any((p) => p.kitHasVitamins);
+    final hasTrace = bases.any((p) => p.kitHasFullTrace);
+    final mnAvoid = current.conditionTags.contains('cholestasis') ||
+        current.conditionTags.contains('liver');
+    final out = <String>[];
+    if (!hasVit) {
+      final mvi = _pickAdoptedProduct((p) => p.isFullMvi);
+      if (mvi != null) out.add(mvi.name);
+    }
+    if (!hasTrace) {
+      final trace = mnAvoid
+          ? (_pickAdoptedProduct((p) => p.isMnFreeTrace) ??
+              _pickAdoptedProduct((p) => p.isCombinedTrace))
+          : _pickAdoptedProduct((p) => p.isCombinedTrace);
+      if (trace != null) out.add(trace.name);
+    }
+    return out;
   }
 
   void _snapTo(double target) {
@@ -2417,31 +2424,40 @@ class _BuilderPageState extends State<BuilderPage>
                     Card(
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
-                        onTap: () => _editPatientParams(context, current),
+                        onTap: _builderCardCollapsed
+                            ? null
+                            : () => _editPatientParams(context, current),
                         child: Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: _builderCardCollapsed ? 2 : 16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.person, size: 18),
-                                const SizedBox(width: 2),
-                                Text(current.caseCode,
-                                    style: Theme.of(context).textTheme.titleLarge),
-                                const SizedBox(width: 12),
-                                const Icon(Icons.bed, size: 18),
-                                const SizedBox(width: 2),
-                                Text(current.currentBed,
-                                    style: Theme.of(context).textTheme.titleLarge),
-                                const Spacer(),
-                                IconButton(
-                                  icon: const Icon(Icons.edit, size: 20),
-                                  tooltip: '患者情報を編集',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () =>
-                                      _editPatientParams(context, current),
-                                ),
+                                if (!_builderCardCollapsed) ...[
+                                  const Icon(Icons.person, size: 18),
+                                  const SizedBox(width: 2),
+                                  Text(current.caseCode,
+                                      style:
+                                          Theme.of(context).textTheme.titleLarge),
+                                  const SizedBox(width: 12),
+                                  const Icon(Icons.bed, size: 18),
+                                  const SizedBox(width: 2),
+                                  Text(current.currentBed,
+                                      style:
+                                          Theme.of(context).textTheme.titleLarge),
+                                  const Spacer(),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 20),
+                                    tooltip: '患者情報を編集',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () =>
+                                        _editPatientParams(context, current),
+                                  ),
+                                ] else
+                                  const Spacer(),
                                 IconButton(
                                   icon: Icon(
                                       _builderCardCollapsed
@@ -2449,7 +2465,7 @@ class _BuilderPageState extends State<BuilderPage>
                                           : Icons.expand_less,
                                       size: 22),
                                   tooltip: _builderCardCollapsed
-                                      ? '展開'
+                                      ? '患者情報を展開'
                                       : '折りたたむ',
                                   visualDensity: VisualDensity.compact,
                                   onPressed: () => setState(() =>
@@ -2458,6 +2474,7 @@ class _BuilderPageState extends State<BuilderPage>
                                 ),
                               ],
                             ),
+                            if (!_builderCardCollapsed) ...[
                             const SizedBox(height: 4),
                             // 入室日 / 絶食開始日 / 栄養開始日
                             Text(
@@ -2466,7 +2483,6 @@ class _BuilderPageState extends State<BuilderPage>
                               '栄養開始日 ${_mmdd(_nutritionStart)}',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
-                            if (!_builderCardCollapsed) ...[
                             const SizedBox(height: 4),
                             Text(
                               current.patientInfoLine,
@@ -2589,7 +2605,7 @@ class _BuilderPageState extends State<BuilderPage>
                     // タブごとの説明書き
                     Text(
                       _builderTabIndex == 0
-                          ? '複数製剤を組み合わせ, 処方・カルテ記載に向けてサマライズします.'
+                          ? '製剤併用を集計し, 処方・カルテ記載に向けてサマライズします.'
                           : _builderTabIndex == 1
                               ? '静脈栄養のみで最小のINにする際の逆引き計算を行います.'
                               : 'フェーズに応じた処方設計を提案し, トレンドを可視化します.',
@@ -2970,6 +2986,29 @@ class _BuilderPageState extends State<BuilderPage>
                               }),
                               if (category == '加注') ...[
                                 const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => setState(() {
+                                      _selectAdditives
+                                        ..clear()
+                                        ..addAll(
+                                            _recommendedSelectAdditives(current));
+                                    }),
+                                    icon: Icon(Icons.auto_fix_high,
+                                        size: 16, color: Colors.indigo.shade600),
+                                    label: const Text('推奨加注を自動セット（重複回避）',
+                                        style: TextStyle(fontSize: 12)),
+                                    style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact),
+                                  ),
+                                ),
+                                Text(
+                                    'ベースに微量元素/ビタミンが内蔵なら加注せず、胆汁うっ滞/肝障害ではMn-freeを選択。',
+                                    style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: Colors.grey.shade600)),
+                                const SizedBox(height: 6),
                                 _additivePicker(_selectAdditives),
                               ],
                               if (category == '食事') ...[
@@ -3365,8 +3404,6 @@ class _BuilderPageState extends State<BuilderPage>
                                                                       ?.glucoseRestrict ??
                                                                   false,
                                                             ),
-                                                            _microTotalsSummary(
-                                                                micro),
                                                             ..._microAlertRows(
                                                                 micro,
                                                                 current,
@@ -3873,14 +3910,7 @@ class _NotePageState extends State<NotePage>
       category: 'つかいかた',
       title: 'つかいかた',
       color: Color(0xFF4A90D9),
-      body: '①患者情報とベッド番号を入力するとHarris-Benedictの式に則り目標カロリーが算出される. そこにタンパク投与量(g/kg)も設定する.\n\n'
-          '②目標カロリーを参考にEN, TPN, PPN製剤の何を何pac投与するか\n'
-          '　また投与速度を指定して一部を投与する場合 (全量投与しないとき), 投与速度を入力すればそれに応じた値が出る.\n\n'
-          '③EN, PN併用時にその合計が知りたい場合.\n'
-          '　それぞれの使用量を選択すると計算される.\n\n'
-          '④静注製剤を自らブレンドする場合 (*)\n'
-          '　投与したいkcal, 蛋白量 (NPC/N比)を決めると各製剤の量 (ml)が出せる. そこからPFC balanceをみつつ脂質投与量を調整していく.\n'
-          '　(*) 便宜的にゼロmenuと記載している.',
+      body: '本アプリはICUの栄養処方を「個別計算・逆引き・自動設計」の3方式で支援し、トレンドとリスクを可視化する。\n\n■ TOP画面（ベッド管理）\n・患者カードが一覧表示。カードをタップで患者情報編集、「計算」で処方ビルダーへ、「退室」で退室。右上の「新規入室」から患者登録。\n\n■ 新規入室 / 患者情報編集\n・年齢・身長・体重・性別を入力。\n・エネルギー式を選択(簡易式kcal/kg〔既定〕/Harris-Benedict/Mifflin/間接熱量測定)。簡易式はkcal/kgを選ぶ。\n・目標タンパク(g/kg)、絶食開始日、病態タグ(腎不全・肝不全・胆汁うっ滞・CRRT・高排出消化管・アルコール 等)を設定。\n・肥満(BMI≥30)は自動で補正体重×20–25(ESPEN)。BMI・肥満区分・栄養計算体重はカードに自動表示。\n\n■ 処方ビルダーの3タブ\n①個別選択: EN/TPN/PPN/食事/加注を個別に選び、併用を合計→処方・カルテ記載向けにサマライズ。全ソースのIN・kcal・タンパク・微量栄養素を横断集計。\n②ゼロmenu: 静脈栄養のみで最小INにする逆引き計算。投与kcalとNPC/N比・脂質量を決めると各製剤の必要mlを算出。\n③自動計算: フェーズに応じた処方設計を提案しトレンドを可視化。急性期20→EN導入25→回復30 kcal/kgへ自動で上げる。Refeedingリスクは初期kcalを自動cap。\n\n■ 製剤選択アルゴリズム（病態連動）\n・病態を選ぶと、目標タンパクの推奨範囲、ゼロmenuのNPC/N比・脂質量を自動調整。\n・GIR(糖)>5(糖質制限病態は>4)、脂質>1.0–1.5 g/kg/dayでアラート。自動設計は上限を超えない製剤選定。\n・微量栄養素は全ソース合算し耐容上限超過を警告。胆汁うっ滞/肝障害はMn-free製剤へ切替提案、CRRTはSe/B1補充、高排出消化管はZn補充、糖負荷前のB1未投与はWernicke警告。\n・加注はベース製剤の内蔵成分と重複しないよう自動付替え(オールインワンTPNには加注しない 等)。\n\n■ アイコン・色の意味\n・入室(緑・login) / 絶食開始(赤・no_meals) / 栄養開始(青・water_drop) / 経口リハ導入(食事・restaurant)。\n・日付の丸囲み＝入室からday5の倍数。\n・グラフ棒: 下から PN→EN→食事 の積み上げ。青の折れ線＝IN(水分量)、IN最高点に水平線＋_ml表記。赤線＝アミノ酸(AA)。\n・グラフ下の「リスクと補充サジェスト」をタップで各種アラートを展開。',
     ),
     _NoteSection(
       category: 'EN',
@@ -5250,6 +5280,36 @@ class Product {
 
   /// ENマスタ（タブ）に表示するか（EN本体/補助 or 両用food）
   bool get inEnTab => category == 'EN' || category == 'EN_AUX' || alsoEn;
+
+  // ── 組成判定（MVI/trace 自動付替え用。micro由来）──
+  /// 複合微量元素（Zn+Cu を含む＝多元素）を内蔵するか
+  bool get kitHasFullTrace {
+    final tr = micro?['trace'];
+    return tr is Map && tr.containsKey('Zn') && tr.containsKey('Cu');
+  }
+
+  /// 総合ビタミン（B1 or A を含む）を内蔵するか
+  bool get kitHasVitamins {
+    final v = micro?['vit'];
+    return v is Map && (v.containsKey('B1') || v.containsKey('A'));
+  }
+
+  /// 含有Mn量（μmol）
+  double get mnAmount {
+    final tr = micro?['trace'];
+    if (tr is! Map) return 0;
+    final m = tr['Mn'];
+    return m is num ? m.toDouble() : 0;
+  }
+
+  /// 複合微量元素製剤か（加注用）
+  bool get isCombinedTrace => category == '微量元素' && kitHasFullTrace;
+
+  /// Mn-free 複合微量元素製剤か
+  bool get isMnFreeTrace => isCombinedTrace && mnAmount <= 0;
+
+  /// 総合ビタミン製剤か（加注用）
+  bool get isFullMvi => category == 'ビタミン' && kitHasVitamins;
 
   /// カテゴリ表示名（EN_AUXは「EN補助」と表示）
   String get categoryLabel {
@@ -7022,7 +7082,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final color = switch (mode) {
       'TPN' => Colors.blue,
       'TPN+EN' => Colors.teal,
-      'EN' => Colors.amber.shade700,
+      'EN' => Colors.amber.shade500,
       '食事' => Colors.deepOrange.shade400,
       _ => Colors.grey,
     };
@@ -7297,7 +7357,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           padding: const EdgeInsets.only(right: 8, bottom: 6),
                           child: Text('EN導入:',
                               style: TextStyle(
-                                  fontSize: 13, color: Colors.amber.shade700)),
+                                  fontSize: 13, color: Colors.amber.shade500)),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -7379,6 +7439,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             ),
           ),
           const SizedBox(height: 8),
+          SizedBox(
+            height: (listH - 240).clamp(220.0, 460.0),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
           ...List.generate(pcts.length, (i) {
             final pct = pcts[i];
             final dayKcal = targetKcal * pct / 100;
@@ -7388,8 +7453,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             final showPn = mode == 'TPN' || mode == 'TPN+EN';
             // 逐次生成済みのプランを使用（minEnKcal単調増加制約適用済み）
             final plan = dayPlans[i];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
+            return SizedBox(
+              width: 264,
+              child: Card(
+              margin: const EdgeInsets.only(right: 10),
               child: InkWell(
                 onTap: () => _showDayDetail(i, plan, dayKcal, dayProt),
                 borderRadius: BorderRadius.circular(8),
@@ -7398,18 +7465,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      Row(children: [
+                        Text(_dateOf(i),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        Text('(Day${i + 1})',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey)),
+                      ]),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text(_dateOf(i),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 6),
-                          Text(
-                              '(Day${i + 1})',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey)),
-                          const SizedBox(width: 4),
                           // 目標% or "full nutrition"（常にgreen）
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -7461,21 +7531,24 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       color: Colors.orange.shade800)),
                             ),
                           ],
-                          const Spacer(),
-                          const Icon(Icons.touch_app,
-                              size: 14, color: Colors.grey),
-                          const SizedBox(width: 4),
                           _modeBadges(plan),
                         ],
                       ),
                       const Divider(height: 16),
-                      _planBody(plan, dayKcal, dayProt, mode),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: _planBody(plan, dayKcal, dayProt, mode),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
-            );
+            ));
           }),
+              ],
+            ),
+          ),
             ],
           ),
         ),   // SizedBox(listH)
@@ -7648,6 +7721,18 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         .byCategory(cat)
         .where((p) => widget.state.isAdopted(p.id))
         .toList();
+    // 胆汁うっ滞/肝障害では微量元素はMn-freeを優先
+    if (cat == '微量元素' &&
+        (widget.current.conditionTags.contains('cholestasis') ||
+            widget.current.conditionTags.contains('liver'))) {
+      final mnFree = adopted.where((p) => p.isMnFreeTrace).toList();
+      if (mnFree.isNotEmpty) return mnFree.first;
+      final anyMnFree = widget.state.catalog
+          .byCategory('微量元素')
+          .where((p) => p.isMnFreeTrace)
+          .toList();
+      if (anyMnFree.isNotEmpty) return anyMnFree.first;
+    }
     if (adopted.isNotEmpty) return adopted.first;
     final all = widget.state.catalog.byCategory(cat);
     return all.isNotEmpty ? all.first : null;
@@ -7909,7 +7994,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         if (flags[1]) mkIconBox(Icons.bed,         Colors.blueGrey.shade400),
         // 栄養開始(=PN/輸液開始)は点滴(water_drop)アイコン。
         if (flags[2]) mkIconBox(Icons.water_drop,  Colors.blue.shade600),
-        if (flags[3]) mkBox('EN',   Colors.amber.shade700),
+        if (flags[3]) mkBox('EN',   Colors.amber.shade500),
         if (flags[4]) mkBox('full', Colors.green.shade700),
         // 経口リハ開始(濃厚流動食・栄サポ食品・一般食)はフォーク&ナイフアイコン。
         if (flags[5]) mkIconBox(Icons.restaurant,  Colors.deepOrange.shade400),
@@ -8085,7 +8170,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                             Colors.deepOrange.shade200),
                                         // 中: EN(黄) — 暗めのアンバー(白背景との視認性確保)
                                         BarChartRodStackItem(mealK, mealK + enK,
-                                            Colors.amber.shade700),
+                                            Colors.amber.shade500),
                                         // 上: PN(緑) — 淡め
                                         BarChartRodStackItem(mealK + enK, total,
                                             Colors.green.shade200),
@@ -8119,10 +8204,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                         FlSpot((inPeakIdx + 1).toDouble(), inPeakVal),
                                       ],
                                       gradient: LinearGradient(colors: [
-                                        Colors.black.withValues(alpha: 0.0),
-                                        Colors.black.withValues(alpha: 0.85),
-                                        Colors.black.withValues(alpha: 0.85),
-                                        Colors.black.withValues(alpha: 0.0),
+                                        Colors.blueGrey.shade700.withValues(alpha: 0.0),
+                                        Colors.blueGrey.shade700.withValues(alpha: 0.9),
+                                        Colors.blueGrey.shade700.withValues(alpha: 0.9),
+                                        Colors.blueGrey.shade700.withValues(alpha: 0.0),
                                       ], stops: const [0.0, 0.35, 0.65, 1.0]),
                                       barWidth: 2,
                                       dotData: const FlDotData(show: false),
@@ -8151,11 +8236,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                     child: Text(
                                       '${inPeakVal.round()}ml',
                                       textAlign: TextAlign.center,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 14,
                                           height: 1.0,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.black),
+                                          color: Colors.blueGrey.shade700),
                                     ),
                                   ),
                                 ),
@@ -8270,7 +8355,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       children: [
                                         _legItem(Colors.deepOrange.shade200,
                                             '食事 (kcal)', false),
-                                        _legItem(Colors.amber.shade700,
+                                        _legItem(Colors.amber.shade500,
                                             'EN (kcal)', false),
                                         _legItem(Colors.green.shade200,
                                             'PN (kcal)', false),
@@ -8574,7 +8659,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         );
     final badges = <Widget>[];
     if (mealK > 1) badges.add(badge('食事', Colors.deepOrange.shade400));
-    if (enK > 1) badges.add(badge('EN', Colors.amber.shade700));
+    if (enK > 1) badges.add(badge('EN', Colors.amber.shade500));
     if (pnK > 1) {
       badges.add(badge(isZero ? 'ゼロmenu' : 'PN', Colors.blue));
     }

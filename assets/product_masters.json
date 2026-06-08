@@ -5512,6 +5512,31 @@
    "add_type": "総合"
   },
   {
+   "id": "trace_703",
+   "category": "微量元素",
+   "name": "ボルビサール注",
+   "product_type": "医薬品",
+   "notes": "Mn-free 4元素(Fe35・Zn60・Cu5・I1 μmol/管). 胆汁うっ滞・黄疸でMn蓄積を避けたい時に標準5元素から切替。長期使用ではMn欠乏に注意.",
+   "sheet_row": 703,
+   "content": "高カロリー輸液用微量元素製剤(Mn-free 4元素)",
+   "volume_ml": 2.0,
+   "kcal": null,
+   "amino_acid_g": null,
+   "nitrogen_g": null,
+   "npc_n_ratio": null,
+   "fat_g_or_kcal_basis": null,
+   "carb_g_or_kcal_basis": null,
+   "micro": {
+    "trace": {
+     "Zn": 60.0,
+     "Fe": 35.0,
+     "Cu": 5.0,
+     "I": 1.0
+    }
+   },
+   "add_type": "総合"
+  },
+  {
    "id": "trace_701",
    "category": "微量元素",
    "name": "エレメンミック注",
