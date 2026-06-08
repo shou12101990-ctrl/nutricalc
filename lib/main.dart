@@ -3408,8 +3408,8 @@ class _BuilderPageState extends State<BuilderPage>
                                   IconButton(
                                     icon: Icon(
                                         _summaryCollapsed
-                                            ? Icons.expand_more
-                                            : Icons.expand_less,
+                                            ? Icons.expand_less
+                                            : Icons.expand_more,
                                         size: 22),
                                     tooltip:
                                         _summaryCollapsed ? '展開' : '折りたたむ',
@@ -8214,7 +8214,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               const Spacer(),
               IconButton(
                 icon: Icon(
-                    _trendCollapsed ? Icons.expand_more : Icons.expand_less,
+                    _trendCollapsed ? Icons.expand_less : Icons.expand_more,
                     size: 22),
                 tooltip: _trendCollapsed ? '展開' : '折りたたむ',
                 visualDensity: VisualDensity.compact,
