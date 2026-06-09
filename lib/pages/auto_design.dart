@@ -143,6 +143,42 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       .where((p) => widget.state.isAdopted(p.id))
       .toList();
 
+  double _b1Of(Product? p) =>
+      ((p?.micro?['vit'] as Map?)?['B1'] as num?)?.toDouble() ?? 0;
+
+  /// 高用量B1製剤(vit.B1≥50mg)。採用済み＞マスタ、ビタメジン優先＞B1量最大。
+  /// refeeding安全のため採用が無ければマスタにフォールバックする。
+  Product? _highDoseB1Product() {
+    final all = widget.state.catalog
+        .byCategory('ビタミン')
+        .where((p) => _b1Of(p) >= 50)
+        .toList();
+    if (all.isEmpty) return null;
+    final adopted = all.where((p) => widget.state.isAdopted(p.id)).toList();
+    final pool = adopted.isNotEmpty ? adopted : all;
+    pool.sort((a, b) {
+      final av = a.name.contains('ビタメジン') ? 1 : 0;
+      final bv = b.name.contains('ビタメジン') ? 1 : 0;
+      if (av != bv) return bv - av;
+      return _b1Of(b).compareTo(_b1Of(a));
+    });
+    return pool.first;
+  }
+
+  /// プランの糖質(g)とB1(mg)合計を製剤組成から算出。
+  ({double carb, double b1}) _carbAndB1OfPlan(DesignPlan plan) {
+    double carb = 0, b1 = 0;
+    for (final it in plan.items) {
+      final prod = widget.state.catalog.byName(it.name);
+      if (prod == null) continue;
+      final pv = prod.volumeMl ?? 0;
+      final mult = pv > 0 ? it.volumeMl / pv : (it.units ?? 0).toDouble();
+      carb += (prod.carbBase ?? 0) * mult;
+      b1 += _b1Of(prod) * mult;
+    }
+    return (carb: carb, b1: b1);
+  }
+
   /// 簡易式 栄養係数(20/25/30 kcal/kg)の段階開始日 設定。
   /// イベント日付決定(絶食〜経口リハ)と同じテーブルに行として配置する。
   /// 既定は自動(EN/経口リハ開始日に連動)。チェックを外すと手動設定。
@@ -445,9 +481,21 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // プランを逐次生成して minEnKcal(単調増加制約)を引き継ぐ
     double prevEnKcal = 0;
     final dayPlans = <DesignPlan>[];
+    // refeeding/Wernicke予防の高用量B1自動加注 準備(絶食日数・高用量B1製剤)
+    final int fastingDays = (() {
+      final f = widget.current.fastingDate;
+      final fd = f != null ? DateTime.tryParse(f) : null;
+      if (fd == null) return 0;
+      final d = DateTime(_startDate.year, _startDate.month, _startDate.day)
+          .difference(DateTime(fd.year, fd.month, fd.day))
+          .inDays;
+      return d < 0 ? 0 : (d > 60 ? 60 : d);
+    })();
+    final b1Prod = _highDoseB1Product();
+    final b1PerUnit = _b1Of(b1Prod);
     for (int i = 0; i < pcts.length; i++) {
       final phase = _acutePhaseTarget(i);
-      final plan = NutritionCalculator.designDay(
+      var plan = NutritionCalculator.designDay(
         mode: _dayModes[i],
         dayTargetKcal: phase.kcal,
         dayTargetProt: phase.prot,
@@ -476,6 +524,33 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         aaSupplementBelowFrac: 0.90, // 目標90%未満(=10%以上へこむ)時だけAA補充
         aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
       );
+      // 絶食≥5日+糖質投与日(初期10日)は高用量B1≥200mgを自動加注(Wernicke/refeeding予防)
+      if (b1Prod != null) {
+        final cb = _carbAndB1OfPlan(plan);
+        final b1Units = NutritionCalculator.thiamineUnitsToAdd(
+          fastingDays: fastingDays,
+          feedingDay: i + 1,
+          carbPresent: cb.carb > 0,
+          currentB1Mg: cb.b1,
+          b1PerUnitMg: b1PerUnit,
+        );
+        if (b1Units > 0) {
+          plan = DesignPlan(
+            label: plan.label,
+            enKcal: plan.enKcal,
+            items: [
+              ...plan.items,
+              DesignItem(
+                name: b1Prod.name,
+                units: b1Units,
+                volumeMl: (b1Prod.volumeMl ?? 0) * b1Units,
+                kcal: (b1Prod.kcal ?? 0) * b1Units,
+                proteinG: 0,
+              ),
+            ],
+          );
+        }
+      }
       dayPlans.add(plan);
       if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
     }

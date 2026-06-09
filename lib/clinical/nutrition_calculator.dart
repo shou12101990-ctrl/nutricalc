@@ -281,6 +281,29 @@ class NutritionCalculator {
     return DesignPlan(label: label, items: items);
   }
 
+  /// Refeeding/Wernicke予防の高用量チアミン(B1)自動加注の本数（純粋関数）。
+  /// 条件: 絶食(不十分摂取)≥fastingThresholdDays(既定5) かつ 糖質投与あり かつ
+  ///       栄養開始からの初期frontLoadDays(既定10日)以内 かつ B1合計<targetMg(既定200)。
+  /// 満たすとき目標mgに到達する最小本数(1..10)を返す。非該当は0。
+  /// 出典: NICE CG32(5日以上の不十分摂取=refeedingリスク) / JSPEN(チアミン200–300mg, 糖負荷前〜10日)。
+  static int thiamineUnitsToAdd({
+    required int fastingDays,
+    required int feedingDay,
+    required bool carbPresent,
+    required double currentB1Mg,
+    required double b1PerUnitMg,
+    double targetMg = 200,
+    int fastingThresholdDays = 5,
+    int frontLoadDays = 10,
+  }) {
+    if (fastingDays < fastingThresholdDays) return 0;
+    if (feedingDay < 1 || feedingDay > frontLoadDays) return 0;
+    if (!carbPresent) return 0;
+    if (b1PerUnitMg <= 0) return 0;
+    if (currentB1Mg >= targetMg) return 0;
+    return ((targetMg - currentB1Mg) / b1PerUnitMg).ceil().clamp(1, 10);
+  }
+
   /// Day別設計: そのDayの目標(kcal/タンパク)を、選んだクラスとEN速度でサジェスト。
   /// mode: 'TPN' / 'TPN+EN' / 'EN' / 'ZERO'
   static DesignPlan designDay({
