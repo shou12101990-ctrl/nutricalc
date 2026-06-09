@@ -49,6 +49,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   late List<String> _dayEnDose; // 各DayのEN投与 ('0'/'r20'(速度)/'p3'(pac))
   late List<int> _dayMealPac; // 各Dayの食事 朝昼夕あたりpac数(0=食事なし, 1..3)
   late List<int> _dayMealSlots; // 各Dayの経口スロット数(0=なし, 1..3)。残りはENで補う。
+  final List<List<RepairChange>> _dayRepairChanges = []; // 各Dayの自動補正(repair)記録
 
   // EN食上げ固定シーケンス(7日): 10→20→30→40ml/h → 1pac朝昼夕(3) → 2pac朝昼夕(6) → EN単独full
   static const _enRampSequence = ['r10', 'r20', 'r30', 'r40', 'p3', 'p6', 'p6'];
@@ -177,6 +178,162 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       b1 += _b1Of(prod) * mult;
     }
     return (carb: carb, b1: b1);
+  }
+
+  double _traceMicro(Product p, String key) =>
+      ((p.micro?['trace'] as Map?)?[key] as num?)?.toDouble() ?? 0;
+
+  Product? _mnFreeForRepair() {
+    final all = widget.state.catalog
+        .byCategory('微量元素')
+        .where((p) => p.isMnFreeTrace)
+        .toList();
+    if (all.isEmpty) return null;
+    final ad = all.where((p) => widget.state.isAdopted(p.id)).toList();
+    return (ad.isNotEmpty ? ad : all).first;
+  }
+
+  Product? _znForRepair() {
+    final all = widget.state.catalog
+        .byCategory('微量元素')
+        .where((p) => _traceMicro(p, 'Zn') > 0)
+        .toList();
+    if (all.isEmpty) return null;
+    final mf = all.where((p) => p.isMnFreeTrace).toList();
+    final pool = mf.isNotEmpty ? mf : all;
+    final ad = pool.where((p) => widget.state.isAdopted(p.id)).toList();
+    return (ad.isNotEmpty ? ad : pool).first;
+  }
+
+  Product? _seForRepair() {
+    final all = widget.state.catalog
+        .byCategory('微量元素')
+        .where((p) => _traceMicro(p, 'Se') > 0)
+        .toList();
+    if (all.isEmpty) return null;
+    final ad = all.where((p) => widget.state.isAdopted(p.id)).toList();
+    return (ad.isNotEmpty ? ad : all).first;
+  }
+
+  Map<String, List<RepairAction>> _repairRegistry() => buildRepairActions(
+        mnFreeProduct: _mnFreeForRepair(),
+        znProduct: _znForRepair(),
+        seProduct: _seForRepair(),
+      );
+
+  int _fastingDaysToStart() {
+    final f = widget.current.fastingDate;
+    final fd = f != null ? DateTime.tryParse(f) : null;
+    if (fd == null) return 0;
+    final d = DateTime(_startDate.year, _startDate.month, _startDate.day)
+        .difference(DateTime(fd.year, fd.month, fd.day))
+        .inDays;
+    return d < 0 ? 0 : d;
+  }
+
+  PlanState _planStateFromDayPlan(DesignPlan plan) {
+    final items = <PlanItem>[];
+    for (final it in plan.items) {
+      final p = widget.state.catalog.byName(it.name);
+      if (p == null) continue;
+      final vol = p.volumeMl ?? 0;
+      final units = it.units ?? (vol > 0 ? (it.volumeMl / vol).round() : 0);
+      if (units <= 0) continue;
+      items.add(PlanItem(p, units));
+    }
+    return PlanState(items);
+  }
+
+  ae.EvalContext _evalDayPlan(PlanState p) => computeEvalContext(
+        p,
+        weightKg: widget.current.weightKg,
+        conditionTags: widget.current.conditionTags.toSet(),
+        targetKcal: NutritionCalculator.targetEnergy(widget.current),
+        proteinGoalPerKg: widget.current.proteinGoalPerKg,
+      );
+
+  /// repair差分のみ DesignPlan へ反映（プレースホルダ・PN部分量は不変）。
+  DesignPlan _applyRepairToDayPlan(
+      DesignPlan plan, PlanState before, PlanState after) {
+    DesignItem mk(Product p, int u) => DesignItem(
+        name: p.name,
+        units: u,
+        volumeMl: (p.volumeMl ?? 0) * u,
+        kcal: (p.kcal ?? 0) * u,
+        proteinG: (p.aminoAcidG ?? 0) * u);
+    final beforeU = {for (final i in before.items) i.product.id: i};
+    final afterU = {for (final i in after.items) i.product.id: i};
+    final items = [...plan.items];
+    for (final id in {...beforeU.keys, ...afterU.keys}) {
+      final b = beforeU[id]?.units ?? 0;
+      final a = afterU[id]?.units ?? 0;
+      if (a == b) continue;
+      final prod = (afterU[id] ?? beforeU[id])!.product;
+      final idx = items
+          .indexWhere((it) => widget.state.catalog.byName(it.name)?.id == id);
+      if (a == 0) {
+        if (idx >= 0) items.removeAt(idx);
+      } else if (idx >= 0) {
+        items[idx] = mk(prod, a);
+      } else {
+        items.add(mk(prod, a));
+      }
+    }
+    return DesignPlan(label: plan.label, items: items, enKcal: plan.enKcal);
+  }
+
+  /// その日のプランに B1自動加注 + repair を適用（チャート/カード共通）。
+  /// thiamine は B1自動加注で処理するため registry には含めない。
+  DesignPlan _b1AndRepair(DesignPlan plan, int feedingDayIdx,
+      {List<RepairChange>? out}) {
+    final b1Prod = _highDoseB1Product();
+    if (b1Prod != null) {
+      final cb = _carbAndB1OfPlan(plan);
+      final units = NutritionCalculator.thiamineUnitsToAdd(
+        fastingDays: _fastingDaysToStart(),
+        feedingDay: feedingDayIdx + 1,
+        carbPresent: cb.carb > 0,
+        currentB1Mg: cb.b1,
+        b1PerUnitMg: _b1Of(b1Prod),
+      );
+      if (units > 0) {
+        plan = DesignPlan(label: plan.label, enKcal: plan.enKcal, items: [
+          ...plan.items,
+          DesignItem(
+              name: b1Prod.name,
+              units: units,
+              volumeMl: (b1Prod.volumeMl ?? 0) * units,
+              kcal: (b1Prod.kcal ?? 0) * units,
+              proteinG: 0),
+        ]);
+      }
+    }
+    final before = _planStateFromDayPlan(plan);
+    final outcome = repair(
+      before,
+      actions: _repairRegistry(),
+      evalOf: _evalDayPlan,
+      constraints: ae.ConstraintSet.standard(),
+      weights: ae.ScoreWeights.standard(),
+    );
+    if (outcome.hasRepair) {
+      out?.addAll(outcome.best!.changes);
+      return _applyRepairToDayPlan(plan, before, outcome.best!.plan);
+    }
+    return plan;
+  }
+
+  /// その日の処方をアラートエンジンで評価（read-only・トレンドのバッジ用）。
+  ({int err, int warn}) _engineDayAlertCounts(DesignPlan plan) {
+    final ps = _planStateFromDayPlan(plan);
+    if (ps.items.isEmpty) return (err: 0, warn: 0);
+    final alerts = ae
+        .evaluate(_evalDayPlan(ps), ae.ConstraintSet.standard())
+        .where((a) => !a.dataMissing);
+    return (
+      err: alerts.where((a) => a.severity == ae.AlertSeverity.error).length,
+      warn: alerts.where((a) => a.severity == ae.AlertSeverity.warning).length,
+    );
   }
 
   /// 簡易式 栄養係数(20/25/30 kcal/kg)の段階開始日 設定。
@@ -481,18 +638,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // プランを逐次生成して minEnKcal(単調増加制約)を引き継ぐ
     double prevEnKcal = 0;
     final dayPlans = <DesignPlan>[];
-    // refeeding/Wernicke予防の高用量B1自動加注 準備(絶食日数・高用量B1製剤)
-    final int fastingDays = (() {
-      final f = widget.current.fastingDate;
-      final fd = f != null ? DateTime.tryParse(f) : null;
-      if (fd == null) return 0;
-      final d = DateTime(_startDate.year, _startDate.month, _startDate.day)
-          .difference(DateTime(fd.year, fd.month, fd.day))
-          .inDays;
-      return d < 0 ? 0 : (d > 60 ? 60 : d);
-    })();
-    final b1Prod = _highDoseB1Product();
-    final b1PerUnit = _b1Of(b1Prod);
+    _dayRepairChanges.clear();
     for (int i = 0; i < pcts.length; i++) {
       final phase = _acutePhaseTarget(i);
       var plan = NutritionCalculator.designDay(
@@ -524,33 +670,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         aaSupplementBelowFrac: 0.90, // 目標90%未満(=10%以上へこむ)時だけAA補充
         aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
       );
-      // 絶食≥5日+糖質投与日(初期10日)は高用量B1≥200mgを自動加注(Wernicke/refeeding予防)
-      if (b1Prod != null) {
-        final cb = _carbAndB1OfPlan(plan);
-        final b1Units = NutritionCalculator.thiamineUnitsToAdd(
-          fastingDays: fastingDays,
-          feedingDay: i + 1,
-          carbPresent: cb.carb > 0,
-          currentB1Mg: cb.b1,
-          b1PerUnitMg: b1PerUnit,
-        );
-        if (b1Units > 0) {
-          plan = DesignPlan(
-            label: plan.label,
-            enKcal: plan.enKcal,
-            items: [
-              ...plan.items,
-              DesignItem(
-                name: b1Prod.name,
-                units: b1Units,
-                volumeMl: (b1Prod.volumeMl ?? 0) * b1Units,
-                kcal: (b1Prod.kcal ?? 0) * b1Units,
-                proteinG: 0,
-              ),
-            ],
-          );
-        }
-      }
+      // B1自動加注 + repair(Mn-free置換/Na減/Zn・Se補充/タンパク調整)を適用
+      final changes = <RepairChange>[];
+      plan = _b1AndRepair(plan, i, out: changes);
+      _dayRepairChanges.add(changes);
       dayPlans.add(plan);
       if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
     }
@@ -1119,7 +1242,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final designPlans = <DesignPlan>[];
     for (int i = 0; i < pcts.length; i++) {
       final phase = _acutePhaseTarget(i);
-      final p = NutritionCalculator.designDay(
+      var p = NutritionCalculator.designDay(
               mode: _dayModes[i],
               dayTargetKcal: phase.kcal,
               dayTargetProt: phase.prot,
@@ -1136,6 +1259,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               minEnKcal: prevEnKcalChart,
               mealProducts: _adoptedMeals(),
               mealPac: _dayMealPac[i],
+              mealSlots: _dayMealSlots[i],
               girLimitMgKgMin: _girLimit,
               maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
               // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
@@ -1147,6 +1271,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               aaSupplementBelowFrac: 0.90, // 目標90%未満時だけAA補充
               aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
             );
+      p = _b1AndRepair(p, i);
       if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
       designPlans.add(p);
     }
@@ -1716,6 +1841,71 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                               '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(2)}g/kg)' : ''}',
                                               style: const TextStyle(
                                                   fontSize: 11)),
+                                          Builder(builder: (_) {
+                                            final ac =
+                                                _engineDayAlertCounts(plan);
+                                            if (ac.err == 0 && ac.warn == 0) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            final red = ac.err > 0;
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                  top: 2),
+                                              child: Row(children: [
+                                                Icon(Icons.health_and_safety,
+                                                    size: 11,
+                                                    color: red
+                                                        ? Colors.red.shade700
+                                                        : Colors
+                                                            .orange.shade800),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                    '${ac.err > 0 ? '禁忌${ac.err} ' : ''}${ac.warn > 0 ? '警告${ac.warn}' : ''}',
+                                                    style: TextStyle(
+                                                        fontSize: 10.5,
+                                                        color: red
+                                                            ? Colors
+                                                                .red.shade700
+                                                            : Colors.orange
+                                                                .shade800)),
+                                              ]),
+                                            );
+                                          }),
+                                          Builder(builder: (_) {
+                                            final di = idx - preDays;
+                                            if (di < 0 ||
+                                                di >=
+                                                    _dayRepairChanges.length) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            final ch = _dayRepairChanges[di];
+                                            if (ch.isEmpty) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                  top: 3),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text('🔧 自動補正 ${ch.length}件',
+                                                      style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.indigo
+                                                              .shade600)),
+                                                  for (final c in ch.take(3))
+                                                    Text('・${c.reason}',
+                                                        style: TextStyle(
+                                                            fontSize: 9.5,
+                                                            color: Colors.indigo
+                                                                .shade400)),
+                                                ],
+                                              ),
+                                            );
+                                          }),
                                         ],
                                       ],
                                     ),

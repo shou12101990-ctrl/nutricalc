@@ -234,5 +234,36 @@ void main() {
           proteinGoalPerKg: 1.2);
       expect(evaluate(ctx, cs).any((a) => a.code == 'conflict_alert'), isTrue);
     });
+
+    test('シナリオ: CRRT+Seなし → セレン補充で se_needed 解消', () {
+      final seProd = mk('アセレンド注', '微量元素', {
+        'trace': {'Se': 100}
+      });
+      final actions = buildRepairActions(seProduct: seProd);
+      EvalContext evalOf(PlanState p) => computeEvalContext(p,
+          weightKg: 60,
+          conditionTags: {'crrt'},
+          targetKcal: 1500,
+          proteinGoalPerKg: 1.2);
+      final o = repair(const PlanState([]),
+          actions: actions, evalOf: evalOf, constraints: cs, weights: w);
+      expect(o.originalAlerts.any((a) => a.code == 'se_needed'), isTrue);
+      expect(o.hasRepair, isTrue);
+      expect(o.best!.alerts.any((a) => a.code == 'se_needed'), isFalse);
+    });
+
+    test('シナリオ: 高排出消化管+Znなし → 亜鉛補充で zn_needed 解消', () {
+      final actions = buildRepairActions(znProduct: mnFree); // Mn-free(Zn60)
+      EvalContext evalOf(PlanState p) => computeEvalContext(p,
+          weightKg: 60,
+          conditionTags: {'gi_loss'},
+          targetKcal: 1500,
+          proteinGoalPerKg: 1.2);
+      final o = repair(const PlanState([]),
+          actions: actions, evalOf: evalOf, constraints: cs, weights: w);
+      expect(o.originalAlerts.any((a) => a.code == 'zn_needed'), isTrue);
+      expect(o.hasRepair, isTrue);
+      expect(o.best!.alerts.any((a) => a.code == 'zn_needed'), isFalse);
+    });
   });
 }

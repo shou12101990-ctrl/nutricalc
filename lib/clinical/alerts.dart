@@ -417,6 +417,32 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
     }
   }
 
+  // Zn欠乏（高排出消化管瘻・大量下痢 / 創傷）: Zn喪失大。標準trace未満で補充候補。
+  if ((c.znUmol ?? 999) < 30 &&
+      (c.conditionTags.contains('gi_loss') ||
+          c.conditionTags.contains('wound'))) {
+    out.add(NutritionAlert(
+        code: 'zn_needed',
+        severity: AlertSeverity.warning,
+        value: c.znUmol,
+        target: 30,
+        unit: 'μmol/day',
+        message: 'Zn不足。高排出消化管/創傷ではZn喪失・需要増。亜鉛(Zn)補充を検討'));
+  }
+
+  // Se欠乏（CRRT / 創傷）: 水溶性で透析喪失・需要増。
+  if ((c.seUmol ?? 999) < 30 &&
+      (c.conditionTags.contains('crrt') ||
+          c.conditionTags.contains('wound'))) {
+    out.add(NutritionAlert(
+        code: 'se_needed',
+        severity: AlertSeverity.warning,
+        value: c.seUmol,
+        target: 30,
+        unit: 'μmol/day',
+        message: 'Se不足。CRRT/創傷ではSe喪失・需要増。セレン(Se)補充を検討'));
+  }
+
   return out;
 }
 

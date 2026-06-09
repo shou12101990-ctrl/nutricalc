@@ -812,6 +812,32 @@ class _BuilderPageState extends State<BuilderPage>
     return (adopted.isNotEmpty ? adopted : all).first;
   }
 
+  double _traceMicro(Product p, String key) =>
+      ((p.micro?['trace'] as Map?)?[key] as num?)?.toDouble() ?? 0;
+
+  Product? _znTraceProduct() {
+    final all = widget.state.catalog
+        .byCategory('微量元素')
+        .where((p) => _traceMicro(p, 'Zn') > 0)
+        .toList();
+    if (all.isEmpty) return null;
+    // Mn-free の Zn源を優先（胆汁うっ滞でも安全）
+    final mnFree = all.where((p) => p.isMnFreeTrace).toList();
+    final pool = mnFree.isNotEmpty ? mnFree : all;
+    final adopted = pool.where((p) => widget.state.isAdopted(p.id)).toList();
+    return (adopted.isNotEmpty ? adopted : pool).first;
+  }
+
+  Product? _seProduct() {
+    final all = widget.state.catalog
+        .byCategory('微量元素')
+        .where((p) => _traceMicro(p, 'Se') > 0)
+        .toList();
+    if (all.isEmpty) return null;
+    final adopted = all.where((p) => widget.state.isAdopted(p.id)).toList();
+    return (adopted.isNotEmpty ? adopted : all).first;
+  }
+
   int _fastingDaysOf(PatientCase c) {
     final f = c.fastingDate;
     final fd = f != null ? DateTime.tryParse(f) : null;
@@ -905,6 +931,8 @@ class _BuilderPageState extends State<BuilderPage>
     final actions = buildRepairActions(
       b1Product: _highDoseB1Product(),
       mnFreeProduct: _mnFreeTraceProduct(),
+      znProduct: _znTraceProduct(),
+      seProduct: _seProduct(),
     );
     final outcome = repair(
       original,

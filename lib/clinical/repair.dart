@@ -458,12 +458,85 @@ class AdjustAminoAcidAction implements RepairAction {
   }
 }
 
+double _traceOf(Product p, String key) =>
+    _microOf(p.micro?['trace'] as Map?, key);
+
+/// Zn補充。alert: 'zn_needed'。標準trade未満のとき亜鉛源(Mn-free推奨)を追加。
+class AddZincAction implements RepairAction {
+  final Product znProduct;
+  final double targetUmol;
+  const AddZincAction(this.znProduct, {this.targetUmol = 30});
+  @override
+  String get id => 'add_zinc';
+  @override
+  String get label => '補充';
+  @override
+  bool canApply(PlanState plan, EvalContext ctx, NutritionAlert alert) =>
+      alert.code == 'zn_needed' && _traceOf(znProduct, 'Zn') > 0;
+  @override
+  RepairResult apply(PlanState plan, EvalContext ctx, NutritionAlert alert) {
+    final per = _traceOf(znProduct, 'Zn');
+    final cur = ctx.znUmol ?? 0;
+    if (per <= 0 || cur >= targetUmol) return RepairResult(plan, const []);
+    final units = ((targetUmol - cur) / per).ceil().clamp(1, 5);
+    return RepairResult(
+      PlanState([...plan.items, PlanItem(znProduct, units)]),
+      [
+        RepairChange(
+          code: 'zn_needed',
+          label: '補充',
+          reason: '高排出消化管/創傷のZn喪失に対し亜鉛を補充',
+          beforeText: 'Zn ${cur.toStringAsFixed(0)} μmol',
+          afterText: '${znProduct.name} ×$units',
+          kind: RepairChangeKind.add,
+        ),
+      ],
+    );
+  }
+}
+
+/// Se補充。alert: 'se_needed'。CRRT/創傷でSe不足のときセレン源を追加。
+class AddSeleniumAction implements RepairAction {
+  final Product seProduct;
+  final double targetUmol;
+  const AddSeleniumAction(this.seProduct, {this.targetUmol = 30});
+  @override
+  String get id => 'add_selenium';
+  @override
+  String get label => '補充';
+  @override
+  bool canApply(PlanState plan, EvalContext ctx, NutritionAlert alert) =>
+      alert.code == 'se_needed' && _traceOf(seProduct, 'Se') > 0;
+  @override
+  RepairResult apply(PlanState plan, EvalContext ctx, NutritionAlert alert) {
+    final per = _traceOf(seProduct, 'Se');
+    final cur = ctx.seUmol ?? 0;
+    if (per <= 0 || cur >= targetUmol) return RepairResult(plan, const []);
+    final units = ((targetUmol - cur) / per).ceil().clamp(1, 5);
+    return RepairResult(
+      PlanState([...plan.items, PlanItem(seProduct, units)]),
+      [
+        RepairChange(
+          code: 'se_needed',
+          label: '補充',
+          reason: 'CRRT/創傷のSe喪失・需要増に対しセレンを補充',
+          beforeText: 'Se ${cur.toStringAsFixed(0)} μmol',
+          afterText: '${seProduct.name} ×$units',
+          kind: RepairChangeKind.add,
+        ),
+      ],
+    );
+  }
+}
+
 // ─────────── レジストリ ───────────
 
-/// alert code → RepairAction[]。B1/Mn-free は対象製剤を注入して構築。
+/// alert code → RepairAction[]。注入製剤(B1/Mn-free/Zn/Se)は対象に応じて追加。
 Map<String, List<RepairAction>> buildRepairActions({
   Product? b1Product,
   Product? mnFreeProduct,
+  Product? znProduct,
+  Product? seProduct,
 }) {
   return {
     'gir_limit': const [ReduceIvGlucoseAction()],
@@ -475,6 +548,8 @@ Map<String, List<RepairAction>> buildRepairActions({
     if (b1Product != null) 'thiamine_needed': [AddVitaminB1Action(b1Product)],
     if (mnFreeProduct != null)
       'contraindicated_product': [ReplaceMnTraceToMnFreeAction(mnFreeProduct)],
+    if (znProduct != null) 'zn_needed': [AddZincAction(znProduct)],
+    if (seProduct != null) 'se_needed': [AddSeleniumAction(seProduct)],
   };
 }
 
