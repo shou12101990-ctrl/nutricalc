@@ -90,8 +90,10 @@ double mifflinStJeorRee({
 ///
 /// 目標値(kcal/kg)に依らず初日は startFrac(≤30%)<full で、初日からfullにはならない(構造的保証)。
 /// day は栄養開始からの日(1始まり)。Refeeding cap は呼び出し側で別途適用する。
-/// 急性期 等差ランプの割合(0〜1)。day1 = (1/N) を [0.15, 0.30] にクランプ、dayN(=fullAchieveDay) = 1.0。
-/// 係数上限(20/25kcal/kg)は含まない純粋な等差。カロリーとタンパクの両方で共有する。
+/// 急性期の線形ランプ割合(0〜1)。day1割合を [0.15, 0.30] に補正した線形ランプ。
+///   startFrac = (1/N) を [0.15, 0.30] にクランプ → dayN(=fullAchieveDay) で 1.0 へ線形。
+///   ※ N≤3 は day1=30%(cap)、N≥7 は day1=15%(floor) になり、厳密な 1/N ではない。
+/// 係数上限(20/25kcal/kg)は含まない。カロリーとタンパクの両方で共有する。
 double acutePhaseRampFraction({required int day, required int fullAchieveDay}) {
   final f = fullAchieveDay > 1 ? fullAchieveDay : 2;
   final startFrac = (1.0 / f).clamp(0.15, 0.30);
@@ -141,6 +143,8 @@ int effectiveFullDay({
   required int kcal25UntilDay,
   int maxDay = 90,
 }) {
+  // 目標未確定(realFull<=0)では実到達日は未定義。設定上のfull達成日を返す(Day1誤表示を避ける)。
+  if (realFullKcal <= 0) return fullAchieveDay.clamp(1, maxDay);
   for (var d = 1; d <= maxDay; d++) {
     final k = acutePhaseTargetKcal(
       day: d,
@@ -150,7 +154,7 @@ int effectiveFullDay({
       kcal20UntilDay: kcal20UntilDay,
       kcal25UntilDay: kcal25UntilDay,
     );
-    if (realFullKcal <= 0 || k >= realFullKcal * 0.995) return d;
+    if (k >= realFullKcal * 0.995) return d;
   }
   return maxDay;
 }

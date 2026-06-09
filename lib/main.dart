@@ -14,6 +14,15 @@ import 'clinical/infusion.dart' as ci;
 import 'clinical/refeeding.dart' as cr;
 import 'clinical/micronutrients.dart' as cm;
 
+// データモデル層（lib/models/）。importで内部使用し、exportで後方互換に再公開。
+import 'models/models.dart';
+export 'models/models.dart';
+import 'clinical/nutrition_calculator.dart';
+export 'clinical/nutrition_calculator.dart';
+// アラート/リペアエンジン（評価＋スコア）。単一プレフィックス ae にまとめる。
+import 'clinical/alerts.dart' as ae;
+import 'clinical/constraints.dart' as ae;
+
 /// AF / SF ドロップダウン用の説明ラベル（値の toStringAsFixed(1) をキーにする）
 const _afHints = {
   '1.0': '寝たきり体動なし',
@@ -62,18 +71,6 @@ DropdownMenuItem<double> _factorItem(double v, Map<String, String> hints) {
   );
 }
 
-/// 製品名から容量サフィックス・剤型語を除いた「ベース名」を返す。
-/// 例: "ツインパル輸液(500mL)" → "ツインパル", "エルネオパNF1号輸液(1500mL)" → "エルネオパNF1号"
-/// 同一ベース名＝同一製剤(容量違い)としてマスタで1項目に集約する。
-String productBaseName(String name) {
-  var n = name.trim();
-  n = n.replaceAll(RegExp(r'「[^」]*」'), ''); // メーカー注記
-  n = n.replaceAll(RegExp(r'[\(（][^\)）]*[\)）]'), ''); // (容量) 等
-  for (final s in ['配合経腸用液', '配合内用剤', '配合散', '経腸用液', '点滴静注', '注射液', '輸液']) {
-    n = n.replaceAll(s, '');
-  }
-  return n.trim();
-}
 
 /// 加注製剤の「何製剤か」表示順（あいうえお順ではなく種別順）
 const _additiveTypeOrder = {
@@ -146,9 +143,10 @@ List<Widget> _energyModelFields({
   required ValueChanged<String> onModel,
   required ValueChanged<double> onKcalPerKg,
 }) {
-  // 簡易式の目標 kcal/kg: 20–30 を1刻み。保存済みの端数値があっても
+  // 簡易式の目標 kcal/kg: 10・15 と 20–30(1刻み)。保存済みの端数値があっても
   // Dropdownが壊れないよう、現在値も候補に含める。
   final kkItems = <double>{
+    10, 15,
     for (int i = 20; i <= 30; i++) i.toDouble(),
     kcalPerKgValue,
   }.toList()
@@ -313,9 +311,10 @@ Future<void> showPatientEditDialog(
   double stress = current.stressFactor;
   double protein = current.proteinGoalPerKg;
   String energyModel = current.energyModel;
-  double kcalPerKgValue = current.kcalPerKgValue ?? 30;
+  double kcalPerKgValue = current.kcalPerKgValue ?? 25;
   final reeCtrl =
       TextEditingController(text: current.measuredREE?.toStringAsFixed(0) ?? '');
+  final patientIdCtrl = TextEditingController(text: current.patientId);
   final memoCtrl = TextEditingController(text: current.memo);
   final selectedTags = current.conditionTags.toSet();
   DateTime? fastingDate = current.fastingDate != null
@@ -326,12 +325,9 @@ Future<void> showPatientEditDialog(
           .clamp(1, 8);
   final admEntry =
       current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
-  final admDateStr = admEntry == null
-      ? '—'
-      : (() {
-          final p = DateTime.tryParse(admEntry.changedAt);
-          return p == null ? admEntry.changedAt : '${p.month}/${p.day}';
-        })();
+  // 入室日(編集可)。入室レコードの changedAt を初期値にする。
+  DateTime? admissionDate =
+      admEntry == null ? null : DateTime.tryParse(admEntry.changedAt);
 
   final saved = await showDialog<bool>(
     context: context,
@@ -354,14 +350,46 @@ Future<void> showPatientEditDialog(
                           fontSize: 14, fontWeight: FontWeight.bold)),
                 ]),
                 const SizedBox(height: 6),
-                // 入室日 | 絶食開始日 (横並び・mm/dd)
+                // 患者ID (任意・編集可)
+                TextField(
+                  controller: patientIdCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '患者ID (任意)',
+                    hintText: 'カルテ番号など',
+                    prefixIcon: Icon(Icons.badge_outlined, size: 18),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // 入室日 (編集可・四角枠ボタン) | 絶食開始日 (横並び・mm/dd)
                 Row(children: [
-                  Icon(Icons.login, size: 14, color: Colors.green.shade500),
-                  const SizedBox(width: 2),
-                  Text('入室 $admDateStr',
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await _quickPickDate(
+                          context, admissionDate ?? DateTime.now());
+                      if (picked != null) {
+                        setLocal(() => admissionDate = picked);
+                      }
+                    },
+                    icon: Icon(Icons.login,
+                        size: 14, color: Colors.green.shade600),
+                    label: Text(
+                      admissionDate == null
+                          ? '入室 —'
+                          : '入室 ${admissionDate!.month}/${admissionDate!.day}',
                       style: TextStyle(
-                          fontSize: 13, color: Colors.green.shade600)),
-                  const SizedBox(width: 16),
+                          fontSize: 13, color: Colors.green.shade700),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      side: BorderSide(color: Colors.green.shade300),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: InkWell(
                       onTap: () async {
@@ -555,7 +583,13 @@ Future<void> showPatientEditDialog(
   current.energyModel = energyModel;
   current.kcalPerKgValue = kcalPerKgValue;
   current.measuredREE = double.tryParse(reeCtrl.text.trim());
+  current.patientId = patientIdCtrl.text.trim();
   current.memo = memoCtrl.text.trim();
+  // 入室日(入室レコードの changedAt)を更新
+  if (admEntry != null && admissionDate != null) {
+    admEntry.changedAt =
+        admissionDate!.toIso8601String().split('T').first;
+  }
   current.conditionTags = ConditionCatalog.all
       .map((c) => c.id)
       .where(selectedTags.contains)
@@ -716,6 +750,17 @@ class _CaseCardState extends State<_CaseCard> {
                             Text(item.caseCode,
                                 style: const TextStyle(
                                     fontSize: 16, fontWeight: FontWeight.bold)),
+                            if (item.patientId.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text('ID:${item.patientId}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                            ],
                             const SizedBox(width: 10),
                             const Icon(Icons.bed, size: 16, color: Colors.grey),
                             const SizedBox(width: 2),
@@ -831,6 +876,7 @@ class CasesPage extends StatelessWidget {
   }
 
   Future<void> _openCaseDialog(BuildContext context) async {
+    final patientId = TextEditingController();
     final age = TextEditingController(text: '60');
     final height = TextEditingController(text: '150');
     final weight = TextEditingController(text: '50');
@@ -846,7 +892,7 @@ class CasesPage extends StatelessWidget {
     double stress = 1.6;
     double protein = 1.5;
     String energyModel = 'kcalPerKg';
-    double kcalPerKgValue = 30;
+    double kcalPerKgValue = 25;
     final reeCtrl = TextEditingController();
     Sex sex = Sex.male;
     // 絶食開始日 デフォルト=入室日-4日(テスト用)
@@ -874,6 +920,17 @@ class CasesPage extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 患者ID (ベッド番号の上・任意)
+                    TextField(
+                      controller: patientId,
+                      decoration: const InputDecoration(
+                        labelText: '患者ID (任意)',
+                        hintText: 'カルテ番号など',
+                        prefixIcon: Icon(Icons.badge_outlined, size: 18),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Text('ベッド: $bedPad',
@@ -1131,6 +1188,7 @@ class CasesPage extends StatelessWidget {
               onPressed: () async {
                 final item = PatientCase(
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  patientId: patientId.text.trim(),
                   caseCode: (() {
                     final nums = state.cases
                         .map((c) => int.tryParse(c.caseCode.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
@@ -2209,6 +2267,104 @@ class _BuilderPageState extends State<BuilderPage>
               .map(prodRow),
         ],
       ],
+    );
+  }
+
+  /// 現処方＋患者からアラートエンジンの評価コンテキストを構築するアダプタ。
+  /// v1: 静脈ブドウ糖(GIR)・Naは未連携のため null（→ dataMissing は非表示）。
+  ae.EvalContext _evalContextFor(PatientCase current, AggregateResult agg) {
+    final prot = agg.totalProteinG;
+    double? npcN;
+    if (prot > 0) {
+      final n = prot / 6.25;
+      final v = (agg.totalKcal - prot * 4) / n;
+      if (v.isFinite) npcN = v;
+    }
+    final products = <ae.EvalProduct>[];
+    for (final item in current.regimenItems) {
+      if (item.units <= 0) continue;
+      final p = widget.state.catalog.byId(item.productId);
+      if (p == null) continue;
+      products.add(ae.EvalProduct(name: p.name, mnAmountUmol: p.mnAmount));
+    }
+    return ae.EvalContext(
+      weightKg: current.weightKg,
+      conditionTags: current.conditionTags.toSet(),
+      targetKcal: NutritionCalculator.targetEnergy(current),
+      proteinGoalPerKg: current.proteinGoalPerKg,
+      totalKcal: agg.totalKcal,
+      totalProteinG: agg.totalProteinG,
+      totalVolumeMl: agg.totalVolumeMl,
+      lipidGramPerDay: agg.totalFatG,
+      npcN: npcN,
+      products: products,
+    );
+  }
+
+  /// アラートエンジンの評価結果をサマリーに表示（#1 可視化）。
+  /// error=禁忌(赤)/warning=警告(橙)。該当なし・dataMissingのみなら非表示。
+  Widget _nutritionAlertPanel(PatientCase current, AggregateResult agg) {
+    final alerts = ae
+        .evaluate(_evalContextFor(current, agg), ae.ConstraintSet.standard())
+        .where((a) => !a.dataMissing)
+        .toList()
+      ..sort((a, b) => a.severity.index.compareTo(b.severity.index));
+    if (alerts.isEmpty) return const SizedBox.shrink();
+    final hasError = alerts.any((a) => a.severity == ae.AlertSeverity.error);
+    Color colOf(ae.AlertSeverity sv) => sv == ae.AlertSeverity.error
+        ? Colors.red.shade700
+        : sv == ae.AlertSeverity.warning
+            ? Colors.orange.shade800
+            : Colors.blueGrey;
+    IconData icoOf(ae.AlertSeverity sv) => sv == ae.AlertSeverity.error
+        ? Icons.error_outline
+        : sv == ae.AlertSeverity.warning
+            ? Icons.warning_amber_rounded
+            : Icons.info_outline;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: hasError ? Colors.red.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+            color: hasError ? Colors.red.shade200 : Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.health_and_safety,
+                size: 14,
+                color: hasError ? Colors.red.shade700 : Colors.orange.shade800),
+            const SizedBox(width: 4),
+            Text('リスク評価（${hasError ? '禁忌あり' : '警告あり'}）',
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color:
+                        hasError ? Colors.red.shade800 : Colors.orange.shade900)),
+          ]),
+          const SizedBox(height: 4),
+          for (final a in alerts)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child:
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(icoOf(a.severity), size: 13, color: colOf(a.severity)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(a.message,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: colOf(a.severity),
+                          height: 1.25)),
+                ),
+              ]),
+            ),
+        ],
+      ),
     );
   }
 
@@ -3454,6 +3610,7 @@ class _BuilderPageState extends State<BuilderPage>
                                                     ],
                                                   );
                                                 }),
+                                                _nutritionAlertPanel(current, aggregate),
                                                 const Divider(height: 14),
                                                 Text('処方', style: TextStyle(fontSize: labelFs, fontWeight: FontWeight.bold)),
                                                 const SizedBox(height: 6),
@@ -3977,94 +4134,83 @@ class _NotePageState extends State<NotePage>
   static final _sections = <_NoteSection>[
     _NoteSection(
       category: 'つかいかた',
-      title: 'つかいかた',
+      title: 'できること / つかいかた',
       color: Color(0xFF4A90D9),
-      body: '本アプリはICUの栄養処方を「個別計算・逆引き・自動設計」の3方式で支援し、トレンドとリスクを可視化する。\n\n■ TOP画面（ベッド管理）\n・患者カードが一覧表示。カードをタップで患者情報編集、「計算」で処方ビルダーへ、「退室」で退室。右上の「新規入室」から患者登録。\n\n■ 新規入室 / 患者情報編集\n・年齢・身長・体重・性別を入力。\n・エネルギー式を選択(簡易式kcal/kg〔既定〕/Harris-Benedict/Mifflin/間接熱量測定)。簡易式はkcal/kgを選ぶ。\n・目標タンパク(g/kg)、絶食開始日、病態タグ(腎不全・肝不全・胆汁うっ滞・CRRT・高排出消化管・アルコール 等)を設定。\n・肥満(BMI≥30)は自動で補正体重×20–25(ESPEN)。BMI・肥満区分・栄養計算体重はカードに自動表示。\n\n■ 処方ビルダーの3タブ\n①個別選択: EN/TPN/PPN/食事/加注を個別に選び、併用を合計→処方・カルテ記載向けにサマライズ。全ソースのIN・kcal・タンパク・微量栄養素を横断集計。\n②ゼロmenu: 静脈栄養のみで最小INにする逆引き計算。投与kcalとNPC/N比・脂質量を決めると各製剤の必要mlを算出。\n③自動計算: フェーズに応じた処方設計を提案しトレンドを可視化。急性期20→EN導入25→回復30 kcal/kgへ自動で上げる。Refeedingリスクは初期kcalを自動cap。\n\n■ 製剤選択アルゴリズム（病態連動）\n・病態を選ぶと、目標タンパクの推奨範囲、ゼロmenuのNPC/N比・脂質量を自動調整。\n・GIR(糖)>5(糖質制限病態は>4)、脂質>1.0–1.5 g/kg/dayでアラート。自動設計は上限を超えない製剤選定。\n・微量栄養素は全ソース合算し耐容上限超過を警告。胆汁うっ滞/肝障害はMn-free製剤へ切替提案、CRRTはSe/B1補充、高排出消化管はZn補充、糖負荷前のB1未投与はWernicke警告。\n・加注はベース製剤の内蔵成分と重複しないよう自動付替え(オールインワンTPNには加注しない 等)。\n\n■ アイコン・色の意味\n・入室(緑・login) / 絶食開始(赤・no_meals) / 栄養開始(青・water_drop) / 経口リハ導入(食事・restaurant)。\n・日付の丸囲み＝入室からday5の倍数。\n・グラフ棒: 下から PN→EN→食事 の積み上げ。青の折れ線＝IN(水分量)、IN最高点に水平線＋_ml表記。赤線＝アミノ酸(AA)。\n・グラフ下の「リスクと補充サジェスト」をタップで各種アラートを展開。',
+      body: '■ できること（めざすもの）\n①複数患者の栄養製剤の処方設計を同時に個別管理. 臨床ワークフローに近い処方設計ができる. \n②製剤マスタデータをアプリの中心に据え, 各施設での採用/非採用・ユーザーのお気に入りに合わせてカスタマイズ. 特殊病態には製品タグを付与し, 患者タグに応じてサジェスト. \n③複数製剤を組み合わせた合計(IN・熱量kcal・タンパクg・対目標比%・PFCバランス)を計算し, どの製剤を何本処方すべきか, 電子カルテのオーダー/記載に向けたサマリーを出力. \n④ENができず長期PNになる場合の逆引き計算(ゼロmenu)もほぼ自動化. \n⑤微量栄養素はアラートを介して投与漏れ/過量投与を可視化し予防. \n⑥絶食〜栄養療法開始〜経腸栄養開始〜経口リハ開始までを統合して管理/設計. \n\n★未実装の機能\n・投与履歴\n・アラート機能を独立させ, アラートを出さない処方へ自動修正する機能\n・検査値との連携(腎機能・肝機能・血糖・電解質 ほか)\n\n■ つかいかた\nICUの栄養処方を「個別計算・逆引き・自動設計」の3方式で支援し, トレンドとリスクを可視化する. \n\n①TOP画面（ベッド管理）\n・右上の「新規入室」から患者を登録(患者ID・ベッド・年齢・身長・体重・性別). カードをタップで再編集, 「計算」で計算画面へ, 「退室」で退室. \n・エネルギー式(簡易式kcal/kg〔既定〕/Harris-Benedict/Mifflin/間接熱量測定), 目標タンパク(g/kg), 絶食開始日, 病態タグを設定. 肥満(BMI≥30)は補正体重で自動補正. \n\n②計算画面（上中下の3エリア）\n(i) 患者カード(上)… 患者情報・目標を表示. 病態タグを付けると, 病態別の栄養設計の注意点・推奨が見られる. \n(ii) 個別選択 / ゼロmenu / 自動設計(中・3タブ)\n・「個別選択」… 各製剤の使用量に応じて栄養素を合算するモード(EN/TPN/PPN/食事/加注を横断集計). \n・「ゼロmenu」… 合計の熱量とタンパク・脂質投与量を設定したとき, 各成分製剤の使用量を逆引き計算するモード(ゼロから組むメニューなので便宜的にゼロmenuとした). \n・「自動設計」… 絶食〜経口リハ開始までのイベント時期を設定すると, 毎日の処方をフェーズに応じて自動設計し提案するモード(急性期20→EN導入25→回復30 kcal/kg, Refeedingは初期kcalを自動cap). \n(iii) サマリー / トレンド(下)\n・「サマリー」… 合計IN・総カロリー・タンパク投与量, 各製剤の必要処方数と流量指示を, カルテ記載/処方向けに表示. \n・「トレンド」… 日々のIN・タンパク投与量・カロリーやその内訳の変化を可視化. \n\n■ 製剤選択アルゴリズム（病態連動）\n・病態を選ぶと, 目標タンパクの推奨範囲, ゼロmenuのNPC/N比・脂質量を自動調整. \n・GIR(糖)>5(糖質制限病態は>4), 脂質>1.0–1.5 g/kg/dayでアラート. 自動設計は上限を超えない製剤選定. \n・微量栄養素は全ソース合算し耐容上限超過を警告. 胆汁うっ滞/肝障害はMn-free製剤へ切替提案, CRRTはSe/B1補充, 高排出消化管はZn補充, 糖負荷前のB1未投与はWernicke警告. \n・加注はベース製剤の内蔵成分と重複しないよう自動付替え(オールインワンTPNには加注しない 等). \n\n■ アイコン・色の意味\n・入室(緑・login) / 絶食開始(赤・no_meals) / 栄養開始(青・water_drop) / 経口リハ導入(食事・restaurant). \n・日付の丸囲み＝入室からday5の倍数. \n・グラフ棒: 下から PN→EN→食事 の積み上げ. 青の折れ線＝IN(水分量), IN最高点に水平線＋_ml表記. 赤線＝アミノ酸(AA). \n・グラフ下の「リスクと補充サジェスト」をタップで各種アラートを展開. ',
     ),
     _NoteSection(
       category: 'EN',
       title: '経腸栄養 (EN)',
       color: Color(0xFF2E7D32),
-      body: '・入室48時間以内に開始する. 1週間で目標投与量まで上げる.\n'
-          '　ENはBacterial Translocationを抑制するので禁忌以外は第一選択.\n'
-          '・カテコラミンは用量依存性に腸管虚血をおこす\n'
-          '　ENもまた腸管酸素需要増加による腸管虚血をおこす.\n'
-          '　→NAd ≦0.1γ程度までテーパーできればEN開始する.\n'
-          '　　また蠕動音, 排便排ガスなくても安全に開始できる.\n'
-          '・胃残 (GRV) <500mlならEN速度上げていく.\n'
-          '　GRVが多い場合は蠕動薬や幽門後栄養 (誤嚥予防)を考える.\n'
-          '・下痢の対策として (優先順位目安として)\n'
-          '　①とろみをつける\n'
-          '　②整腸剤, 食品の追加, 浸透圧を等張にする.\n'
-          '　③滴下速度 100ml/h以下にする.\n'
-          '・Refeeding症候群：NICEガイドライン参照\n'
-          '　P, K, Mg, またvit B1が急激に減少するので補正する.\n'
-          '・ダンピング症候群：空腸投与時は10-50ml/hから開始する.\n'
-          '　最大100ml/hまでとする.',
+      body: '■ 開始のタイミング\n'
+          '・入室48時間以内に開始し, 約1週間で目標量まで漸増する. ENはBacterial Translocationを抑制するため, 禁忌がなければ第一選択. \n'
+          '・カテコラミンは用量依存性に腸管虚血を起こし, EN自体も腸管の酸素需要を増やす. ノルアドレナリン ≦0.1γ程度までテーパーできればEN開始を検討してよい(蠕動音・排便排ガスがなくても安全に開始できる). \n\n'
+          '■ 速度調整と合併症\n'
+          '・胃残量(GRV)<500 mLなら速度を上げる. GRVが多ければ蠕動促進薬や幽門後(空腸)投与で誤嚥を予防する. \n'
+          '・下痢対策(優先順): ①とろみを付ける ②整腸剤・食物繊維の追加・浸透圧を等張に ③滴下速度を100 mL/h以下に. \n'
+          '・ダンピング症候群: 空腸投与は10〜50 mL/hから開始し, 最大100 mL/hまで. \n\n'
+          '■ Refeeding症候群\n'
+          '・低栄養・絶食後の栄養再開でP・K・Mg・ビタミンB1が急減する. 補正しながら開始する(詳細はRefeedingの項). ',
     ),
     _NoteSection(
       category: 'EN',
       title: 'EN製剤の選択',
       color: Color(0xFF2E7D32),
-      body: '■分類\n'
-          '窒素源の形態により成分, 消化態, 半消化態に分類される.\n'
-          '①成分栄養剤は脂肪含有量が極めて低い物があり, 2週間以上単独で使用する場合は必須脂肪酸を補充する必要がある.\n'
-          '②消化態栄養素はペプチドを含む. 成分栄養より吸収効率が良い.\n'
-          '③半消化態栄養剤はバランスや栄養に優れており消化機能に問題がなければ選択すべき.\n\n'
-          '■選択の方法\n'
+      body: '■ 分類\n'
+          '窒素源の形態により, 成分・消化態・半消化態に分類される. \n'
+          '①成分栄養剤: 脂肪含有が極めて低い製剤があり, 2週間以上単独で使う場合は必須脂肪酸の補充が必要. \n'
+          '②消化態栄養剤: ペプチドを含み, 成分栄養より吸収効率がよい. \n'
+          '③半消化態栄養剤: バランス・栄養に優れ, 消化機能に問題がなければ第一選択. \n\n'
+          '■ 選択の方法\n'
           '実効吸収面積の減少による吸収不良　：成分◯ 消化態△ 半消化態✕\n'
           '膵外分泌機能低下による消化不良　　：成分◯ 消化態◯ 半消化態△\n'
           '胆汁分泌障害による消化不良　　　　：成分◯ 消化態◯ 半消化態△\n'
           '食塊と消化液分泌のタイミング不調　：成分◯ 消化態△ 半消化態✕\n'
-          '（◯重症例でも可, △中等症まで, ✕不適）\n\n'
-          '消化吸収に問題があれば消化態栄養素\n'
-          '→なければ半消化態栄養素を選ぶ.\n'
-          '　個々の病態に応じて病態別栄養剤(*)も考慮する.\n'
-          '→水分制限があるなら2kcal/ml前後に調整されたものを選択する.\n'
-          '→1000kcal/day未満では微量元素, ビタミンが必要量を満たさず長期化すると欠乏症をおこすので採血を見て適宜補正する.\n\n'
-          '＊病態別栄養剤\n'
-          '糖尿病, 肝疾患, 腎疾患, 呼吸不全, 腫瘍, 免疫調整剤に向けた製剤.',
+          '（◯重症例でも可 / △中等症まで / ✕不適）\n\n'
+          '・消化吸収に問題があれば消化態, なければ半消化態を選ぶ. \n'
+          '・個々の病態に応じて病態別栄養剤(*)も考慮する. \n'
+          '・水分制限があれば2 kcal/mL前後の高濃度製剤を選ぶ. \n'
+          '・1,000 kcal/日未満では微量元素・ビタミンが必要量に届かず, 長期化で欠乏症を来すため採血を見て補正する. \n\n'
+          '＊病態別栄養剤: 糖尿病・肝疾患・腎疾患・呼吸不全・腫瘍・免疫調整に向けた製剤. ',
     ),
     _NoteSection(
       category: 'TPN',
       title: '中心静脈栄養 (TPN)',
       color: Color(0xFF1565C0),
-      body: '・EN禁忌の患者は入室後7日目までにTPNもしくはPPNを開始する.\n'
-          '　→栄養リスク高い患者 (NRS2002 ≧5点, NUTRIC score ≧6点)は速やかに開始.\n'
-          '　→PPN 7日以上になればPICCなどのCVC留置を検討する.\n'
-          '・腸管は最大級の免疫組織なので, 腸管を使用しないPNは感染性合併症が増える.\n'
-          '　一方で確実に投与できるので過剰栄養 (=高血糖)になりやすく, これも感染を増やす.\n'
-          '　重症患者では体タンパクの崩壊等による内因性エネルギー供給が多いので, これを勘案した投与設計をする.',
+      body: '・EN禁忌の患者は入室後7日目までにTPNまたはPPNを開始する. 栄養リスクが高い患者(NRS-2002 ≧5点, NUTRIC score ≧6点)は速やかに開始する. \n'
+          '・PPNが7日以上に及ぶならPICC等のCVC留置を検討する. \n'
+          '・腸管は最大級の免疫組織であり, 腸管を使わないPNは感染性合併症が増える. 一方で確実に投与できる分, 過剰栄養(=高血糖)になりやすく, これも感染を増やす. \n'
+          '・重症患者では体タンパク崩壊などによる内因性エネルギー供給が多いため, これを見込んで投与設計する. ',
     ),
     _NoteSection(
       category: 'PPN',
       title: '末梢静脈栄養 (PPN)',
       color: Color(0xFF00838F),
-      body: '・1000kcal/day程度の栄養が可能. 2週間以内の短期間なら考慮する.\n'
-          '　栄養障害が高度な場合は水制限もできるTPNを選択する.\n'
-          '　PPN単独での栄養状態の改善は難しいので経口やENとの併用をする.',
+      body: '・1,000 kcal/日程度まで投与でき, 2週間以内の短期間なら考慮する. \n'
+          '・栄養障害が高度な場合は, 水分制限もできるTPNを選択する. \n'
+          '・PPN単独での栄養状態の改善は難しいため, 経口やENと併用する. ',
     ),
     _NoteSection(
       category: 'エネルギー\n算出法',
       title: 'エネルギー算出法',
       color: Color(0xFFE67E22),
-      body: '目標エネルギー量をどう決めるか――その考え方は歴史的に変遷してきた。\n\n'
+      body: '目標エネルギー量をどう決めるか――その考え方は歴史的に変遷してきた. \n\n'
           '■ Harris-Benedictの式 (1919)\n'
-          '基礎代謝量(BEE)を体重・身長・年齢から推定する古典的回帰式。健常者の実測がもとで、臨床では Long(1979) が「BEE×活動係数×侵害(ストレス)係数」を掛けて必要量とする方法を広めた。\n'
+          '基礎代謝量(BEE)を体重・身長・年齢から推定する古典的回帰式. 健常者の実測がもとで, 臨床では Long(1979) が「BEE×活動係数×侵害(ストレス)係数」を掛けて必要量とする方法を広めた. \n'
           '　女性 BEE = 655 + 9.6×体重kg + 1.8×身長cm − 4.7×年齢\n'
           '　男性 BEE =  66 + 13.7×体重kg + 5.0×身長cm − 6.8×年齢\n'
-          '　（※女性定数は 655。665 は広く出回る誤記）\n'
-          '長所: 個別の体格を反映。短所: もとが健常者由来で、重症・浮腫・肥満では系統的に過大評価しやすく、係数の掛け算がさらに過剰栄養を招くとされ、ICUでは支持を失っていった。\n\n'
+          '　（※女性定数は 655. 665 は広く出回る誤記）\n'
+          '長所: 個別の体格を反映. 短所: もとが健常者由来で, 重症・浮腫・肥満では系統的に過大評価しやすく, 係数の掛け算がさらに過剰栄養を招くとされ, ICUでは支持を失っていった. \n\n'
           '■ 簡易式 (25〜30 kcal/kg/day)\n'
-          '「複雑な式でも実測より正確とは限らない」という反省から、体重あたりの簡便な目安が普及。ASPEN/SCCM 2016・ESPEN 2019・JSPEN が採用。肥満では低めの係数(11〜14 kcal/kg)や理想体重を用いる。\n'
-          '長所: 簡便で過剰栄養を避けやすい。短所: 体組成や代謝亢進の個別差は反映しにくい。\n\n'
+          '「複雑な式でも実測より正確とは限らない」という反省から, 体重あたりの簡便な目安が普及. ASPEN/SCCM 2016・ESPEN 2019・JSPEN が採用. 肥満では低めの係数(11〜14 kcal/kg)や理想体重を用いる. \n'
+          '長所: 簡便で過剰栄養を避けやすい. 短所: 体組成や代謝亢進の個別差は反映しにくい. \n\n'
           '■ 間接熱量測定 (indirect calorimetry)\n'
-          '呼気のO₂消費・CO₂産生から実際の安静時エネルギー消費(REE)を測る、現在のゴールドスタンダード。ESPEN/ASPEN は「可能なら測定」を推奨。機器・人手・リーク等の制約で全例には使えないのが現実。\n\n'
+          '呼気のO₂消費・CO₂産生から実際の安静時エネルギー消費(REE)を測る, 現在のゴールドスタンダード. ESPEN/ASPEN は「可能なら測定」を推奨. 機器・人手・リーク等の制約で全例には使えないのが現実. \n\n'
           '■ いま何がエビデンスか\n'
-          '・正確さ: 間接熱量測定 ＞ 体重あたり簡易式 ≧ 予測式(H-B等)。予測式は誤差が大きい。\n'
-          '・急性期はむしろ不足を許容(permissive underfeeding)し過剰栄養を避けるのが主流(ESPEN)。\n'
-          '・どの式でも、重症・浮腫・肥満では体重指標(実体重/理想体重/補正体重)の選択が結果を大きく左右する。\n\n'
-          '本アプリでは患者情報編集で式を選べ(H-B / Mifflin-St Jeor / 簡易kcal·kg / 間接熱量測定)、補正体重は内部で自動採用する。',
+          '・正確さ: 間接熱量測定 ＞ 体重あたり簡易式 ≧ 予測式(H-B等). 予測式は誤差が大きい. \n'
+          '・急性期はむしろ不足を許容(permissive underfeeding)し過剰栄養を避けるのが主流(ESPEN). \n'
+          '・どの式でも, 重症・浮腫・肥満では体重指標(実体重/理想体重/補正体重)の選択が結果を大きく左右する. \n\n'
+          '本アプリでは患者情報編集で式を選べ(H-B / Mifflin-St Jeor / 簡易kcal·kg / 間接熱量測定), 補正体重は内部で自動採用する. ',
     ),
     _NoteSection(
       category: '活動係数\n侵害係数',
@@ -4077,11 +4223,11 @@ class _NotePageState extends State<NotePage>
           '積極的なリハビリ            1.5以上\n'
           '\n'
           '■背景\n'
-          '・Harris-Benedictは基礎代謝量(BEE)の推定式。これに活動係数(AF)×侵害係数(SF)を掛けて'
-          '1日の総エネルギー消費量(TEE)を概算する(Longの式, 1979)。\n'
-          '・AFは身体活動による上乗せ分。ICUでは安静〜リハ進行に応じて概ね1.0〜1.4。\n'
-          '・AFとSFを掛け合わせるほど推定値は大きくなるため、両係数が高いと過大評価に傾く'
-          '(→侵害係数の項を参照)。',
+          '・Harris-Benedictは基礎代謝量(BEE)の推定式. これに活動係数(AF)×侵害係数(SF)を掛けて'
+          '1日の総エネルギー消費量(TEE)を概算する(Longの式, 1979). \n'
+          '・AFは身体活動による上乗せ分. ICUでは安静〜リハ進行に応じて概ね1.0〜1.4. \n'
+          '・AFとSFを掛け合わせるほど推定値は大きくなるため, 両係数が高いと過大評価に傾く'
+          '(→侵害係数の項を参照). ',
     ),
     _NoteSection(
       category: '活動係数\n侵害係数',
@@ -4096,101 +4242,96 @@ class _NotePageState extends State<NotePage>
           '熱傷                                                                1.2 – 2.0　(広範囲熱傷 2.1)\n'
           '\n'
           '■背景\n'
-          '・SFは疾患・侵襲による代謝亢進(hypermetabolism)の上乗せ係数(Longの式, 1979)。'
-          '敗血症・外傷・熱傷などで基礎代謝が増える。\n'
+          '・SFは疾患・侵襲による代謝亢進(hypermetabolism)の上乗せ係数(Longの式, 1979). '
+          '敗血症・外傷・熱傷などで基礎代謝が増える. \n'
           '\n'
           '■「SF≧1.5で過大栄養になりうる」根拠\n'
-          '・BEE×AF×SFの予測式は、重症患者では実測エネルギー消費量(間接熱量測定)を'
-          '過大評価しやすいことが報告されている。\n'
-          '・急性期は異化による内因性エネルギー供給があるため、計算値どおりフル投与すると'
-          '過剰栄養(overfeeding)になりやすい。\n'
+          '・BEE×AF×SFの予測式は, 重症患者では実測エネルギー消費量(間接熱量測定)を'
+          '過大評価しやすいことが報告されている. \n'
+          '・急性期は異化による内因性エネルギー供給があるため, 計算値どおりフル投与すると'
+          '過剰栄養(overfeeding)になりやすい. \n'
           '・過剰栄養は高血糖・高TG血症・脂肪肝・CO2産生増加(換気負担)・感染・'
-          '人工呼吸期間の延長などのリスクと関連する。\n'
-          '・ASPEN/SCCM(2016)・ESPEN(2019)は、間接熱量測定が使えない場合は'
-          '25–30 kcal/kg/day を目安とし、急性期は計算値の100%投与を急がない'
-          '(段階的に増量)ことを推奨している。\n'
-          '・目安として、侵害係数が高い(SF≧1.5)とAFと相まって目標が概ね'
-          '>30 kcal/kg/day に達し、過剰栄養域に入りやすい'
-          '(本アプリも該当時に注意表示)。\n'
-          '※いずれも目安であり、最終判断は患者の病態と主治医の評価による。',
+          '人工呼吸期間の延長などのリスクと関連する. \n'
+          '・ASPEN/SCCM(2016)・ESPEN(2019)は, 間接熱量測定が使えない場合は'
+          '25–30 kcal/kg/day を目安とし, 急性期は計算値の100%投与を急がない'
+          '(段階的に増量)ことを推奨している. \n'
+          '・目安として, 侵害係数が高い(SF≧1.5)とAFと相まって目標が概ね'
+          '>30 kcal/kg/day に達し, 過剰栄養域に入りやすい'
+          '(本アプリも該当時に注意表示). \n'
+          '※いずれも目安であり, 最終判断は患者の病態と主治医の評価による. ',
     ),
     _NoteSection(
       category: 'タンパク',
       title: 'タンパクの投与量',
       color: Color(0xFFE53935),
-      body: '・全体の10〜20%を補うように投与\n'
-          '・手術や敗血症などの高侵襲時はインスリン・カテコラミン↑となるため,\n'
-          '　脂肪分解とケトーシスが抑制され, エネルギー源として筋蛋白が主に利用される.\n'
-          '　→ 侵襲時にはアミノ酸製剤を混ぜる必要がある.\n\n'
-          '式) 必要蛋白量 (アミノ酸g) = 6.25 × 必要窒素量g = 6.25 × 必要熱量kcal ÷ NPC/N\n\n'
+      body: '■ 考え方\n'
+          '・全エネルギーの10〜20%をタンパクで補う. \n'
+          '・手術・敗血症などの高侵襲時はインスリン・カテコラミンが上昇し, 脂肪分解とケトーシスが抑制されるため, エネルギー源として筋タンパクが主に利用される. →侵襲時はアミノ酸製剤の併用が必要. \n\n'
+          '式) 必要タンパク量(アミノ酸g) = 6.25 × 必要窒素量g = 6.25 × 必要熱量kcal ÷ (NPC/N)\n\n'
           '■ NPC/N比\n'
-          '　"蛋白に対し脂質と炭水化物がどの程度であれば蛋白が効率よく利用されるか"の指標\n'
-          '　窒素1g = 蛋白質6.25gとして計算.\n'
-          '　通常 150 / 敗血症 100–150 / 外科手術 150–200\n'
-          '　飢餓 400–600 / 腎不全 500–1000\n\n'
+          '・「タンパクに対し脂質と炭水化物がどの程度あればタンパクが効率よく利用されるか」の指標(窒素1 g = タンパク質6.25 gとして計算). \n'
+          '・通常 150 / 敗血症 100〜150 / 外科手術 150〜200 / 飢餓 400〜600 / 腎不全 500〜1,000. \n\n'
           '■ 投与量の目安\n'
-          '・重症患者: 1.2–2.0 g/kg/day (蛋白異化亢進のため)\n'
-          '・その他患者: 最低 1 g/kg/day, 目標 1.2–1.5 g/kg/day\n'
-          '・CKD患者 (≠AKI): 0.6–0.8 g/kg/day\n'
-          '・肝硬変患者: 1–1.2 g/kg/day\n\n'
-          '■ 注意事項\n'
-          '・投与速度が早すぎると悪心嘔吐が出現する.\n'
-          '・アミノ酸とグルコースはメイラード反応で褐変する. 投与直前に混ぜること.',
+          '・重症患者: 1.2〜2.0 g/kg/日(タンパク異化亢進のため). \n'
+          '・その他: 最低1 g/kg/日, 目標1.2〜1.5 g/kg/日. \n'
+          '・CKD(非AKI): 0.6〜0.8 g/kg/日. \n'
+          '・肝硬変: 1.0〜1.2 g/kg/日. \n\n'
+          '■ 注意\n'
+          '・投与速度が速すぎると悪心・嘔吐が出る. \n'
+          '・アミノ酸とグルコースはメイラード反応で褐変するため, 投与直前に混合する. ',
     ),
     _NoteSection(
       category: '炭水化物',
       title: '炭水化物の投与量',
       color: Color(0xFF8BC34A),
-      body: '・全体の60〜70%を補うように投与.\n'
-          '・末梢から投与可能な加糖液の濃度限界は10%.',
+      body: '・全エネルギーの60〜70%を炭水化物で補う. \n'
+          '・末梢から投与できる加糖液の濃度限界は10%. \n'
+          '・糖質負荷(GIR)は概ね5 mg/kg/分以下に留める(過剰で高血糖・CO2産生増加・脂肪肝. 糖質制限を要する病態では>4でアラート). ',
     ),
     _NoteSection(
       category: '脂質',
       title: '脂質の投与量',
       color: Color(0xFF009688),
-      body: '・10〜20%を補うように投与\n'
-          '・NPC/N比や糖質負荷量を適正化する目的に使用.\n'
-          '・投与量は 1.0 g/kg/day以下, 投与速度 0.1 g/kg/h以下を厳守.\n'
-          '　投与速度が速いと肺に蓄積され呼吸不全, 免疫機能低下を来す.\n'
-          '・肝機能悪化, TG上昇, 胆嚢炎, 膵炎に注意しながら投与.\n'
-          '・基本的に初期から投与する必要はない.\n'
-          '　→ 2週間程度で必須脂肪酸が欠乏してくるので, その時点で投与を考慮.',
+      body: '・全エネルギーの10〜20%を脂質で補う. NPC/N比や糖質負荷量を適正化する目的でも用いる. \n'
+          '・投与量は1.0 g/kg/日以下, 投与速度は0.1 g/kg/時以下を厳守する. 速度が速いと肺に蓄積し, 呼吸不全・免疫機能低下を来す. \n'
+          '・肝機能悪化・TG上昇・胆嚢炎・膵炎に注意して投与する. \n'
+          '・初期から投与する必要は必ずしもない. 2週間程度で必須脂肪酸が欠乏してくるため, その時点で投与を考慮する. ',
     ),
     _NoteSection(
       category: '電解質',
       title: '電解質',
       color: Color(0xFF3F51B5),
-      body: '■ Na（ナトリウム）\n・厚労省 食事摂取基準2025 食塩相当量 目標量: 男性<7.5 / 女性<6.5 g/日。高血圧・CKD治療目標<6 g/日。\n・換算: 食塩1 g = Na 17.1 mEq。6 g=102.7 mEq, 7.5 g=128.3 mEq。\n・静脈栄養(ASPEN/JSPEN)標準: 1〜2 mEq/kg/日。本アプリは 食塩7 g/日(Na≈119.8 mEq, HTなし成人の目標値)超で黄、9.6 g/日(Na≈164.3 mEq, 日本人の平均食塩摂取量)以上で赤の塩分負荷アラート。\n\n■ K（カリウム）\n・食事摂取基準2025 目安量 男2,500/女2,000 mg/日(目標量 男3,000/女2,600 mg以上)。耐容上限なし。\n・PN標準 1〜2 mEq/kg/日。1日100 mEq超は注意。投与速度≤20 mEq/h・濃度≤40 mEq/L(原則中心静脈・心電図監視)。\n\n■ Ca（カルシウム）\n・推奨量 650〜800 mg/日、耐容上限 2,500 mg/日(≒125 mEq)。PN標準 10〜15 mEq/日。P製剤との配合変化(沈殿)に注意。\n\n■ Mg（マグネシウム）\n・推奨量 男340〜380/女280〜290 mg/日(サプリ等の上限350 mg)。PN標準 8〜20 mEq/日。腎機能低下で高Mg血症に注意。\n\n■ P（リン）\n・目安量 男1,000/女800 mg/日、耐容上限 3,000 mg/日(≒97 mmol)。PN標準 20〜40 mmol/日。Refeedingで低下しやすく要モニタ。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN 静脈経腸栄養ガイドライン',
+      body: '■ Na（ナトリウム）\n・厚労省 食事摂取基準2025 食塩相当量 目標量: 男性<7.5 / 女性<6.5 g/日. 高血圧・CKD治療目標<6 g/日. \n・換算: 食塩1 g = Na 17.1 mEq（6 g=102.7 / 7 g=119.8 / 7.5 g=128.3 / 9.6 g=164.3 mEq）. \n・静脈栄養(ASPEN/JSPEN)標準: 1〜2 mEq/kg/日. 本アプリは 食塩7 g/日(Na≈119.8 mEq, HTなし成人の目標値)超で黄, 9.6 g/日(Na≈164.3 mEq, 日本人の平均食塩摂取量)以上で赤の塩分負荷アラート. \n\n■ K（カリウム）\n・食事摂取基準2025 目安量 男2,500/女2,000 mg/日(目標量 男3,000/女2,600 mg以上). 耐容上限なし. \n・PN標準 1〜2 mEq/kg/日. 1日100 mEq超は注意. 投与速度≤20 mEq/h・濃度≤40 mEq/L(原則中心静脈・心電図監視). \n\n■ Ca（カルシウム）\n・推奨量 650〜800 mg/日, 耐容上限 2,500 mg/日(≒125 mEq). PN標準 10〜15 mEq/日. P製剤との配合変化(沈殿)に注意. \n\n■ Mg（マグネシウム）\n・推奨量 男340〜380/女280〜290 mg/日(サプリ等の上限350 mg). PN標準 8〜20 mEq/日. 腎機能低下で高Mg血症に注意. \n\n■ P（リン）\n・目安量 男1,000/女800 mg/日, 耐容上限 3,000 mg/日(≒97 mmol). PN標準 20〜40 mmol/日. Refeedingで低下しやすく要モニタ. \n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN 静脈経腸栄養ガイドライン',
     ),
     _NoteSection(
       category: 'ビタミン',
       title: 'ビタミン',
       color: Color(0xFF9C27B0),
-      body: '■ ビタミンB1（チアミン）\n・体内貯蔵量が約30 mgと少なく早期に欠乏。糖負荷で需要増。Refeeding/Wernicke予防に投与前〜10日 200〜300 mg/日(NICE/JSPEN)。\n\n■ 耐容上限(UL)が臨床上重要なもの（食事摂取基準2025）\n・ビタミンA: 推奨 650〜900 µgRAE、UL 2,700 µgRAE/日。過剰で肝障害・頭蓋内圧亢進。\n・ビタミンD: 目安 9.0 µg、UL 100 µg(4,000 IU)/日。過剰で高Ca血症。\n・ビタミンB6: 推奨 1.2〜1.5 mg、UL 45〜60 mg/日。過剰で感覚性ニューロパチー。\n・葉酸(強化食品/サプリ) UL 900〜1,000 µg/日。ナイアシン UL 300〜350 mg/日。\n\n■ 静脈栄養の総合ビタミン(ASPEN成人/国内オーツカMV・ビタジェクト相当・1日量)\n・B1 3〜6・B2 3.6・B6 4〜6 mg, B12 5 µg, ナイアシン 40 mg, 葉酸 400〜600 µg, C 100〜200 mg, A 3,300 IU, D 200 IU, E 10 mg, K 150 µg。\n・TPNでは水溶性ビタミンが不足しやすく、毎日の総合ビタミン投与が基本。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN',
+      body: '■ ビタミンB1（チアミン）\n・体内貯蔵量が約30 mgと少なく早期に欠乏. 糖負荷で需要増. Refeeding/Wernicke予防に投与前〜10日 200〜300 mg/日(NICE/JSPEN). \n\n■ 耐容上限(UL)が臨床上重要なもの（食事摂取基準2025）\n・ビタミンA: 推奨 650〜900 µgRAE, UL 2,700 µgRAE/日. 過剰で肝障害・頭蓋内圧亢進. \n・ビタミンD: 目安 9.0 µg, UL 100 µg(4,000 IU)/日. 過剰で高Ca血症. \n・ビタミンB6: 推奨 1.2〜1.5 mg, UL 45〜60 mg/日. 過剰で感覚性ニューロパチー. \n・葉酸(強化食品/サプリ) UL 900〜1,000 µg/日. ナイアシン UL 300〜350 mg/日. \n\n■ 静脈栄養の総合ビタミン(ASPEN成人/国内オーツカMV・ビタジェクト相当・1日量)\n・B1 3〜6・B2 3.6・B6 4〜6 mg, B12 5 µg, ナイアシン 40 mg, 葉酸 400〜600 µg, C 100〜200 mg, A 3,300 IU, D 200 IU, E 10 mg, K 150 µg. \n・TPNでは水溶性ビタミンが不足しやすく, 毎日の総合ビタミン投与が基本. \n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN',
     ),
     _NoteSection(
       category: '微量元素',
       title: '微量元素',
       color: Color(0xFFFF7043),
-      body: '微量元素は長期TPNで欠乏・過剰の両方が問題になる。経口/経腸はDRI、静脈はASPEN/JSPENで必要量が異なる。\n\n■ 必要量と耐容上限（食事摂取基準2025 / 括弧は内部単位µmol）\n・亜鉛 Zn: 推奨 8〜9.5 mg、UL 男45/女35 mg(≒688/535 µmol)。創傷治癒・味覚に重要。\n・銅 Cu: 推奨 0.7〜0.9 mg、UL 7 mg(≒110 µmol)。Zn過剰投与でCu欠乏を招く。\n・セレン Se: 推奨 25〜35 µg、UL 男450/女350 µg(≒5.7/4.4 µmol)。長期TPNで欠乏(心筋症)。\n・マンガン Mn: 目安 3〜3.5 mg、UL 11 mg(≒200 µmol)。胆汁うっ滞・長期TPNで脳(淡蒼球)蓄積→パーキンソン様神経毒性。減量/中止を検討。\n・ヨウ素 I: 推奨 140 µg、UL 3,000 µg(≒23.6 µmol)。\n・鉄 Fe: 推奨 男7.5/女(月経)10.5 mg。PNには通常ルーチン添加しない(鉄過剰リスク)。\n\n■ 静脈栄養の標準（ASPEN成人 / 国内エレジェクト等・1日量）\n・Zn 3〜5 mg, Cu 0.3〜0.5 mg, Se 60〜100 µg。Mn 国内製剤は約1.1 mg(ASPEN推奨55 µgの約20倍→長期は要注意)。\n・1,000 kcal/日未満が長期化すると不足しやすく、採血で過不足を確認し補正。\n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN / 食品安全委員会(Mn)',
+      body: '微量元素は長期TPNで欠乏・過剰の両方が問題になる. 経口/経腸はDRI, 静脈はASPEN/JSPENで必要量が異なる. \n\n■ 必要量と耐容上限（食事摂取基準2025 / 括弧は内部単位µmol）\n・亜鉛 Zn: 推奨 8〜9.5 mg, UL 男45/女35 mg(≒688/535 µmol). 創傷治癒・味覚に重要. \n・銅 Cu: 推奨 0.7〜0.9 mg, UL 7 mg(≒110 µmol). Zn過剰投与でCu欠乏を招く. \n・セレン Se: 推奨 25〜35 µg, UL 男450/女350 µg(≒5.7/4.4 µmol). 長期TPNで欠乏(心筋症). \n・マンガン Mn: 目安 3〜3.5 mg, UL 11 mg(≒200 µmol). 胆汁うっ滞・長期TPNで脳(淡蒼球)蓄積→パーキンソン様神経毒性. 減量/中止を検討. \n・ヨウ素 I: 推奨 140 µg, UL 3,000 µg(≒23.6 µmol). \n・鉄 Fe: 推奨 男7.5/女(月経)10.5 mg. PNには通常ルーチン添加しない(鉄過剰リスク). \n\n■ 静脈栄養の標準（ASPEN成人 / 国内エレジェクト等・1日量）\n・Zn 3〜5 mg, Cu 0.3〜0.5 mg, Se 60〜100 µg. Mn 国内製剤は約1.1 mg(ASPEN推奨55 µgの約20倍→長期は要注意). \n・1,000 kcal/日未満が長期化すると不足しやすく, 採血で過不足を確認し補正. \n\n出典: 厚労省「日本人の食事摂取基準2025」/ ASPEN 2019 / JSPEN / 食品安全委員会(Mn)',
     ),
     _NoteSection(
       category: 'ガイドライン',
       title: 'ASPEN/SCCM・ESPEN 概説',
       color: Color(0xFF6D4C41),
-      body: 'ICU栄養の二大ガイドライン。要点を対比して概説する。\n\n■ ASPEN/SCCM 2016（米・McClaveら, 2022更新）\n・開始: 血行動態が安定すれば 24〜48時間以内に経腸栄養(EN)を開始。\n・エネルギー: 間接熱量測定が第一。なければ 25〜30 kcal/kg/日。\n・タンパク: 1.2〜2.0 g/kg/日。肥満は BMI30〜40で2.0、≥40で2.5 g/kg(理想体重)。\n・肥満の許容的低カロリー: BMI30〜50は11〜14 kcal/kg(実体重)、>50は22〜25 kcal/kg(理想体重)。\n・第1週はEN優先、栄養リスクが低ければ早期PNは急がない。\n\n■ ESPEN 2019（欧・Singerら, 2023実践版）\n・エネルギー: 間接熱量測定を推奨。なければ 20〜25 kcal/kg/日。\n・急性期早期(〜3日)は permissive underfeeding（目標の<70%）→以後80〜100%へ漸増。過剰栄養を避ける。\n・タンパク: 1.3 g/kg/日を漸増。糖質≤5 mg/kg/min、脂質≤1.5 g/kg/日。\n\n■ 近年の潮流\n・「早期の積極的フルフィード」より「過剰栄養を避け漸増」へ。\n・精度は 間接熱量測定 ＞ 体重あたり簡易式 ＞ 予測式。\n・電解質(特にRefeeding)・血糖(140〜180 mg/dL)を厳格に管理。\n\n出典: McClave et al. JPEN 2016 / Compher et al. JPEN 2022 / Singer et al. Clin Nutr 2019・2023',
+      body: 'ICU栄養の二大ガイドライン. 要点を対比して概説する. \n\n■ ASPEN/SCCM 2016（米・McClaveら, 2022更新）\n・開始: 血行動態が安定すれば 24〜48時間以内に経腸栄養(EN)を開始. \n・エネルギー: 間接熱量測定が第一. なければ 25〜30 kcal/kg/日. \n・タンパク: 1.2〜2.0 g/kg/日. 肥満は BMI30〜40で2.0, ≥40で2.5 g/kg(理想体重). \n・肥満の許容的低カロリー: BMI30〜50は11〜14 kcal/kg(実体重), >50は22〜25 kcal/kg(理想体重). \n・第1週はEN優先, 栄養リスクが低ければ早期PNは急がない. \n\n■ ESPEN 2019（欧・Singerら, 2023実践版）\n・エネルギー: 間接熱量測定を推奨. なければ 20〜25 kcal/kg/日. \n・急性期早期(〜3日)は permissive underfeeding（目標の<70%）→以後80〜100%へ漸増. 過剰栄養を避ける. \n・タンパク: 1.3 g/kg/日を漸増. 糖質≤5 mg/kg/min, 脂質≤1.5 g/kg/日. \n\n■ 近年の潮流\n・「早期の積極的フルフィード」より「過剰栄養を避け漸増」へ. \n・精度は 間接熱量測定 ＞ 体重あたり簡易式 ＞ 予測式. \n・電解質(特にRefeeding)・血糖(140〜180 mg/dL)を厳格に管理. \n\n出典: McClave et al. JPEN 2016 / Compher et al. JPEN 2022 / Singer et al. Clin Nutr 2019・2023',
     ),
     _NoteSection(
       category: 'Refeeding',
       title: 'Refeeding症候群 (NICE)',
       color: Color(0xFFC2185B),
-      body: '低栄養・絶食後に栄養(特に糖質)を再開すると、細胞内へK・P・Mgが移動し致死的な低下を来す病態。インスリン分泌再開とビタミンB1需要増が引き金。\n\n■ 高リスク基準（NICE CG32, 2006）\n・次のいずれか1つ: BMI<16 / 3〜6か月で>15%体重減 / 10日以上のほぼ絶食 / 投与前からK・P・Mg低値。\n・または次のいずれか2つ: BMI<18.5 / >10%体重減 / 5日以上のほぼ絶食 / アルコール・薬物(インスリン・化学療法・制酸薬・利尿薬)歴。\n・超高リスク: BMI<14 または 15日以上の絶食。\n\n■ 対処\n・開始エネルギー: 高リスク 10 kcal/kg/日(超高リスクは5、心電図監視)。4〜7日かけて必要量へ漸増。\n・チアミン(B1) 200〜300 mg/日を糖負荷の前〜10日。総合ビタミンB群も。\n・電解質は補充しながら投与(正常化を待って開始を遅らせない): K 2〜4 / P 0.3〜0.6 / Mg 0.2〜0.4 mmol/kg/日。\n・血清P≥2.0 mg/dL維持。K・P・Mg・血糖を頻回モニタ。\n\n本アプリは絶食開始日・BMIからリスク階層を判定し、自動設計の初期kcalを上記rampで自動cap、対処サジェストを表示する。\n\n出典: NICE CG32「Nutrition support for adults」(2006) / JSPEN',
+      body: '低栄養・絶食後に栄養(特に糖質)を再開すると, 細胞内へK・P・Mgが移動し致死的な低下を来す病態. インスリン分泌再開とビタミンB1需要増が引き金. \n\n■ 高リスク基準（NICE CG32, 2006）\n・次のいずれか1つ: BMI<16 / 3〜6か月で>15%体重減 / 10日以上のほぼ絶食 / 投与前からK・P・Mg低値. \n・または次のいずれか2つ: BMI<18.5 / >10%体重減 / 5日以上のほぼ絶食 / アルコール・薬物(インスリン・化学療法・制酸薬・利尿薬)歴. \n・超高リスク: BMI<14 または 15日以上の絶食. \n\n■ 対処\n・開始エネルギー: 高リスク 10 kcal/kg/日(超高リスクは5, 心電図監視). 4〜7日かけて必要量へ漸増. \n・チアミン(B1) 200〜300 mg/日を糖負荷の前〜10日. 総合ビタミンB群も. \n・電解質は補充しながら投与(正常化を待って開始を遅らせない): K 2〜4 / P 0.3〜0.6 / Mg 0.2〜0.4 mmol/kg/日. \n・血清P≥2.0 mg/dL維持. K・P・Mg・血糖を頻回モニタ. \n\n本アプリは絶食開始日・BMIからリスク階層を判定し, 自動設計の初期kcalを上記rampで自動cap, 対処サジェストを表示する. \n\n出典: NICE CG32「Nutrition support for adults」(2006) / JSPEN',
     ),
     _NoteSection(
       category: '微量元素\n病態調整',
       title: '微量元素の病態別調整',
       color: Color(0xFF5E35B1),
-      body: '微量元素・ビタミンは「過剰(蓄積)」と「不足(喪失)」の両方が問題になり、病態で方向が変わる。\n\n■ 通常患者: 非重複が原則\nベースが内蔵する成分は加注しない(二重投与回避)。\n・エルネオパNF/ワンパル(電解質+微量元素+ビタミン内蔵)→加注なし(Seのみ条件付き)\n・フルカリック(ビタミンのみ)→微量元素のみ追加\n・ミキシッド/ゼロmenu→MVI+微量元素\n\n■ 胆汁うっ滞・肝不全・肝性脳症: Cu/Mn過剰回避\nMnは胆汁排泄80%→淡蒼球に蓄積しパーキンソン様(不可逆あり)。胆道閉塞はMn製剤禁忌。\n→標準微量元素(Mn 20μmol)をMn-free「ボルビサール」へ切替。Cuは減量しつつ残す(ゼロにしない)。\nモニタ: 全血Mn(基準0.52–2.4μg/dL)、血清Cu+セルロプラスミン(月2回)。\n\n■ 腎不全(非透析): Cr/Mn蓄積\nCrは輸液汚染で充足し追加不要(腎障害助長)。複合微量元素を減量し血中濃度をモニタ。\n\n■ CRRT・持続透析: 喪失側→補充\n水溶性(Se・B1・Cu・葉酸・VitC・カルニチン)が透析液へ喪失。Se・B1を2倍目安で補充、複合traceは継続。VitC高用量はシュウ酸で避ける。\n\n■ 高排出消化管瘻・大量下痢: Zn喪失\nZn 腸液+12mg/L・便/ストマ+17mg/Lを上乗せ。Mg/K/Na・水分も補正。\n\n■ チアミン×糖負荷(安全インターロック)\nB1欠乏者に糖を先行するとWernicke脳症・乳酸アシドーシス。糖の前〜同時にB1 100–300mg。標準MVIのB1 3mgは予防に不足→高用量B1製剤を別途。\n\n■ 単剤 add / replace\n・ADD: 創傷・高GI損失でZn追加、CRRT/長期でSe(アセレンド)追加。\n・REPLACE: Mn回避が必要な胆汁うっ滞で 標準複合→Mn-free複合+Se単剤。\n・注意: 国内にIV亜鉛単剤がほぼ無く、Zn増量は複合もう1管/院内調製/経口併用。\n\n■ 栄養開始時セット vs 補正後増量セット\n・開始時(refeeding慎重): B1高用量を糖前にフロントロード+標準MVI+標準微量元素(胆汁うっ滞ならMn-free)。Se/Zn追加なし、10–15kcal/kgで慎重、K/PO4/Mg頻回。\n・補正後増量: Se(CRRT/長期/熱傷/創傷)・Zn(高排出/創傷)追加、Mn再評価、採血ベースで増量。\n\n出典: ESPEN micronutrient guideline 2022 / ASPEN / JSPEN / NICE CG32 / 各添付文書',
+      body: '微量元素・ビタミンは「過剰(蓄積)」と「不足(喪失)」の両方が問題になり, 病態で方向が変わる. \n\n■ 通常患者: 非重複が原則\nベースが内蔵する成分は加注しない(二重投与回避). \n・エルネオパNF/ワンパル(電解質+微量元素+ビタミン内蔵)→加注なし(Seのみ条件付き)\n・フルカリック(ビタミンのみ)→微量元素のみ追加\n・ミキシッド/ゼロmenu→MVI+微量元素\n\n■ 胆汁うっ滞・肝不全・肝性脳症: Cu/Mn過剰回避\nMnは胆汁排泄80%→淡蒼球に蓄積しパーキンソン様(不可逆あり). 胆道閉塞はMn製剤禁忌. \n→標準微量元素(Mn 20μmol)をMn-free「ボルビサール」へ切替. Cuは減量しつつ残す(ゼロにしない). \nモニタ: 全血Mn(基準0.52–2.4μg/dL), 血清Cu+セルロプラスミン(月2回). \n\n■ 腎不全(非透析): Cr/Mn蓄積\nCrは輸液汚染で充足し追加不要(腎障害助長). 複合微量元素を減量し血中濃度をモニタ. \n\n■ CRRT・持続透析: 喪失側→補充\n水溶性(Se・B1・Cu・葉酸・VitC・カルニチン)が透析液へ喪失. Se・B1を2倍目安で補充, 複合traceは継続. VitC高用量はシュウ酸で避ける. \n\n■ 高排出消化管瘻・大量下痢: Zn喪失\nZn 腸液+12mg/L・便/ストマ+17mg/Lを上乗せ. Mg/K/Na・水分も補正. \n\n■ チアミン×糖負荷(安全インターロック)\nB1欠乏者に糖を先行するとWernicke脳症・乳酸アシドーシス. 糖の前〜同時にB1 100–300mg. 標準MVIのB1 3mgは予防に不足→高用量B1製剤を別途. \n\n■ 単剤 add / replace\n・ADD: 創傷・高GI損失でZn追加, CRRT/長期でSe(アセレンド)追加. \n・REPLACE: Mn回避が必要な胆汁うっ滞で 標準複合→Mn-free複合+Se単剤. \n・注意: 国内にIV亜鉛単剤がほぼ無く, Zn増量は複合もう1管/院内調製/経口併用. \n\n■ 栄養開始時セット vs 補正後増量セット\n・開始時(refeeding慎重): B1高用量を糖前にフロントロード+標準MVI+標準微量元素(胆汁うっ滞ならMn-free). Se/Zn追加なし, 10–15kcal/kgで慎重, K/PO4/Mg頻回. \n・補正後増量: Se(CRRT/長期/熱傷/創傷)・Zn(高排出/創傷)追加, Mn再評価, 採血ベースで増量. \n\n出典: ESPEN micronutrient guideline 2022 / ASPEN / JSPEN / NICE CG32 / 各添付文書',
     ),
   ];
 
@@ -5190,1313 +5331,6 @@ class ResultLegend extends StatelessWidget {
   }
 }
 
-enum Sex { male, female }
-
-/// 病態タグの定義。患者に付けた病態タグに応じて、対応する病態別製剤を
-/// 処方画面で上位(お気に入り扱い)に浮かせ、処方サジェストを表示する。
-class ConditionDef {
-  const ConditionDef({
-    required this.id,
-    required this.label,
-    required this.suggestion,
-    this.proteinCapPerKg,
-  });
-
-  final String id; // glucose_intolerance/renal/liver/respiratory/critical/wound/malabsorption/dysphagia
-  final String label; // 表示名
-  final String suggestion; // 💡 処方サジェスト本文
-  final double? proteinCapPerKg; // 蛋白の目安上限(g/kg/day)。超過時に控えめなテキスト(現状は未設定=オフ)
-}
-
-/// 病態カタログ(選択アルゴリズム)。各病態の「考え方」と推奨製剤を紐づける。
-/// 文言・割り当ては現場でレビュー・調整して使う。
-class ConditionCatalog {
-  static const List<ConditionDef> all = [
-    ConditionDef(
-      id: 'glucose_intolerance',
-      label: '耐糖能異常',
-      suggestion: '急な糖質負荷を避け、血糖変動を大きくしない。'
-          '必要なら食物繊維や低GI設計を用いる。',
-    ),
-    ConditionDef(
-      id: 'renal',
-      label: '腎不全(保存期)',
-      suggestion: '保存期: 低蛋白(0.6–0.8 g/kg/day)・低K・低P で腎負荷を軽減。'
-          '十分なエネルギーを確保し異化を防ぐ。',
-    ),
-    ConditionDef(
-      id: 'renal_dialysis',
-      label: '腎不全(透析期)',
-      suggestion: '透析期: 必要蛋白(1.0–1.2 g/kg/day)を確保しつつ'
-          'K/P・水分負荷に配慮。',
-    ),
-    ConditionDef(
-      id: 'liver',
-      label: '肝不全/肝性脳症',
-      suggestion: '蛋白 1.0–1.2 g/kg/day を目安に低栄養を避け、BCAAを意識。'
-          '肝性脳症悪化リスクに配慮(過度な蛋白制限は避ける)。',
-    ),
-    ConditionDef(
-      id: 'respiratory',
-      label: '呼吸器疾患/高CO2貯留',
-      suggestion: '糖質過多でCO2産生を増やしすぎない。',
-    ),
-    ConditionDef(
-      id: 'critical',
-      label: '重症・周術期・高侵襲',
-      suggestion: '蛋白 1.2–2.0 g/kg/day と十分なエネルギーを確保。'
-          '必要に応じEPA/DHA・アルギニン等の免疫栄養を補充。',
-    ),
-    ConditionDef(
-      id: 'wound',
-      label: '褥瘡・創傷治癒・サルコペニア',
-      suggestion: '蛋白 1.2–1.5 g/kg/day・十分なエネルギーを確保。'
-          'アルギニン・HMB・微量元素(Zn等)の補充を検討。',
-    ),
-    ConditionDef(
-      id: 'malabsorption',
-      label: '消化吸収障害・短腸・下痢',
-      suggestion: '消化態/成分栄養の要否、脂肪・浸透圧耐性、'
-          '吸収のしやすさ・低残渣性に配慮。',
-    ),
-    ConditionDef(
-      id: 'dysphagia',
-      label: '嚥下障害・逆流・胃瘻',
-      suggestion: '誤嚥・逆流・注入時間・半固形化の要否に配慮。'
-          '液体で問題があれば半固形・とろみへの切替を検討。',
-    ),
-    ConditionDef(
-      id: 'cholestasis',
-      label: '胆汁うっ滞・胆道閉塞',
-      suggestion: 'Mnは胆汁排泄のため蓄積し神経毒性(淡蒼球)。Mn含有微量元素はMn-free(ボルビサール)へ切替。'
-          'Cuも減量しつつモニタ(血清Cu・セルロプラスミン)。胆道閉塞ではMn製剤は禁忌。',
-    ),
-    ConditionDef(
-      id: 'crrt',
-      label: 'CRRT・持続透析',
-      suggestion: '水溶性微量栄養素(Se・B1・Cu・葉酸・VitC)が透析液へ喪失。'
-          'Se・B1は2倍目安で補充し複合traceは継続、血中濃度をモニタ(蓄積でなく欠乏側)。',
-    ),
-    ConditionDef(
-      id: 'gi_loss',
-      label: '高排出消化管瘻・大量下痢',
-      suggestion: 'Zn喪失大。腸液+12mg/L・便/ストマ+17mg/Lを上乗せ。Mg/K/Na・水分も補正。',
-    ),
-    ConditionDef(
-      id: 'alcohol',
-      label: 'アルコール多飲・低栄養',
-      suggestion: 'ビタミンB1欠乏のハイリスク。糖負荷の前〜同時にチアミン100–300mgを投与し'
-          'Wernicke脳症・乳酸アシドーシスを予防。Refeedingにも注意。',
-    ),
-  ];
-
-  static ConditionDef? byId(String id) =>
-      all.where((c) => c.id == id).firstOrNull;
-
-  static String labelOf(String id) => byId(id)?.label ?? id;
-}
-
-class Product {
-  Product({
-    required this.id,
-    required this.category,
-    required this.name,
-    required this.content,
-    required this.productType,
-    required this.volumeMl,
-    required this.kcal,
-    required this.aminoAcidG,
-    required this.nitrogenG,
-    required this.npcNRatio,
-    required this.fatBase,
-    required this.carbBase,
-    required this.notes,
-    this.micro,
-    this.alsoEn = false,
-    this.addType,
-    this.conditionTags = const [],
-  });
-
-  final String id;
-  String category; // EN / EN_AUX / TPN / PPN (mutable for master edit)
-  String name; // mutable for future name editing
-  String content; // 性状(成分/消化態/半消化態 など)
-  String productType; // 食品 / 医薬品
-  double? volumeMl;
-  double? kcal;
-  double? aminoAcidG;
-  double? nitrogenG;
-  double? npcNRatio;
-  double? fatBase;
-  double? carbBase;
-  String? notes;
-  // 微量栄養素(1袋あたり): {elec:{Na,K,Cl,Ca,Mg,P}, trace:{Zn,Fe,Mn,Cu,I,Se}, vit:{...}}
-  // elec: Na/K/Cl/Ca/Mg=mEq, P=mmol / trace=μmol / vit=各単位
-  Map<String, dynamic>? micro;
-  // 両用フラグ: trueなら「食事」カテゴリの製剤をENマスタにも表示（同一製剤として採用共有）
-  bool alsoEn;
-  // 加注製剤の種別 (電解質:Na/K/Ca/Mg/P/HCO3, 微量元素:総合/Zn/Se, ビタミン:総合/B群/単独)
-  String? addType;
-  // 病態タグ (病態別製剤): ConditionCatalog の id 群 (renal/dialysis/liver/diabetes/respiratory/immune/heart)
-  List<String> conditionTags;
-
-  /// この製剤を「食事」タブに表示するか（濃厚流動食 or 栄養サポート食品）
-  bool get isFood =>
-      category == '濃厚流動食' || category == '栄養サポート食品';
-
-  /// 「食事」タブ内のサブセクション名（濃厚流動食 / 栄養サポート食品）
-  String? get foodClass => isFood ? category : null;
-
-  /// ENマスタ（タブ）に表示するか（EN本体/補助 or 両用food）
-  bool get inEnTab => category == 'EN' || category == 'EN_AUX' || alsoEn;
-
-  // ── 組成判定（MVI/trace 自動付替え用。micro由来）──
-  /// 複合微量元素（Zn+Cu を含む＝多元素）を内蔵するか
-  bool get kitHasFullTrace {
-    final tr = micro?['trace'];
-    return tr is Map && tr.containsKey('Zn') && tr.containsKey('Cu');
-  }
-
-  /// 総合ビタミン（B1 or A を含む）を内蔵するか
-  bool get kitHasVitamins {
-    final v = micro?['vit'];
-    return v is Map && (v.containsKey('B1') || v.containsKey('A'));
-  }
-
-  /// 含有Mn量（μmol）
-  double get mnAmount {
-    final tr = micro?['trace'];
-    if (tr is! Map) return 0;
-    final m = tr['Mn'];
-    return m is num ? m.toDouble() : 0;
-  }
-
-  /// 複合微量元素製剤か（加注用）
-  bool get isCombinedTrace => category == '微量元素' && kitHasFullTrace;
-
-  /// Mn-free 複合微量元素製剤か
-  bool get isMnFreeTrace => isCombinedTrace && mnAmount <= 0;
-
-  /// 総合ビタミン製剤か（加注用）
-  bool get isFullMvi => category == 'ビタミン' && kitHasVitamins;
-
-  /// カテゴリ表示名（EN_AUXは「EN補助」と表示）
-  String get categoryLabel {
-    switch (category) {
-      case 'EN_AUX':
-        return 'EN補助';
-      default:
-        return category;
-    }
-  }
-
-  factory Product.fromMap(Map<String, dynamic> map) {
-    double? toDouble(dynamic value) {
-      if (value == null) return null;
-      if (value is num) return value.toDouble();
-      return double.tryParse(value.toString());
-    }
-
-    return Product(
-      id: map['id'] as String,
-      category: map['category'] as String,
-      name: map['name'] as String,
-      content: (map['content'] ?? '') as String,
-      productType: (map['product_type'] ?? '食品') as String,
-      volumeMl: toDouble(map['volume_ml']),
-      kcal: toDouble(map['kcal']),
-      aminoAcidG: toDouble(map['amino_acid_g']),
-      nitrogenG: toDouble(map['nitrogen_g']),
-      npcNRatio: toDouble(map['npc_n_ratio']),
-      fatBase: toDouble(map['fat_g_or_kcal_basis']),
-      carbBase: toDouble(map['carb_g_or_kcal_basis']),
-      notes: map['notes'] as String?,
-      micro: (map['micro'] as Map?)?.cast<String, dynamic>(),
-      alsoEn: (map['also_en'] as bool?) ?? false,
-      addType: map['add_type'] as String?,
-      conditionTags: (map['condition_tags'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-    );
-  }
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'category': category,
-        'name': name,
-        'content': content,
-        'product_type': productType,
-        'volume_ml': volumeMl,
-        'kcal': kcal,
-        'amino_acid_g': aminoAcidG,
-        'nitrogen_g': nitrogenG,
-        'npc_n_ratio': npcNRatio,
-        'fat_g_or_kcal_basis': fatBase,
-        'carb_g_or_kcal_basis': carbBase,
-        'notes': notes,
-        'micro': micro,
-        if (alsoEn) 'also_en': true,
-        if (addType != null) 'add_type': addType,
-        if (conditionTags.isNotEmpty) 'condition_tags': conditionTags,
-      };
-
-  String get volumeMlString => volumeMl == null
-      ? '-'
-      : '${volumeMl!.toStringAsFixed(volumeMl! % 1 == 0 ? 0 : 1)} ml';
-  String get kcalString => kcal == null
-      ? '-'
-      : '${kcal!.toStringAsFixed(kcal! % 1 == 0 ? 0 : 1)} kcal';
-  String get aminoString =>
-      aminoAcidG == null ? '-' : 'AA ${aminoAcidG!.toStringAsFixed(1)} g';
-}
-
-class RegimenItem {
-  RegimenItem({
-    required this.productId,
-    required this.units,
-    this.morning = 0,
-    this.noon = 0,
-    this.evening = 0,
-    this.partialMl = 0,
-  });
-  final String productId;
-  int units;
-  int morning;
-  int noon;
-  int evening;
-  // TPN/PPN: 本数(units)に上乗せする部分使用量(ml, 100ml単位)。実投与量=units×bagVol+partialMl。
-  int partialMl;
-
-  bool get hasMealTiming => morning > 0 || noon > 0 || evening > 0;
-
-  Map<String, dynamic> toMap() => {
-        'productId': productId,
-        'units': units,
-        'morning': morning,
-        'noon': noon,
-        'evening': evening,
-        'partialMl': partialMl,
-      };
-  factory RegimenItem.fromMap(Map<String, dynamic> map) => RegimenItem(
-        productId: map['productId'] as String,
-        units: map['units'] as int,
-        morning: (map['morning'] as int?) ?? 0,
-        noon: (map['noon'] as int?) ?? 0,
-        evening: (map['evening'] as int?) ?? 0,
-        partialMl: (map['partialMl'] as int?) ?? 0,
-      );
-}
-
-class BedAssignment {
-  BedAssignment(
-      {required this.changedAt,
-      required this.fromBed,
-      required this.toBed,
-      required this.note});
-  String changedAt;
-  final String? fromBed;
-  final String toBed;
-  final String note;
-
-  Map<String, dynamic> toMap() => {
-        'changedAt': changedAt,
-        'fromBed': fromBed,
-        'toBed': toBed,
-        'note': note
-      };
-  factory BedAssignment.fromMap(Map<String, dynamic> map) => BedAssignment(
-        changedAt: map['changedAt'] as String,
-        fromBed: map['fromBed'] as String?,
-        toBed: map['toBed'] as String,
-        note: (map['note'] ?? '') as String,
-      );
-}
-
-class ZeroMenuConfig {
-  ZeroMenuConfig(
-      {required this.targetKcal,
-      required this.npcNRatio,
-      required this.lipidGramPerKg,
-      required this.glucoseProductName});
-  final double targetKcal;
-  final double npcNRatio;
-  final double lipidGramPerKg;
-  final String glucoseProductName;
-
-  factory ZeroMenuConfig.defaultConfig() => ZeroMenuConfig(
-      targetKcal: 1500,
-      npcNRatio: 125,
-      lipidGramPerKg: 0.4,
-      glucoseProductName: '70% グルコース');
-
-  Map<String, dynamic> toMap() => {
-        'targetKcal': targetKcal,
-        'npcNRatio': npcNRatio,
-        'lipidGramPerKg': lipidGramPerKg,
-        'glucoseProductName': glucoseProductName,
-      };
-
-  factory ZeroMenuConfig.fromMap(Map<String, dynamic> map) => ZeroMenuConfig(
-        targetKcal: (map['targetKcal'] as num).toDouble(),
-        npcNRatio: (map['npcNRatio'] as num).toDouble(),
-        lipidGramPerKg: (map['lipidGramPerKg'] as num).toDouble(),
-        glucoseProductName: map['glucoseProductName'] as String,
-      );
-}
-
-class PatientCase {
-  PatientCase({
-    required this.id,
-    required this.caseCode,
-    required this.currentBed,
-    required this.age,
-    required this.heightCm,
-    required this.weightKg,
-    required this.sex,
-    required this.activityFactor,
-    required this.stressFactor,
-    required this.proteinGoalPerKg,
-    required this.createdAt,
-    required this.bedHistory,
-    required this.regimenItems,
-    required this.selectedProtocolId,
-    required this.zeroMenuConfig,
-    this.autoDesignConfig,
-    this.energyModel = 'harrisBenedict',
-    this.kcalPerKgValue,
-    this.measuredREE,
-    this.memo = '',
-    List<String>? conditionTags,
-  }) : conditionTags = conditionTags ?? [];
-
-  final String id;
-  String caseCode;
-  String currentBed;
-  int age;
-  double heightCm;
-  double weightKg;
-  Sex sex;
-  double activityFactor;
-  double stressFactor;
-  double proteinGoalPerKg;
-  final String createdAt;
-  final List<BedAssignment> bedHistory;
-  final List<RegimenItem> regimenItems;
-  String selectedProtocolId;
-  ZeroMenuConfig zeroMenuConfig;
-  Map<String, dynamic>? autoDesignConfig; // Day別投与設計の保存
-  String memo; // 合併症・コメントなど
-  String? fastingDate; // 絶食開始日 (ISO date string, null=未設定)
-  List<String> conditionTags; // 病態タグ (ConditionCatalog の id 群)
-  String energyModel; // 'harrisBenedict'|'mifflinStJeor'|'kcalPerKg'|'indirectCalorimetry'
-  double? kcalPerKgValue; // 簡易式の kcal/kg/day
-  double? measuredREE; // 間接熱量測定の実測REE (kcal/day)
-
-  String get displayLabel => '$caseCode / $currentBed';
-
-  /// プロトコルIDを旧スキーマから新スキーマへマイグレーションする (Phase 4-③)
-  static String _migrateProtocolId(String? oldId) {
-    switch (oldId) {
-      case 'icu_5day':
-        return 'five_day';
-      case 'standard_4day':
-        return 'four_day';
-      case 'cautious_refeeding':
-        return 'cautious';
-      case null:
-        return 'five_day';
-      default:
-        // 新IDか未知のIDとりあえずそのまま返すが、不明なら five_day にフォールバック
-        const known = {'three_day', 'four_day', 'five_day', 'cautious'};
-        return known.contains(oldId) ? oldId! : 'five_day';
-    }
-  }
-
-  String get sexLabel => sex == Sex.male ? 'M' : 'F';
-
-  String get patientInfoLine =>
-      '${age}歳, $sexLabel, ${heightCm.toStringAsFixed(0)}cm, ${weightKg.toStringAsFixed(1)}kg, BMI ${NutritionCalculator.bmi(this).toStringAsFixed(1)}';
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'caseCode': caseCode,
-        'currentBed': currentBed,
-        'age': age,
-        'heightCm': heightCm,
-        'weightKg': weightKg,
-        'sex': sex.name,
-        'activityFactor': activityFactor,
-        'stressFactor': stressFactor,
-        'proteinGoalPerKg': proteinGoalPerKg,
-        'createdAt': createdAt,
-        'bedHistory': bedHistory.map((e) => e.toMap()).toList(),
-        'regimenItems': regimenItems.map((e) => e.toMap()).toList(),
-        'selectedProtocolId': selectedProtocolId,
-        'zeroMenuConfig': zeroMenuConfig.toMap(),
-        'autoDesignConfig': autoDesignConfig,
-        'memo': memo,
-        'fastingDate': fastingDate,
-        'conditionTags': conditionTags,
-        'energyModel': energyModel,
-        'kcalPerKgValue': kcalPerKgValue,
-        'measuredREE': measuredREE,
-      };
-
-  factory PatientCase.fromMap(Map<String, dynamic> map) => PatientCase(
-        id: map['id'] as String,
-        caseCode: map['caseCode'] as String,
-        currentBed: map['currentBed'] as String,
-        age: map['age'] as int,
-        heightCm: (map['heightCm'] as num).toDouble(),
-        weightKg: (map['weightKg'] as num).toDouble(),
-        sex: (map['sex'] as String) == 'male' ? Sex.male : Sex.female,
-        activityFactor: (map['activityFactor'] as num).toDouble(),
-        stressFactor: (map['stressFactor'] as num).toDouble(),
-        proteinGoalPerKg: (map['proteinGoalPerKg'] as num).toDouble(),
-        createdAt: map['createdAt'] as String,
-        bedHistory: ((map['bedHistory'] ?? []) as List)
-            .map((e) => BedAssignment.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-        regimenItems: ((map['regimenItems'] ?? []) as List)
-            .map((e) => RegimenItem.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-        selectedProtocolId: PatientCase._migrateProtocolId(
-            map['selectedProtocolId'] as String?),
-        zeroMenuConfig: map['zeroMenuConfig'] == null
-            ? ZeroMenuConfig.defaultConfig()
-            : ZeroMenuConfig.fromMap(
-                Map<String, dynamic>.from(map['zeroMenuConfig'])),
-        autoDesignConfig: map['autoDesignConfig'] == null
-            ? null
-            : Map<String, dynamic>.from(map['autoDesignConfig']),
-        memo: (map['memo'] as String?) ?? '',
-        conditionTags: (map['conditionTags'] as List?)
-            ?.map((e) => e.toString())
-            .toList(),
-        energyModel: (map['energyModel'] as String?) ?? 'harrisBenedict',
-        kcalPerKgValue: (map['kcalPerKgValue'] as num?)?.toDouble(),
-        measuredREE: (map['measuredREE'] as num?)?.toDouble(),
-      )..fastingDate = map['fastingDate'] as String?;
-}
-
-class ProtocolTemplate {
-  const ProtocolTemplate(
-      {required this.id,
-      required this.name,
-      required this.percentages,
-      required this.description});
-  final String id;
-  final String name;
-  final List<double> percentages;
-  final String description;
-}
-
-class AggregateResult {
-  const AggregateResult({
-    required this.totalVolumeMl,
-    required this.totalKcal,
-    required this.totalProteinG,
-    required this.totalFatG,
-    required this.fatKcal,
-    required this.carbKcal,
-    required this.proteinKcal,
-  });
-
-  final double totalVolumeMl;
-  final double totalKcal;
-  final double totalProteinG;
-  final double totalFatG;
-  final double fatKcal;
-  final double carbKcal;
-  final double proteinKcal;
-
-  double targetPercent(double targetKcal) =>
-      targetKcal == 0 ? 0 : (totalKcal / targetKcal) * 100;
-  double get totalMacroKcal => fatKcal + carbKcal + proteinKcal;
-  double get fatPercent =>
-      totalMacroKcal == 0 ? 0 : fatKcal / totalMacroKcal * 100;
-  double get carbPercent =>
-      totalMacroKcal == 0 ? 0 : carbKcal / totalMacroKcal * 100;
-  double get proteinPercent =>
-      totalMacroKcal == 0 ? 0 : proteinKcal / totalMacroKcal * 100;
-  String get npcNText {
-    if (totalProteinG <= 0) return '-';
-    final n = totalProteinG / 6.25;
-    if (n == 0) return '-';
-    final value = (totalKcal - totalProteinG * 4) / n;
-    if (value.isNaN || value.isInfinite) return '-';
-    return value.round().toString();
-  }
-}
-
-class ZeroMenuSuggestion {
-  const ZeroMenuSuggestion({
-    required this.aminoVolumeMl,
-    required this.glucoseVolumeMl,
-    required this.lipidVolumeMl,
-    required this.proteinGram,
-    required this.lipidGram,
-  });
-
-  final double aminoVolumeMl;
-  final double glucoseVolumeMl;
-  final double lipidVolumeMl;
-  final double proteinGram;
-  final double lipidGram;
-}
-
-/// 自動設計の1製剤分（本数 or 静注ml）
-class DesignItem {
-  DesignItem({
-    required this.name,
-    this.units,
-    required this.volumeMl,
-    required this.kcal,
-    required this.proteinG,
-  });
-  final String name;
-  final int? units; // 本数(pac/本)。静注mlベースのときはnull
-  final double volumeMl; // 1日総量ml
-  final double kcal;
-  final double proteinG;
-  double get ratePerHour => volumeMl / 24; // 24h持続換算
-}
-
-/// 自動設計の1案（複数製剤の組み合わせ）
-class DesignPlan {
-  DesignPlan({required this.label, required this.items, this.enKcal = 0});
-  final String label; // 'EN案' / 'TPN案' / 'ゼロmenu案'
-  final List<DesignItem> items;
-  final double enKcal; // EN由来kcal（designDayが設定、単調増加管理用）
-  double get totalKcal => items.fold(0.0, (s, i) => s + i.kcal);
-  double get totalProteinG => items.fold(0.0, (s, i) => s + i.proteinG);
-  double get totalVolumeMl => items.fold(0.0, (s, i) => s + i.volumeMl);
-}
-
-class NutritionCalculator {
-  static double bmi(PatientCase item) =>
-      item.weightKg / ((item.heightCm / 100) * (item.heightCm / 100));
-
-  /// 目標エネルギー（kcal/day）。選択モデル＋補正体重を内部適用（clinical/energy.dart に委譲）。
-  static ce.EnergyResult targetEnergyResult(PatientCase item) => ce.targetEnergy(
-        model: ce.energyModelFromId(item.energyModel),
-        isMale: item.sex == Sex.male,
-        weightKg: item.weightKg,
-        heightCm: item.heightCm,
-        age: item.age,
-        activityFactor: item.activityFactor,
-        stressFactor: item.stressFactor,
-        kcalPerKgValue: item.kcalPerKgValue ?? 30,
-        measuredREE: item.measuredREE,
-      );
-
-  static double targetEnergy(PatientCase item) =>
-      targetEnergyResult(item).kcal;
-
-  /// 目標タンパク（g/day）。肥満は理想体重基準（clinical/protein.dart に委譲）。
-  static double targetProtein(PatientCase item) => cp.targetProtein(
-        actualKg: item.weightKg,
-        heightCm: item.heightCm,
-        isMale: item.sex == Sex.male,
-        gramPerKg: item.proteinGoalPerKg,
-      );
-
-  static AggregateResult aggregate(List<RegimenItem> items) {
-    double totalVolumeMl = 0;
-    double totalKcal = 0;
-    double totalProteinG = 0;
-    double totalFatG = 0;
-    double fatKcal = 0;
-    double carbKcal = 0;
-    double proteinKcal = 0;
-    for (final item in items) {
-      final product = ProductCatalog.instance.byId(item.productId);
-      if (product == null || item.units <= 0) continue;
-      totalVolumeMl += (product.volumeMl ?? 0) * item.units;
-      totalKcal += (product.kcal ?? 0) * item.units;
-      totalProteinG += (product.aminoAcidG ?? 0) * item.units;
-      totalFatG += (product.fatBase ?? 0) * item.units;
-      fatKcal += (product.fatBase ?? 0) * 9 * item.units;
-      carbKcal += (product.carbBase ?? 0) * 4 * item.units;
-      proteinKcal += (product.aminoAcidG ?? 0) * 4 * item.units;
-    }
-    return AggregateResult(
-      totalVolumeMl: totalVolumeMl,
-      totalKcal: totalKcal,
-      totalProteinG: totalProteinG,
-      totalFatG: totalFatG,
-      fatKcal: fatKcal,
-      carbKcal: carbKcal,
-      proteinKcal: proteinKcal,
-    );
-  }
-
-  static ZeroMenuSuggestion zeroMenuSuggestion({
-    required double targetKcal,
-    required double npcNRatio,
-    required double lipidGramPerKg,
-    required double weightKg,
-    required Product? glucoseProduct,
-    required Product? aminoProduct,
-    required Product? lipidProduct,
-    double? girLimitMgKgMin, // 指定時: GIR上限でブドウ糖をcapし余剰kcalを脂質へ再配分(自動設計用)
-    double? maxLipidGramPerKgDay, // 脂質再配分の上限(g/kg/day)
-  }) {
-    final aminoMlPerGram = (aminoProduct?.volumeMl ?? 500) /
-        ((aminoProduct?.aminoAcidG ?? 50) == 0
-            ? 50
-            : (aminoProduct?.aminoAcidG ?? 50));
-    final proteinGram = (6.25 * targetKcal) / (npcNRatio + 6.25 * 4);
-    final aminoVolumeMl = proteinGram * aminoMlPerGram;
-    double lipidGram = lipidGramPerKg * weightKg;
-    double glucoseKcal = (targetKcal - proteinGram * 4 - lipidGram * 9)
-        .clamp(0, double.infinity)
-        .toDouble();
-    // GIR上限でブドウ糖を制限し、余剰kcalを脂質へ再配分（自動設計でのみ有効）
-    if (girLimitMgKgMin != null && weightKg > 0) {
-      final maxGluGram = girLimitMgKgMin * weightKg * 1440 / 1000;
-      double glucoseGram = glucoseKcal / 4;
-      if (glucoseGram > maxGluGram) {
-        final deficitKcal = (glucoseGram - maxGluGram) * 4;
-        glucoseGram = maxGluGram;
-        glucoseKcal = glucoseGram * 4;
-        if (maxLipidGramPerKgDay != null) {
-          final maxLipidGram = maxLipidGramPerKgDay * weightKg;
-          final addable = maxLipidGram - lipidGram;
-          if (addable > 0) {
-            final extra = deficitKcal / 9;
-            lipidGram += extra < addable ? extra : addable;
-          }
-        }
-      }
-    }
-    final lipidVolumeMl = lipidProduct == null
-        ? 0.0
-        : lipidGram /
-            ((lipidProduct.fatBase ?? 20) / (lipidProduct.volumeMl ?? 100));
-    final glucoseDensity =
-        glucoseProduct == null || (glucoseProduct.volumeMl ?? 0) == 0
-            ? 1
-            : (glucoseProduct.kcal ?? 0) / (glucoseProduct.volumeMl ?? 1);
-    final glucoseVolumeMl =
-        glucoseDensity == 0 ? 0.0 : glucoseKcal / glucoseDensity;
-    return ZeroMenuSuggestion(
-      aminoVolumeMl: aminoVolumeMl,
-      glucoseVolumeMl: glucoseVolumeMl,
-      lipidVolumeMl: lipidVolumeMl,
-      proteinGram: proteinGram,
-      lipidGram: lipidGram,
-    );
-  }
-
-  /// 自動設計。
-  /// ルール: カロリーは目標の90〜100%(オーバー不可)、タンパクは90〜100%(オーバー不可)。
-  /// mode: 'EN'(EN最大2剤+PPN補正) / 'TPN'(TPN単剤+PPN補正) / 'BOTH'(両案) / 'ZERO'(静注ブレンド)
-  static List<DesignPlan> autoDesign({
-    required String mode,
-    required double targetKcal,
-    required double targetProtein,
-    required double weightKg,
-    required List<Product> enProducts,
-    required List<Product> tpnProducts,
-    required List<Product> ppnProducts,
-    Product? glucoseProduct,
-    Product? aminoProduct,
-    Product? lipidProduct,
-  }) {
-    final plans = <DesignPlan>[];
-    if (mode == 'EN' || mode == 'BOTH') {
-      final p = _designWithBase(
-          enProducts, ppnProducts, targetKcal, targetProtein, 'EN案',
-          maxBase: 2);
-      if (p != null) plans.add(p);
-    }
-    if (mode == 'TPN' || mode == 'BOTH') {
-      final p = _designWithBase(
-          tpnProducts, ppnProducts, targetKcal, targetProtein, 'TPN案',
-          maxBase: 1);
-      if (p != null) plans.add(p);
-    }
-    if (mode == 'ZERO') {
-      final z = zeroMenuSuggestion(
-        targetKcal: targetKcal,
-        npcNRatio: 125,
-        lipidGramPerKg: 0.4,
-        weightKg: weightKg,
-        glucoseProduct: glucoseProduct,
-        aminoProduct: aminoProduct,
-        lipidProduct: lipidProduct,
-      );
-      final items = <DesignItem>[];
-      double densKcal(Product? p, double ml) =>
-          p == null || (p.volumeMl ?? 0) == 0 ? 0 : (p.kcal ?? 0) * ml / p.volumeMl!;
-      double densProt(Product? p, double ml) =>
-          p == null || (p.volumeMl ?? 0) == 0 ? 0 : (p.aminoAcidG ?? 0) * ml / p.volumeMl!;
-      if (aminoProduct != null && z.aminoVolumeMl > 0) {
-        items.add(DesignItem(
-            name: aminoProduct.name,
-            volumeMl: z.aminoVolumeMl,
-            kcal: densKcal(aminoProduct, z.aminoVolumeMl),
-            proteinG: densProt(aminoProduct, z.aminoVolumeMl)));
-      }
-      if (glucoseProduct != null && z.glucoseVolumeMl > 0) {
-        items.add(DesignItem(
-            name: glucoseProduct.name,
-            volumeMl: z.glucoseVolumeMl,
-            kcal: densKcal(glucoseProduct, z.glucoseVolumeMl),
-            proteinG: 0));
-      }
-      if (lipidProduct != null && z.lipidVolumeMl > 0) {
-        items.add(DesignItem(
-            name: lipidProduct.name,
-            volumeMl: z.lipidVolumeMl,
-            kcal: z.lipidGram * 9,
-            proteinG: 0));
-      }
-      plans.add(DesignPlan(label: 'ゼロmenu案', items: items));
-    }
-    return plans;
-  }
-
-  /// 主軸製剤(base)を maxBase 剤まで使い、PPNでタンパク補正する設計を1案返す。
-  static DesignPlan? _designWithBase(List<Product> bases, List<Product> ppns,
-      double targetKcal, double targetProtein, String label,
-      {required int maxBase}) {
-    final minKcal = targetKcal * 0.9;
-    List<MapEntry<Product, int>>? best;
-    double bestIn = double.infinity;
-
-    void consider(List<MapEntry<Product, int>> combo) {
-      double kcal = 0, prot = 0, inMl = 0;
-      for (final e in combo) {
-        kcal += (e.key.kcal ?? 0) * e.value;
-        prot += (e.key.aminoAcidG ?? 0) * e.value;
-        inMl += (e.key.volumeMl ?? 0) * e.value;
-      }
-      if (kcal > targetKcal) return; // カロリーオーバー不可
-      if (kcal < minKcal) return; // -10%未満は不採用
-      if (prot > targetProtein) return; // タンパクオーバー不可
-      // カロリー条件を満たす中で IN(投与量) 最小を採用
-      if (inMl < bestIn) {
-        bestIn = inMl;
-        best = combo;
-      }
-    }
-
-    final valid = bases.where((b) => (b.kcal ?? 0) > 0).toList();
-    // 単剤
-    for (final b in valid) {
-      final k = b.kcal!;
-      for (int n = 1; n * k <= targetKcal; n++) {
-        consider([MapEntry(b, n)]);
-      }
-    }
-    // 2剤
-    if (maxBase >= 2) {
-      for (int i = 0; i < valid.length; i++) {
-        for (int j = i + 1; j < valid.length; j++) {
-          final a = valid[i], c = valid[j];
-          for (int n1 = 1; n1 * a.kcal! <= targetKcal; n1++) {
-            for (int n2 = 1; n1 * a.kcal! + n2 * c.kcal! <= targetKcal; n2++) {
-              consider([MapEntry(a, n1), MapEntry(c, n2)]);
-            }
-          }
-        }
-      }
-    }
-
-    if (best == null) return null;
-
-    final items = best!
-        .map((e) => DesignItem(
-              name: e.key.name,
-              units: e.value,
-              volumeMl: (e.key.volumeMl ?? 0) * e.value,
-              kcal: (e.key.kcal ?? 0) * e.value,
-              proteinG: (e.key.aminoAcidG ?? 0) * e.value,
-            ))
-        .toList();
-
-    // タンパク補正: 達成タンパクが目標の90%未満ならPPNアミノ酸を追加
-    double curKcal = items.fold(0.0, (s, i) => s + i.kcal);
-    double curProt = items.fold(0.0, (s, i) => s + i.proteinG);
-    if (curProt < targetProtein * 0.9) {
-      final aminos = ppns.where((p) => (p.aminoAcidG ?? 0) > 0).toList()
-        ..sort((a, b) => ((b.aminoAcidG ?? 0) / (b.volumeMl ?? 1))
-            .compareTo((a.aminoAcidG ?? 0) / (a.volumeMl ?? 1)));
-      if (aminos.isNotEmpty) {
-        final pp = aminos.first;
-        int add = 0;
-        while (curProt < targetProtein * 0.9 &&
-            curProt + (pp.aminoAcidG ?? 0) <= targetProtein &&
-            curKcal + (pp.kcal ?? 0) <= targetKcal) {
-          curProt += pp.aminoAcidG ?? 0;
-          curKcal += pp.kcal ?? 0;
-          add++;
-        }
-        if (add > 0) {
-          items.add(DesignItem(
-              name: pp.name,
-              units: add,
-              volumeMl: (pp.volumeMl ?? 0) * add,
-              kcal: (pp.kcal ?? 0) * add,
-              proteinG: (pp.aminoAcidG ?? 0) * add));
-        }
-      }
-    }
-
-    return DesignPlan(label: label, items: items);
-  }
-
-  /// Day別設計: そのDayの目標(kcal/タンパク)を、選んだクラスとEN速度でサジェスト。
-  /// mode: 'TPN' / 'TPN+EN' / 'EN' / 'ZERO'
-  static DesignPlan designDay({
-    required String mode,
-    required double dayTargetKcal,
-    required double dayTargetProt,
-    required double weightKg,
-    required List<Product> enProducts,
-    double enRateMlH = 0,
-    int enPac = 0,
-    Product? pnProduct,
-    double pnRateMlH = 0,
-    required List<Product> tpnProducts,
-    required List<Product> ppnProducts,
-    Product? glucoseProduct,
-    Product? aminoProduct,
-    Product? lipidProduct,
-    double minEnKcal = 0, // 単調増加制約: 前日のEN kcal以上を要求
-    List<Product> mealProducts = const [], // 食事(濃厚流動食/栄養サポート)
-    int mealPac = 0, // 食事 朝昼夕あたりpac数(1..3, 経口リハ期に使用)
-    double? girLimitMgKgMin, // 自動設計: GIR上限(糖質制限病態は4, 既定5)
-    double? maxLipidGramPerKgDay, // 脂質再配分の上限
-    bool allowZeroMenu = false, // ゼロmenu許可(PNのみ7日目以降・EN未開始時のみtrue)
-  }) {
-    // ゼロmenu(静注ブレンド)のitem群を構築
-    List<DesignItem> buildZeroItems(double tKcal) {
-      final items = <DesignItem>[];
-      final z = zeroMenuSuggestion(
-        targetKcal: tKcal,
-        npcNRatio: 125,
-        lipidGramPerKg: 0.4,
-        weightKg: weightKg,
-        glucoseProduct: glucoseProduct,
-        aminoProduct: aminoProduct,
-        lipidProduct: lipidProduct,
-        girLimitMgKgMin: girLimitMgKgMin,
-        maxLipidGramPerKgDay: maxLipidGramPerKgDay,
-      );
-      double dKcal(Product? p, double ml) =>
-          p == null || (p.volumeMl ?? 0) == 0 ? 0 : (p.kcal ?? 0) * ml / p.volumeMl!;
-      double dProt(Product? p, double ml) =>
-          p == null || (p.volumeMl ?? 0) == 0 ? 0 : (p.aminoAcidG ?? 0) * ml / p.volumeMl!;
-      if (aminoProduct != null && z.aminoVolumeMl > 0) {
-        items.add(DesignItem(name: aminoProduct.name, volumeMl: z.aminoVolumeMl, kcal: dKcal(aminoProduct, z.aminoVolumeMl), proteinG: dProt(aminoProduct, z.aminoVolumeMl)));
-      }
-      if (glucoseProduct != null && z.glucoseVolumeMl > 0) {
-        items.add(DesignItem(name: glucoseProduct.name, volumeMl: z.glucoseVolumeMl, kcal: dKcal(glucoseProduct, z.glucoseVolumeMl), proteinG: 0));
-      }
-      if (lipidProduct != null && z.lipidVolumeMl > 0) {
-        items.add(DesignItem(name: lipidProduct.name, volumeMl: z.lipidVolumeMl, kcal: z.lipidGram * 9, proteinG: 0));
-      }
-      items.add(DesignItem(name: 'ビタミン製剤', volumeMl: 2, kcal: 0, proteinG: 0));
-      items.add(DesignItem(name: '微量元素製剤', volumeMl: 2, kcal: 0, proteinG: 0));
-      items.add(DesignItem(name: '電解質製剤', volumeMl: 2, kcal: 0, proteinG: 0));
-      return items;
-    }
-
-    // ZERO: 静注ブレンド（EN不要）
-    if (mode == 'ZERO') {
-      return DesignPlan(label: 'Day', items: buildZeroItems(dayTargetKcal));
-    }
-
-    // タンパク不足を高濃度AA製剤で補正してitemsに追加するヘルパー。
-    //   AAが目標未満なら、高濃度AA(aminoProduct=純AA, アミパレンfallback)で
-    //   「目標まで一旦全部埋める」。INやkcalが多少増えてもタンパクを優先する。
-    void addPpnProtein(List<DesignItem> items, double curKcal, double curProt) {
-      if (curProt >= dayTargetProt) return;
-      // 高濃度AA製剤: 純AA(aminoProduct) > 採用PPNの最高AA密度。
-      Product? aa = (aminoProduct != null && (aminoProduct.aminoAcidG ?? 0) > 0)
-          ? aminoProduct
-          : null;
-      if (aa == null) {
-        final aminos = ppnProducts.where((p) => (p.aminoAcidG ?? 0) > 0).toList()
-          ..sort((a, b) => ((b.aminoAcidG ?? 0) / (b.volumeMl ?? 1))
-              .compareTo((a.aminoAcidG ?? 0) / (a.volumeMl ?? 1)));
-        aa = aminos.isNotEmpty ? aminos.first : null;
-      }
-      final aaG = aa?.aminoAcidG ?? 0;
-      if (aa == null || aaG <= 0) return;
-      // 不足分を満たす最小本数(端数切り上げ=目標到達優先)。安全上限20本。
-      final add = ((dayTargetProt - curProt) / aaG).ceil().clamp(1, 20);
-      items.add(DesignItem(
-          name: aa.name,
-          units: add,
-          volumeMl: (aa.volumeMl ?? 0) * add,
-          kcal: (aa.kcal ?? 0) * add,
-          proteinG: aaG * add));
-    }
-
-    // 食事(経口リハ): 食事製剤を朝昼夕 mealPac本ずつ(=計3×mealPac本)投与。
-    //   ただしkcalが当日目標を超えない範囲にcap。不足分(kcal・タンパク)はPPNで補う。
-    if (mode == '食事') {
-      final meals = mealProducts
-          .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
-          .toList();
-      final items = <DesignItem>[];
-      double mealKcal = 0, mealProt = 0;
-      if (meals.isNotEmpty && mealPac > 0) {
-        // 主食 = kcal/pacが最大の食事製剤(高栄養の濃厚流動食)を一貫採用
-        final sorted = [...meals]
-          ..sort((a, b) => (b.kcal ?? 0).compareTo(a.kcal ?? 0));
-        final p = sorted.first;
-        final pk = (p.kcal ?? 0).toDouble();
-        if (pk > 0) {
-          final capPac = 3 * mealPac; // 朝昼夕 × pac数(1→3で漸増)
-          // kcalが当日目標を超えない範囲にcap
-          final byKcal = (dayTargetKcal / pk).floor();
-          final pac = (capPac < byKcal ? capPac : byKcal).clamp(0, capPac);
-          if (pac > 0) {
-            mealKcal = pk * pac;
-            mealProt = (p.aminoAcidG ?? 0) * pac;
-            items.add(DesignItem(
-                name: p.name,
-                units: pac,
-                volumeMl: (p.volumeMl ?? 0) * pac,
-                kcal: mealKcal,
-                proteinG: mealProt));
-          }
-        }
-      }
-      // 不足分(kcal・タンパク)をPPN製剤で補う
-      final restKcal =
-          (dayTargetKcal - mealKcal).clamp(0, double.infinity).toDouble();
-      final restProt =
-          (dayTargetProt - mealProt).clamp(0, double.infinity).toDouble();
-      if (restKcal > 80 && ppnProducts.isNotEmpty) {
-        final sub = _designWithBase(
-            ppnProducts, ppnProducts, restKcal, restProt, 'PPN',
-            maxBase: 2);
-        if (sub != null) items.addAll(sub.items);
-      }
-      // 経口リハ期はタンパクが落ち込みやすい(エルネオパ等のPN中止+食事は低タンパク)。
-      // → 高濃度AA製剤で「目標タンパクまで」確実に補充する(kcal超過は許容しタンパク優先)。
-      //   AA源は ゼロmenuと同じ純AA製剤(aminoProduct, アミパレンfallback)を最優先。
-      //   PPN未採用の施設(エルネオパ中心)でも補充が効くようにする。
-      {
-        final curProt = items.fold(0.0, (s, it) => s + it.proteinG);
-        // 高濃度AA製剤の選定: 純AA(aminoProduct) > 採用PPNの最高AA密度。
-        Product? aa = (aminoProduct != null && (aminoProduct.aminoAcidG ?? 0) > 0)
-            ? aminoProduct
-            : null;
-        if (aa == null) {
-          final aminos =
-              ppnProducts.where((p) => (p.aminoAcidG ?? 0) > 0).toList()
-                ..sort((a, b) => ((b.aminoAcidG ?? 0) / (b.volumeMl ?? 1))
-                    .compareTo((a.aminoAcidG ?? 0) / (a.volumeMl ?? 1)));
-          aa = aminos.isNotEmpty ? aminos.first : null;
-        }
-        final aaG = aa?.aminoAcidG ?? 0;
-        if (aa != null && aaG > 0 && curProt < dayTargetProt) {
-          // 不足分を満たす最小本数(端数切り上げ=目標到達優先)。安全上限20本。
-          final add = ((dayTargetProt - curProt) / aaG).ceil().clamp(1, 20);
-          items.add(DesignItem(
-              name: aa.name,
-              units: add,
-              volumeMl: (aa.volumeMl ?? 0) * add,
-              kcal: (aa.kcal ?? 0) * add,
-              proteinG: aaG * add));
-        }
-      }
-      return DesignPlan(label: 'Day', items: items);
-    }
-
-    // EN baseのitem群＋PN主剤(pnBase)を渡して、PN自動減量＋PPN補正で1日プランを完成
-    DesignPlan completePlan(List<DesignItem> enItems, Product? pnBase) {
-      final items = <DesignItem>[...enItems];
-      final enKcal = enItems.fold<double>(0, (s, it) => s + it.kcal);
-      final enProt = enItems.fold<double>(0, (s, it) => s + it.proteinG);
-      if (mode == 'EN') {
-        addPpnProtein(items, enKcal, enProt);
-        return DesignPlan(label: 'Day', items: items);
-      }
-      // PN自動減量: 残りkcalをPNで埋める(over回避)
-      final restKcal =
-          (dayTargetKcal - enKcal).clamp(0, double.infinity).toDouble();
-      final restProt =
-          (dayTargetProt - enProt).clamp(0, double.infinity).toDouble();
-      if (pnBase != null && (pnBase.volumeMl ?? 0) > 0 && restKcal > 0) {
-        final bagVol = pnBase.volumeMl!; // 1袋の容量ml
-        final bagKcal = pnBase.kcal ?? 0; // 1袋のkcal
-        final pnDensity = bagVol > 0 ? bagKcal / bagVol : 0.0; // kcal/ml
-        // 袋数調整: under feeding許容 + INの段差を緩和するため、端数が≥50%なら開封OK
-        //   ≤1袋分 → 速度調整で部分使用(目標ちょうど)
-        //   >1袋分 → 整数袋 + 端数が袋容量の50%以上なら+1袋(部分使用)、未満は切り捨て
-        const fracThreshold = 0.50; // 端数50%以上なら開封
-        double pnMl = 0;
-        int? pnUnits;
-        if (pnDensity > 0) {
-          if (restKcal <= bagKcal) {
-            pnMl = restKcal / pnDensity;
-            if ((bagVol - pnMl).abs() < 1.0) {
-              pnMl = bagVol;
-              pnUnits = 1;
-            }
-          } else {
-            final wholeBags = (restKcal / bagKcal).floor();
-            final fracKcal = restKcal - wholeBags * bagKcal;
-            if (fracKcal / bagKcal >= fracThreshold) {
-              // 端数袋を開封(部分使用)
-              pnMl = wholeBags * bagVol + fracKcal / pnDensity;
-              pnUnits = wholeBags + 1;
-            } else {
-              // 端数は切り捨て
-              pnMl = wholeBags * bagVol;
-              pnUnits = wholeBags;
-            }
-          }
-        }
-        // TPN(PN主剤)の使用量を100ml単位に丸める。
-        // 過剰栄養は禁忌のため、丸めで残りkcalを超える場合は100ml切り下げる。
-        if (pnMl > 0 && pnDensity > 0) {
-          double rounded = (pnMl / 100).round() * 100.0;
-          while (rounded > 0 && pnDensity * rounded > restKcal + 1e-6) {
-            rounded -= 100;
-          }
-          pnMl = rounded;
-          pnUnits = pnMl > 0 ? (pnMl / bagVol).ceil() : null;
-        }
-        final pnKcal = pnDensity * pnMl;
-        final pnProt = (pnBase.aminoAcidG ?? 0) * pnMl / bagVol;
-        if (pnMl > 0) {
-          items.add(DesignItem(
-              name: pnBase.name,
-              units: pnUnits,
-              volumeMl: pnMl,
-              kcal: pnKcal,
-              proteinG: pnProt));
-        }
-        addPpnProtein(items, enKcal + pnKcal, enProt + pnProt);
-        return DesignPlan(label: 'Day', items: items);
-      }
-      // PN主剤なし: 残りをTPN単剤+PPNで本数最適
-      if (restKcal > 0) {
-        final sub = _designWithBase(
-            tpnProducts, ppnProducts, restKcal, restProt, 'TPN', maxBase: 1);
-        if (sub != null) items.addAll(sub.items);
-      }
-      return DesignPlan(label: 'Day', items: items);
-    }
-
-    // EN製剤を pac本 のitemに
-    DesignItem enPacItem(Product p, int pac) {
-      final double vol = pac * (p.volumeMl ?? 0.0);
-      return DesignItem(
-          name: p.name,
-          units: pac,
-          volumeMl: vol,
-          kcal: (p.kcal ?? 0) * vol / (p.volumeMl ?? 1),
-          proteinG: (p.aminoAcidG ?? 0) * vol / (p.volumeMl ?? 1));
-    }
-
-    // EN製剤名の集合(輸液=経静脈分の容量を切り分けるために使用)
-    final enNameSet = enProducts.map((p) => p.name).toSet();
-    // 評価(under feeding基準): kcalは当日目標の90-100%、タンパク90-100%、
-    //   over nutritionは厳禁、INは~1000ml/dayを確保したい。スコア小が良。
-    //   planEnKcal: ENアイテム由来kcal（候補ループ側で計算して渡す）
-    double scoreOf(DesignPlan plan, double planEnKcal) {
-      final tK = dayTargetKcal, tP = dayTargetProt;
-      final k = plan.totalKcal, pr = plan.totalProteinG, vol = plan.totalVolumeMl;
-      double s = 0;
-      if (tK > 0) {
-        final r = k / tK;
-        if (r > 1.0) {
-          s += (r - 1.0) * 100; // over厳禁
-        } else if (r < 0.9) {
-          s += (0.9 - r) * 50; // 90%未満の下振れ
-        } else {
-          s += (1.0 - r) * 5; // 90-100%窓内は目標寄りを微優先
-        }
-      }
-      if (tP > 0) {
-        final r = pr / tP;
-        if (r > 1.0) {
-          s += (r - 1.0) * 80;
-        } else if (r < 0.9) {
-          s += (0.9 - r) * 40;
-        } else {
-          s += (1.0 - r) * 4;
-        }
-      }
-      // IN ~1000ml/day確保。絞りすぎ回避＆2500ml超は強くペナルティ(ゼロmenu等へ誘導)
-      if (vol < 1000) {
-        s += (1000 - vol) / 1000 * 10;
-      } else if (vol <= 2500) {
-        s += (vol - 1000) / 1000 * 1;
-      } else {
-        s += 1.5 + (vol - 2500) / 1000 * 50;
-      }
-      // 輸液(経静脈)上限: 3000ml/day を超えないようハードキャップ。
-      //   EN(経腸)分は含めず、PN/PPN/IV分のみで判定する。
-      double ivVol = 0;
-      for (final it in plan.items) {
-        if (!enNameSet.contains(it.name)) ivVol += it.volumeMl;
-      }
-      if (ivVol > 3000) {
-        // 実質的に3000ml超を回避(代替が無い場合のみ許容＝段階的劣化)
-        s += 1000 + (ivVol - 3000) * 2;
-      }
-      // 単調増加制約: ENカロリーが前日より少ない場合は重くペナルティ
-      if (minEnKcal > 0 && planEnKcal < minEnKcal * 0.98) {
-        s += (minEnKcal - planEnKcal) / (tK + 1) * 80;
-      }
-      return s;
-    }
-
-    final ens = enProducts
-        .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
-        .toList();
-
-    // EN候補(食単位で最大2製剤まで混合)を列挙。1食内は1製剤のみ。
-    List<List<DesignItem>> enCandidates() {
-      if (mode == 'TPN' || ens.isEmpty) return [<DesignItem>[]];
-      if (enPac > 0) {
-        // 朝昼夕の3食。食あたりpac数=mealPac。3食を最大2製剤に振り分け
-        final mealPac = (enPac / 3).round().clamp(1, enPac);
-        final out = <List<DesignItem>>[];
-        for (var i = 0; i < ens.length; i++) {
-          final prod = ens[i];
-          final pacKcal = (prod.kcal ?? 0).toDouble();
-          // 単調増加制約: minEnKcal を満たす最小pac数まで単剤候補を切り上げ
-          // (連続投与→ボーラス切替時の凹みを防ぐ)
-          int totalPacs = 3 * mealPac;
-          if (minEnKcal > 0 && pacKcal > 0) {
-            final needed = (minEnKcal / pacKcal).ceil();
-            if (needed > totalPacs) {
-              // 目標kcalを超えない範囲で増やす
-              final hardMax = dayTargetKcal > 0
-                  ? (dayTargetKcal / pacKcal).floor().clamp(totalPacs, 99)
-                  : 99;
-              totalPacs = needed.clamp(totalPacs, hardMax);
-            }
-          }
-          out.add([enPacItem(prod, totalPacs)]); // 単剤(単調増加対応)
-          for (var j = i + 1; j < ens.length; j++) {
-            for (final a in const [1, 2]) {
-              // a食をens[i]、(3-a)食をens[j] (食単位混合)
-              out.add([
-                enPacItem(ens[i], a * mealPac),
-                enPacItem(ens[j], (3 - a) * mealPac),
-              ]);
-            }
-          }
-        }
-        return out;
-      }
-      if (enRateMlH > 0) {
-        // 速度(ml/h)は持続投与=単剤のみ
-        final ml = enRateMlH * 24;
-        return ens
-            .map((p) => [
-                  DesignItem(
-                      name: p.name,
-                      volumeMl: ml,
-                      kcal: (p.kcal ?? 0) * ml / (p.volumeMl ?? 1),
-                      proteinG: (p.aminoAcidG ?? 0) * ml / (p.volumeMl ?? 1)),
-                ])
-            .toList();
-      }
-      return [<DesignItem>[]];
-    }
-
-    // PN主剤候補: 導入プロトコルの 1号/2号(エルネオパ or ネオパレン)のみを使用。
-    // どちらも未採用ならゼロmenuで構築する(他TPNは自動設計のPN主剤に使わない)。
-    // マスタ名は末尾空白や容量サフィックス付きの場合があるため productBaseName で正規化して判定。
-    bool isProtoBase(Product p) {
-      final b = productBaseName(p.name);
-      return b == 'エルネオパNF1号' ||
-          b == 'エルネオパNF2号' ||
-          b == 'ネオパレン1号' ||
-          b == 'ネオパレン2号';
-    }
-    final pnBases = tpnProducts
-        .where((p) =>
-            isProtoBase(p) && (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
-        .toList();
-
-    DesignPlan? best;
-    double bestScore = double.infinity;
-    double bestEnKcal = 0; // 勝者のEN由来kcal
-    void consider(DesignPlan plan, double planEnKcal) {
-      final sc = scoreOf(plan, planEnKcal);
-      if (sc < bestScore) {
-        bestScore = sc;
-        best = plan;
-        bestEnKcal = planEnKcal;
-      }
-    }
-
-    for (final enItems in enCandidates()) {
-      // EN由来kcalをitemから集計（単調増加スコアリング用）
-      final enKcal =
-          enItems.fold<double>(0, (s, it) => s + it.kcal);
-      if (mode == 'EN') {
-        consider(completePlan(enItems, null), enKcal);
-      } else if (pnBases.isEmpty) {
-        consider(completePlan(enItems, null), enKcal);
-      } else {
-        // PN主剤の選定: エルネオパ1号→2号 の導入プロトコルを優先する。
-        //   初期導入は1号、必要量が過大(>2000ml相当)になれば2号へ切替。
-        //   エルネオパ未採用時は従来どおり IN/kcal 最適で選ぶ。
-        for (final pb in pnBases) {
-          final plan = completePlan(enItems, pb);
-          double planScore = scoreOf(plan, enKcal);
-          final bagVol = pb.volumeMl ?? 1;
-          double pnVol = 0;
-          for (final it in plan.items) {
-            if (it.units == null && it.name == pb.name) {
-              pnVol = it.volumeMl;
-              final usageRatio = it.volumeMl / bagVol;
-              if (usageRatio < 0.5) {
-                // 50%未満の端数使用 → 別製剤があれば乗り換えを促す
-                planScore += (0.5 - usageRatio) * 20;
-              }
-            }
-          }
-          // 導入プロトコル: 1号を強く優先。1号で必要量が過大なら2号を次点優先。
-          final pbBase = productBaseName(pb.name);
-          final is1go =
-              pbBase == 'エルネオパNF1号' || pbBase == 'ネオパレン1号';
-          final is2go =
-              pbBase == 'エルネオパNF2号' || pbBase == 'ネオパレン2号';
-          if (is1go) {
-            // 1号は希釈。約3000ml(輸液上限)までは1号を優先、超えれば2号へ
-            if (pnVol <= 3000) planScore -= 1000.0;
-          } else if (is2go) {
-            planScore -= 500.0;
-          }
-          if (planScore < bestScore) {
-            bestScore = planScore;
-            best = plan;
-            bestEnKcal = enKcal;
-          }
-        }
-      }
-    }
-    // ゼロmenu(高濃度静注ブレンド)の使用制限:
-    //  ・エルネオパ/ネオパレン 1号/2号 が未採用の施設のみ(採用施設は1号→2号を使用)。
-    //  ・PNのみの栄養が6日続いた翌日(7日目)以降のPN専用日のみ(allowZeroMenu)。
-    //  ・ENを開始していれば採用しない(mode=='TPN'のPN専用日に限る)。
-    if (allowZeroMenu && pnBases.isEmpty && mode == 'TPN') {
-      consider(DesignPlan(label: 'ZERO', items: buildZeroItems(dayTargetKcal)), 0);
-    }
-    // 勝者のEN kcalをDesignPlanに記録して返す（逐次生成時の単調増加追跡に使用）
-    if (best == null) return DesignPlan(label: 'Day', items: const []);
-    return DesignPlan(label: best!.label, items: best!.items, enKcal: bestEnKcal);
-  }
-}
-
 class ProductCatalog {
   ProductCatalog(this.products) {
     instance = this;
@@ -7367,7 +6201,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   // 全期間を固定シーケンスで自動生成:
   //   目標%(総カロリー)はrampDaysで100%まで等差で漸増し、以降100%を維持(EN導入とは独立)
   //   EN食上げ(enStartDay以降7日): 10→20→30→40ml/h → 1pac→2pac朝昼夕、PNは自動減量、最終日はEN単独full
-  /// 自動連動: 栄養開始〜EN開始前=20, EN開始〜経口リハ前=25, 経口リハ以降=30 kcal/kg。
+  /// 自動連動(inclusive): 20kcal/kg上限はEN開始日まで、25kcal/kg上限は経口リハ開始日まで。
+  /// 以降は上限解除(full)。full達成(_rampDays=傾きの終点)は連動しない(実到達日は別途算出)。
   void _applyAutoKcalSteps() {
     // 20kcal/kg上限はEN開始日まで、25kcal/kg上限は経口リハ開始日まで(以降はfull)。
     _kcalStep20Day = _enStartDay.clamp(1, 28);
@@ -7385,15 +6220,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // 経口リハ開始日+5日(計6日)まで延長
     final mealEnd = oral != null ? oral + _mealRampDays - 1 : 0;
     _totalDays = enEnd > mealEnd ? enEnd : mealEnd;
-    // 実到達日(係数上限でfullが遅れうる)まで表示期間を拡張し、必ずfull到達を含める。
-    final effFull = ce.effectiveFullDay(
-      feedingWeightKg:
-          NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg,
-      realFullKcal: NutritionCalculator.targetEnergy(widget.current),
-      fullAchieveDay: _rampDays,
-      kcal20UntilDay: _kcalStep20Day,
-      kcal25UntilDay: _kcalStep25Day,
-    );
+    // 実到達日(係数上限・refeeding capでfullが遅れうる)まで表示期間を拡張し、full到達を含める。
+    final effFull = _effectiveFullDay();
     if (effFull > _totalDays) _totalDays = effFull;
     // 設定変更を親(チャートパネル)に通知
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -7482,6 +6310,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
         // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
         allowZeroMenu: _dayModes[i] == 'TPN' && i >= 6,
+        // refeeding時はAA補充込みの総kcalがその日のcapを超えないようにする(安全優先)。
+        hardKcalCap: _refeedingTier != cr.RefeedingTier.none
+            ? _refeedCappedKcal(i, 1e9)
+            : null,
+        aaSupplementBelowFrac: 0.90, // 目標90%未満(=10%以上へこむ)時だけAA補充
+        aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
       );
       dayPlans.add(plan);
       if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
@@ -7584,6 +6418,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               final picked = await _quickPickDate(context, _startDate);
                               if (picked != null) {
                                 setState(() => _startDate = picked);
+                                _saveConfig();
                                 widget.onSettingsChanged?.call();
                               }
                             },
@@ -7626,16 +6461,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               ),
                               // 実到達日(係数上限で設定値と乖離しうるため並記)
                               Builder(builder: (_) {
-                                final effFull = ce.effectiveFullDay(
-                                  feedingWeightKg: NutritionCalculator
-                                      .targetEnergyResult(widget.current)
-                                      .feedingWeightKg,
-                                  realFullKcal: NutritionCalculator.targetEnergy(
-                                      widget.current),
-                                  fullAchieveDay: _rampDays,
-                                  kcal20UntilDay: _kcalStep20Day,
-                                  kcal25UntilDay: _kcalStep25Day,
-                                );
+                                final effFull = _effectiveFullDay();
                                 return Padding(
                                   padding: const EdgeInsets.only(left: 6),
                                   child: Text('実到達 Day$effFull',
@@ -7670,10 +6496,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                       .map((d) => DropdownMenuItem(
                                           value: d, child: Text('$d')))
                                       .toList(),
-                                  onChanged: (v) => setState(() {
-                                    _enStartDay = v ?? _enStartDay;
-                                    _rebuildDays();
-                                  }),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _enStartDay = v ?? _enStartDay;
+                                      _rebuildDays();
+                                    });
+                                    _saveConfig();
+                                    widget.onSettingsChanged?.call();
+                                  },
                                 ),
                               ),
                             ],
@@ -7705,10 +6535,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                         DropdownMenuItem<int?>(
                                             value: d, child: Text('$d'))),
                                   ],
-                                  onChanged: (v) => setState(() {
-                                    _oralRehabStartDay = v;
-                                    _rebuildDays(); // 食事フェーズを再生成
-                                  }),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _oralRehabStartDay = v;
+                                      _rebuildDays(); // 食事フェーズを再生成
+                                    });
+                                    _saveConfig();
+                                    widget.onSettingsChanged?.call();
+                                  },
                                 ),
                               ),
                             ],
@@ -7958,6 +6792,17 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return (kcal: cappedKcal, prot: realProt * protFrac);
   }
 
+  /// full nutrition 実到達日(1始まり)。等差ランプ・係数上限に加え **refeeding cap も込み**で
+  /// 各日目標kcalが realFull に到達する最初の日。設定上のfull達成(傾き終点)とは別概念。
+  int _effectiveFullDay() {
+    final realFull = NutritionCalculator.targetEnergy(widget.current);
+    if (realFull <= 0) return _rampDays;
+    for (int d = 1; d <= 90; d++) {
+      if (_acutePhaseTarget(d - 1).kcal >= realFull * 0.995) return d;
+    }
+    return 90;
+  }
+
   /// 1日プランの電解質・微量元素・ビタミンUL超過アラート。
   List<cm.MicroAlert> _dayMicroAlerts(DesignPlan p) {
     final totals = cm.aggregateMicro(p.items.map((it) {
@@ -8061,6 +6906,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
               // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
               allowZeroMenu: _dayModes[i] == 'TPN' && i >= 6,
+              // refeeding時はAA補充込みの総kcalがその日のcapを超えないようにする(安全優先)。
+              hardKcalCap: _refeedingTier != cr.RefeedingTier.none
+                  ? _refeedCappedKcal(i, 1e9)
+                  : null,
+              aaSupplementBelowFrac: 0.90, // 目標90%未満時だけAA補充
+              aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
             );
       if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
       designPlans.add(p);
@@ -8209,15 +7060,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final admissionIdxClamped =
         (admissionIdx >= 0 && admissionIdx < n) ? admissionIdx : -1;
     final nutritionIdx = preDays;
-    // full nutrition実到達日(設定上のfull達成=傾き終点とは別。係数上限で遅れうる)。
-    final _fullDay = ce.effectiveFullDay(
-      feedingWeightKg:
-          NutritionCalculator.targetEnergyResult(widget.current).feedingWeightKg,
-      realFullKcal: NutritionCalculator.targetEnergy(widget.current),
-      fullAchieveDay: _rampDays,
-      kcal20UntilDay: _kcalStep20Day,
-      kcal25UntilDay: _kcalStep25Day,
-    );
+    // full nutrition実到達日(refeeding cap込み。設定上のfull達成=傾き終点とは別)。
+    final _fullDay = _effectiveFullDay();
     final fullIdx      = (preDays + _fullDay - 1).clamp(0, n - 1);
     final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
     final oralIdx      = (_oralRehabStartDay != null &&

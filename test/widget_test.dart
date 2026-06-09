@@ -22,7 +22,7 @@ void main() {
       expect(product.productType, '食品');
       expect(product.volumeMlString, '125 ml');
       expect(product.kcalString, '80 kcal');
-      expect(product.aminoString, '0.5 g AA');
+      expect(product.aminoString, 'AA 0.5 g');
     });
 
     test('旧プロトコルIDは新しい4段階IDへ移行される', () {
