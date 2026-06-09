@@ -105,6 +105,7 @@ class ScoreWeights {
   final double productCount; // 製剤数（処方の複雑さ）
   final double changeMagnitude; // 元処方からの変更度
   final double fluidPerKg; // IN(ml/kg/day)（小さいほど良い＝最小化圧）
+  final Map<String, double> alertWeights; // alert code別の重み(未指定はwarning)
 
   const ScoreWeights({
     required this.warning,
@@ -113,7 +114,11 @@ class ScoreWeights {
     required this.productCount,
     required this.changeMagnitude,
     required this.fluidPerKg,
+    this.alertWeights = const {},
   });
+
+  /// alert code の重み（未登録は warning）。
+  double weightForAlert(String code) => alertWeights[code] ?? warning;
 
   factory ScoreWeights.standard() => const ScoreWeights(
         warning: 1000,
@@ -122,5 +127,21 @@ class ScoreWeights {
         productCount: 10,
         changeMagnitude: 2,
         fluidPerKg: 1,
+        alertWeights: {
+          // error相当(本来feasibleで除外されるが保険として高く)
+          'gir_limit': 10000,
+          'contraindicated_product': 10000,
+          'lipid_day_limit': 10000,
+          'fluid_max': 10000,
+          // warning
+          'thiamine_needed': 2000,
+          'na_excess': 1500,
+          'conflict_alert': 1300,
+          'protein_balance': 1200,
+          'protein_condition': 1200,
+          'mn_excess': 1100,
+          'lipid_day_target': 900,
+          'kcal_dev': 800,
+        },
       );
 }

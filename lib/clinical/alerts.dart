@@ -87,6 +87,20 @@ class EvalContext {
   final double lipidHours; // 脂質投与時間（既定24h）
   final double? npcN; // 算出済み NPC/N 比
   final double? naMEq; // 合計 Na mEq/day
+  // 電解質（repair/病態制約用。null=未算出）
+  final double? kMEq;
+  final double? pMmol;
+  final double? mgMEq;
+  // ビタミン・微量元素（repair用。null=未算出）
+  final double? vitaminB1Mg;
+  final double? mnUmol;
+  final double? cuUmol;
+  final double? znUmol;
+  final double? seUmol;
+  // 状態フラグ（repair用）
+  final bool hasGlucoseLoad; // 糖質(静脈ブドウ糖/PN/EN)投与あり
+  final bool refeedingRisk;
+  final bool fastingDaysGE5; // 不十分摂取≥5日
   final bool peripheralLine; // 末梢ライン投与か
 
   final List<EvalProduct> products;
@@ -105,6 +119,17 @@ class EvalContext {
     this.lipidHours = 24,
     this.npcN,
     this.naMEq,
+    this.kMEq,
+    this.pMmol,
+    this.mgMEq,
+    this.vitaminB1Mg,
+    this.mnUmol,
+    this.cuUmol,
+    this.znUmol,
+    this.seUmol,
+    this.hasGlucoseLoad = false,
+    this.refeedingRisk = false,
+    this.fastingDaysGE5 = false,
     this.peripheralLine = false,
     this.products = const [],
     this.changeMagnitude = 0,
@@ -309,6 +334,44 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
         message: 'タンパク質バランスが目標域外: ${parts.join(' / ')}'));
   }
 
+  // 病態タンパク範囲: 病態が範囲を持つとき、AA g/kgが範囲外なら警告。
+  //   複数病態で範囲が重ならない(衝突)なら自動決定せず conflict_alert(医師判断)。
+  final pRanges = proteinRangesFor(c.conditionTags);
+  if (pRanges.isNotEmpty) {
+    final inter = intersectedProteinRange(c.conditionTags);
+    if (inter == null) {
+      out.add(NutritionAlert(
+          code: 'conflict_alert',
+          severity: AlertSeverity.warning,
+          unit: 'g/kg',
+          message:
+              'タンパク目標が病態間で衝突（${pRanges.map((r) => '${r.id} ${r.proteinMinPerKg}–${r.proteinMaxPerKg}').join(' / ')}）。自動決定せず現在値を維持'));
+    } else if (c.aaPerKg < inter.min - 1e-9 || c.aaPerKg > inter.max + 1e-9) {
+      final over = c.aaPerKg > inter.max;
+      out.add(NutritionAlert(
+          code: 'protein_condition',
+          severity: AlertSeverity.warning,
+          value: c.aaPerKg,
+          target: over ? inter.max : inter.min,
+          unit: 'g/kg',
+          message:
+              'AA ${c.aaPerKg.toStringAsFixed(2)} g/kg が病態推奨 ${inter.min}–${inter.max} g/kg を${over ? '超過' : '下回る'}'));
+    }
+  }
+
+  // Mn蓄積注意（肝不全）。胆汁うっ滞×Mn製剤は別途 hard error。
+  if (c.mnUmol != null &&
+      c.conditionTags.contains('liver') &&
+      c.mnUmol! > 20 + 1e-9) {
+    out.add(NutritionAlert(
+        code: 'mn_excess',
+        severity: AlertSeverity.warning,
+        value: c.mnUmol,
+        unit: 'μmol/day',
+        message:
+            'Mn ${c.mnUmol!.toStringAsFixed(0)} μmol/日。肝不全では蓄積し神経毒性。Mn-free製剤を検討'));
+  }
+
   // 脂質 1日量の目標上限（>1.0 g/kg/day）
   if (c.lipidGramPerDay != null) {
     final lpk =
@@ -338,6 +401,22 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
             'Na ${c.naMEq!.toStringAsFixed(0)} mEq/日（食塩 ${(c.naMEq! * 0.05844).toStringAsFixed(1)} g）が目標6g（102.7 mEq）超過'));
   }
 
+  // B1(チアミン): 不十分摂取≥5日 かつ 糖質負荷 で 合計B1<200mg なら不足warning。
+  //   Wernicke/refeeding予防。repairの thiamine_needed アクションが逆引きで補充する。
+  if (c.fastingDaysGE5 && c.hasGlucoseLoad) {
+    final b1 = c.vitaminB1Mg ?? 0;
+    if (b1 < 200) {
+      out.add(NutritionAlert(
+          code: 'thiamine_needed',
+          severity: AlertSeverity.warning,
+          value: b1,
+          target: 200,
+          unit: 'mg',
+          message:
+              'ビタミンB1 ${b1.toStringAsFixed(0)}mg（糖負荷前〜10日は200–300mg推奨）。Wernicke/refeeding予防に高用量B1を追加'));
+    }
+  }
+
   return out;
 }
 
@@ -349,11 +428,17 @@ bool isFeasible(List<NutritionAlert> alerts) =>
 /// = warning数×W + kcal%ズレ×W + protein%ズレ×W + 製剤数×W + 変更幅×W + IN(ml/kg)×W
 double softScore(EvalContext c, ConstraintSet cs, ScoreWeights weights) {
   final alerts = evaluate(c, cs);
-  final warnings = alerts.where((a) => a.severity == AlertSeverity.warning).length;
+  // warning は alert code 別の重みで加点（na_excess等を重く）。
+  double warnPenalty = 0;
+  for (final a in alerts) {
+    if (a.severity == AlertSeverity.warning) {
+      warnPenalty += weights.weightForAlert(a.code);
+    }
+  }
   final kcalDev = _absPct(c.totalKcal, c.targetKcal);
   final protDev = _absPct(c.totalProteinG, c.targetProteinG);
   final fluidPerKg = c.weightKg > 0 ? c.totalVolumeMl / c.weightKg : 0;
-  return weights.warning * warnings +
+  return warnPenalty +
       weights.kcalDevPct * kcalDev +
       weights.proteinDevPct * protDev +
       weights.productCount * c.products.length +

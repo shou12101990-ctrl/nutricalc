@@ -22,6 +22,8 @@ export 'clinical/nutrition_calculator.dart';
 // アラート/リペアエンジン（評価＋スコア）。単一プレフィックス ae にまとめる。
 import 'clinical/alerts.dart' as ae;
 import 'clinical/constraints.dart' as ae;
+// Repair Loop(型・アクション・engine)。EvalContext は ae.EvalContext を共用。
+import 'clinical/repair.dart';
 
 part 'widgets.dart';
 part 'state.dart';

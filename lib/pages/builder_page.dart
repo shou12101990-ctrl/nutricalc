@@ -629,12 +629,33 @@ class _BuilderPageState extends State<BuilderPage>
       final v = (agg.totalKcal - prot * 4) / n;
       if (v.isFinite) npcN = v;
     }
+    double m(Map? mp, String key) => (mp?[key] as num?)?.toDouble() ?? 0;
     final products = <ae.EvalProduct>[];
+    double na = 0, kEl = 0, pMmol = 0, mg = 0;
+    double b1 = 0, mn = 0, cu = 0, zn = 0, se = 0;
+    double ivGlu = 0, carbTot = 0;
     for (final item in current.regimenItems) {
-      if (item.units <= 0) continue;
+      final units =
+          item.units > 0 ? item.units : (item.morning + item.noon + item.evening);
+      if (units <= 0) continue;
       final p = widget.state.catalog.byId(item.productId);
       if (p == null) continue;
+      final u = units.toDouble();
       products.add(ae.EvalProduct(name: p.name, mnAmountUmol: p.mnAmount));
+      final el = p.micro?['elec'] as Map?;
+      na += m(el, 'Na') * u;
+      kEl += m(el, 'K') * u;
+      pMmol += m(el, 'P') * u;
+      mg += m(el, 'Mg') * u;
+      final tr = p.micro?['trace'] as Map?;
+      mn += m(tr, 'Mn') * u;
+      cu += m(tr, 'Cu') * u;
+      zn += m(tr, 'Zn') * u;
+      se += m(tr, 'Se') * u;
+      b1 += m(p.micro?['vit'] as Map?, 'B1') * u;
+      final carb = (p.carbBase ?? 0) * u;
+      carbTot += carb;
+      if (!(p.inEnTab || p.isFood)) ivGlu += carb;
     }
     return ae.EvalContext(
       weightKg: current.weightKg,
@@ -644,8 +665,20 @@ class _BuilderPageState extends State<BuilderPage>
       totalKcal: agg.totalKcal,
       totalProteinG: agg.totalProteinG,
       totalVolumeMl: agg.totalVolumeMl,
+      ivGlucoseGramPerDay: ivGlu,
       lipidGramPerDay: agg.totalFatG,
       npcN: npcN,
+      naMEq: na,
+      kMEq: kEl,
+      pMmol: pMmol,
+      mgMEq: mg,
+      vitaminB1Mg: b1,
+      mnUmol: mn,
+      cuUmol: cu,
+      znUmol: zn,
+      seUmol: se,
+      hasGlucoseLoad: carbTot > 0,
+      fastingDaysGE5: _fastingDaysOf(current) >= 5,
       products: products,
     );
   }
@@ -745,129 +778,223 @@ class _BuilderPageState extends State<BuilderPage>
     );
   }
 
-  // ─────────── リペアループ（自動修正） ───────────
-  // 個別選択の処方を、評価エンジン(ae.evaluate/softScore)で
-  // 「禁忌(error)を消し、softScoreを最小化」する方向へ本数を山登り調整して提案する。
-  // 食事タイミング(EN朝昼夕)の製剤は触らず、本数(units)ベースの製剤のみ調整する。
+  // ─────────── リペアループ（自動修正・説明可能） ───────────
+  // alerts.evaluate のアラートから RepairAction を逆引きし、feasible案を softScore で
+  // ランキングして提案する(repair engine)。食事タイミング製剤は触らない。
 
-  RegimenItem _copyItem(RegimenItem it) => RegimenItem(
-        productId: it.productId,
-        units: it.units,
-        morning: it.morning,
-        noon: it.noon,
-        evening: it.evening,
-        partialMl: it.partialMl,
+  double _b1mgOf(Product? p) =>
+      ((p?.micro?['vit'] as Map?)?['B1'] as num?)?.toDouble() ?? 0;
+
+  Product? _highDoseB1Product() {
+    final all = widget.state.catalog
+        .byCategory('ビタミン')
+        .where((p) => _b1mgOf(p) >= 50)
+        .toList();
+    if (all.isEmpty) return null;
+    final adopted = all.where((p) => widget.state.isAdopted(p.id)).toList();
+    final pool = adopted.isNotEmpty ? adopted : all;
+    pool.sort((a, b) {
+      final av = a.name.contains('ビタメジン') ? 1 : 0;
+      final bv = b.name.contains('ビタメジン') ? 1 : 0;
+      if (av != bv) return bv - av;
+      return _b1mgOf(b).compareTo(_b1mgOf(a));
+    });
+    return pool.first;
+  }
+
+  Product? _mnFreeTraceProduct() {
+    final all = widget.state.catalog
+        .byCategory('微量元素')
+        .where((p) => p.isMnFreeTrace)
+        .toList();
+    if (all.isEmpty) return null;
+    final adopted = all.where((p) => widget.state.isAdopted(p.id)).toList();
+    return (adopted.isNotEmpty ? adopted : all).first;
+  }
+
+  int _fastingDaysOf(PatientCase c) {
+    final f = c.fastingDate;
+    final fd = f != null ? DateTime.tryParse(f) : null;
+    if (fd == null) return 0;
+    final d = DateTime.now().difference(fd).inDays;
+    return d < 0 ? 0 : d;
+  }
+
+  /// 現regimen→PlanState(本数ベース。食事タイミングは合計pacを本数化)。
+  PlanState _planStateFromRegimen(PatientCase current) {
+    final items = <PlanItem>[];
+    for (final it in current.regimenItems) {
+      final p = widget.state.catalog.byId(it.productId);
+      if (p == null) continue;
+      final units =
+          it.units > 0 ? it.units : (it.morning + it.noon + it.evening);
+      if (units <= 0) continue;
+      items.add(PlanItem(p, units));
+    }
+    return PlanState(items);
+  }
+
+  ae.EvalContext _evalOfPlan(PatientCase current, PlanState p) =>
+      computeEvalContext(
+        p,
+        weightKg: current.weightKg,
+        conditionTags: current.conditionTags.toSet(),
+        targetKcal: NutritionCalculator.targetEnergy(current),
+        proteinGoalPerKg: current.proteinGoalPerKg,
+        fastingDaysGE5: _fastingDaysOf(current) >= 5,
       );
 
-  /// 候補regimenの (error件数, softScore)。current.regimenItems を一時差し替えて評価し復元する。
-  (int, double) _repairScore(PatientCase current, List<RegimenItem> items) {
-    final saved = current.regimenItems.map(_copyItem).toList();
-    current.regimenItems
-      ..clear()
-      ..addAll(items);
-    final agg = _aggregateWithRates(current);
-    final ctx = _evalContextFor(current, agg);
-    final cs = ae.ConstraintSet.standard();
-    final errs = ae.evaluate(ctx, cs).where((a) => a.isError).length;
-    final score = ae.softScore(ctx, cs, ae.ScoreWeights.standard());
-    current.regimenItems
-      ..clear()
-      ..addAll(saved);
-    return (errs, score);
-  }
-
-  /// 山登り法: 各製剤の本数を±1して、error優先→softScore最小の隣接解へ移動。極小で停止。
-  List<RegimenItem> _repairSearch(PatientCase current) {
-    var best = current.regimenItems.map(_copyItem).toList();
-    var (bestErr, bestScore) = _repairScore(current, best);
-    for (var iter = 0; iter < 80; iter++) {
-      List<RegimenItem>? move;
-      var mErr = bestErr;
-      var mScore = bestScore;
-      for (var i = 0; i < best.length; i++) {
-        if (best[i].hasMealTiming) continue; // 食事タイミングは維持
-        for (final d in const [1, -1]) {
-          final nu = best[i].units + d;
-          if (nu < 0 || nu > 30) continue;
-          final cand = best.map(_copyItem).toList();
-          cand[i].units = nu;
-          final filtered =
-              cand.where((it) => it.units > 0 || it.hasMealTiming).toList();
-          final (e, s) = _repairScore(current, filtered);
-          if (e < mErr || (e == mErr && s < mScore - 1e-6)) {
-            mErr = e;
-            mScore = s;
-            move = filtered;
-          }
-        }
-      }
-      if (move == null) break; // 局所最適
-      best = move;
-      bestErr = mErr;
-      bestScore = mScore;
-    }
-    return best;
-  }
-
-  /// [リペア]ボタン: 修正案を計算し、変更内容を提示。採用で処方に反映。
-  Future<void> _runRepair(PatientCase current) async {
-    final before = current.regimenItems.map(_copyItem).toList();
-    final (beforeErr, beforeScore) = _repairScore(current, before);
-    final repaired = _repairSearch(current);
-    final (afterErr, afterScore) = _repairScore(current, repaired);
-
-    final beforeUnits = {for (final it in before) it.productId: it.units};
-    final afterUnits = {for (final it in repaired) it.productId: it.units};
-    final changes = <String>[];
-    for (final id in {...beforeUnits.keys, ...afterUnits.keys}) {
-      final b = beforeUnits[id] ?? 0;
-      final a = afterUnits[id] ?? 0;
+  /// 補正案を差分のみ regimen へ反映（食事タイミング製剤は不変）。
+  Future<void> _applyRepair(
+      PatientCase current, PlanState before, PlanState after) async {
+    final beforeU = {for (final i in before.items) i.product.id: i.units};
+    final afterU = {for (final i in after.items) i.product.id: i.units};
+    for (final id in {...beforeU.keys, ...afterU.keys}) {
+      final b = beforeU[id] ?? 0;
+      final a = afterU[id] ?? 0;
       if (a == b) continue;
-      final name = widget.state.catalog.byId(id)?.name ?? id;
-      changes.add('$name: $b → $a 本');
+      final idx = current.regimenItems.indexWhere((it) => it.productId == id);
+      if (a == 0) {
+        if (idx >= 0) current.regimenItems.removeAt(idx);
+      } else if (idx >= 0) {
+        current.regimenItems[idx].units = a;
+      } else {
+        current.regimenItems.add(RegimenItem(productId: id, units: a));
+      }
     }
+    await widget.state.persist();
+    if (mounted) setState(() {});
+  }
 
-    if (changes.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('これ以上は改善できませんでした（本数調整では修正不可）')));
+  Widget _repairChangeTile(int n, RepairChange c) {
+    final color = c.kind == RepairChangeKind.add
+        ? Colors.green.shade700
+        : c.kind == RepairChangeKind.replace
+            ? Colors.amber.shade800
+            : Colors.indigo.shade600;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(8)),
+            child: Text(c.label,
+                style: const TextStyle(fontSize: 10, color: Colors.white)),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text('$n. ${c.reason}',
+                style: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, top: 2),
+          child: Text('${c.beforeText} → ${c.afterText}',
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700)),
+        ),
+      ],
+    );
+  }
+
+  /// [リペア]ボタン: エンジンで補正案を作り、差分・残存警告を提示。採用で反映。
+  Future<void> _runRepair(PatientCase current) async {
+    final original = _planStateFromRegimen(current);
+    final actions = buildRepairActions(
+      b1Product: _highDoseB1Product(),
+      mnFreeProduct: _mnFreeTraceProduct(),
+    );
+    final outcome = repair(
+      original,
+      actions: actions,
+      evalOf: (p) => _evalOfPlan(current, p),
+      constraints: ae.ConstraintSet.standard(),
+      weights: ae.ScoreWeights.standard(),
+    );
+    if (!mounted) return;
+    if (!outcome.hasRepair) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('自動補正できる項目はありませんでした')));
       return;
     }
-
-    if (!mounted) return;
+    final best = outcome.best!;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('リペア提案'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('禁忌(error): $beforeErr → $afterErr 件\n'
-                'スコア: ${beforeScore.toStringAsFixed(0)} → ${afterScore.toStringAsFixed(0)}（小さいほど良い）'),
-            const SizedBox(height: 10),
-            const Text('変更内容（本数）',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            for (final c in changes) Text('・$c'),
-          ],
+        title: Text('自動補正 ${best.changes.length}件'),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < best.changes.length; i++) ...[
+                  _repairChangeTile(i + 1, best.changes[i]),
+                  const SizedBox(height: 8),
+                ],
+                if (outcome.unresolved.isNotEmpty) ...[
+                  const Divider(),
+                  Text('残存（自動解決できず）',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade700,
+                          fontSize: 12.5)),
+                  for (final a in outcome.unresolved)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text('・${a.message}',
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              color: a.severity == ae.AlertSeverity.error
+                                  ? Colors.red.shade700
+                                  : Colors.orange.shade800)),
+                    ),
+                ],
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('キャンセル')),
+              child: const Text('却下（元のまま）')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('採用')),
+              child: const Text('この補正を採用')),
         ],
       ),
     );
-    if (ok != true) return;
-    current.regimenItems
-      ..clear()
-      ..addAll(repaired);
-    await widget.state.persist();
-    if (mounted) setState(() {});
+    if (ok == true) {
+      // 元入力スナップショット(食事タイミング・部分使用も保持)→ 採用後に「元に戻す」可能
+      final snapshot = current.regimenItems
+          .map((it) => RegimenItem(
+                productId: it.productId,
+                units: it.units,
+                morning: it.morning,
+                noon: it.noon,
+                evening: it.evening,
+                partialMl: it.partialMl,
+              ))
+          .toList();
+      await _applyRepair(current, original, best.plan);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('自動補正を適用しました'),
+        action: SnackBarAction(
+          label: '元に戻す',
+          onPressed: () async {
+            current.regimenItems
+              ..clear()
+              ..addAll(snapshot);
+            await widget.state.persist();
+            if (mounted) setState(() {});
+          },
+        ),
+      ));
+    }
   }
 
   /// 病態タグに応じた処方サジェスト(💡)。タグ0個なら非表示。
