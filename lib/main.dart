@@ -4591,7 +4591,8 @@ class _NotePageState extends State<NotePage>
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        // カードを画面いっぱい(全幅)に揃える
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
