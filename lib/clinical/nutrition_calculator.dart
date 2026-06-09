@@ -301,6 +301,7 @@ class NutritionCalculator {
     double minEnKcal = 0, // 単調増加制約: 前日のEN kcal以上を要求
     List<Product> mealProducts = const [], // 食事(濃厚流動食/栄養サポート)
     int mealPac = 0, // 食事 朝昼夕あたりpac数(1..3, 経口リハ期に使用)
+    int mealSlots = 3, // 経口リハ移行: 経口にするスロット数(1..3)。残りはEN。既定3=全て経口
     double? girLimitMgKgMin, // 自動設計: GIR上限(糖質制限病態は4, 既定5)
     double? maxLipidGramPerKgDay, // 脂質再配分の上限
     bool allowZeroMenu = false, // ゼロmenu許可(PNのみ7日目以降・EN未開始時のみtrue)
@@ -396,22 +397,24 @@ class NutritionCalculator {
           proteinG: aaG * add));
     }
 
-    // 食事(経口リハ): 食事製剤を朝昼夕 mealPac本ずつ(=計3×mealPac本)投与。
-    //   ただしkcalが当日目標を超えない範囲にcap。不足分(kcal・タンパク)はPPNで補う。
+    // 食事(経口リハ): 経口スロット(mealSlots, 朝→昼→夕)に食事を mealPac本ずつ投与。
+    //   移行期は残り(3-mealSlots)スロットをENで補い(1スロット2pac相当)、不足はPPN/PNで補う。
+    //   kcalが当日目標を超えない範囲にcapする。
     if (mode == '食事') {
       final meals = mealProducts
           .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
           .toList();
       final items = <DesignItem>[];
+      final oralSlots = mealSlots.clamp(0, 3);
       double mealKcal = 0, mealProt = 0;
-      if (meals.isNotEmpty && mealPac > 0) {
+      if (meals.isNotEmpty && mealPac > 0 && oralSlots > 0) {
         // 主食 = kcal/pacが最大の食事製剤(高栄養の濃厚流動食)を一貫採用
         final sorted = [...meals]
           ..sort((a, b) => (b.kcal ?? 0).compareTo(a.kcal ?? 0));
         final p = sorted.first;
         final pk = (p.kcal ?? 0).toDouble();
         if (pk > 0) {
-          final capPac = 3 * mealPac; // 朝昼夕 × pac数(1→3で漸増)
+          final capPac = oralSlots * mealPac; // 経口スロット数 × pac数
           // kcalが当日目標を超えない範囲にcap
           final byKcal = (dayTargetKcal / pk).floor();
           final pac = (capPac < byKcal ? capPac : byKcal).clamp(0, capPac);
@@ -427,11 +430,43 @@ class NutritionCalculator {
           }
         }
       }
+      // 経口リハ移行期: 非経口スロット(3-oralSlots)をENで埋める(1スロット2pac相当)。
+      //   meal+EN が当日目標kcalを超えない範囲にcap。
+      double enKcalAdded = 0, enProtAdded = 0;
+      final enSlots = (3 - oralSlots).clamp(0, 3);
+      final ens = enProducts
+          .where((p) => (p.kcal ?? 0) > 0 && (p.volumeMl ?? 0) > 0)
+          .toList();
+      if (enSlots > 0 && ens.isNotEmpty) {
+        final enP =
+            ([...ens]..sort((a, b) => (b.kcal ?? 0).compareTo(a.kcal ?? 0)))
+                .first;
+        final epk = (enP.kcal ?? 0).toDouble();
+        if (epk > 0) {
+          final wantPac = enSlots * 2; // 1スロット2pac(確立したEN bolus相当)
+          final remainKcal =
+              (dayTargetKcal - mealKcal).clamp(0, double.infinity).toDouble();
+          final byKcal = (remainKcal / epk).floor();
+          final enPac = (wantPac < byKcal ? wantPac : byKcal).clamp(0, wantPac);
+          if (enPac > 0) {
+            enKcalAdded = epk * enPac;
+            enProtAdded = (enP.aminoAcidG ?? 0) * enPac;
+            items.add(DesignItem(
+                name: enP.name,
+                units: enPac,
+                volumeMl: (enP.volumeMl ?? 0) * enPac,
+                kcal: enKcalAdded,
+                proteinG: enProtAdded));
+          }
+        }
+      }
       // 不足分(kcal・タンパク)をPPN製剤で補う
-      final restKcal =
-          (dayTargetKcal - mealKcal).clamp(0, double.infinity).toDouble();
-      final restProt =
-          (dayTargetProt - mealProt).clamp(0, double.infinity).toDouble();
+      final restKcal = (dayTargetKcal - mealKcal - enKcalAdded)
+          .clamp(0, double.infinity)
+          .toDouble();
+      final restProt = (dayTargetProt - mealProt - enProtAdded)
+          .clamp(0, double.infinity)
+          .toDouble();
       if (restKcal > 80 && ppnProducts.isNotEmpty) {
         final sub = _designWithBase(
             ppnProducts, ppnProducts, restKcal, restProt, 'PPN',

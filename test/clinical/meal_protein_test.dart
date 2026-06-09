@@ -185,4 +185,56 @@ void main() {
           reason: '許容内(≥85%)なのに補充された');
     });
   });
+
+  group('経口リハ移行ラダー(mealSlots): 非経口スロットはENで埋める', () {
+    Product en() => Product.fromMap({
+          'id': 'en-x',
+          'category': 'EN',
+          'name': '移行EN',
+          'content': '半消化態',
+          'product_type': '食品',
+          'volume_ml': 200,
+          'kcal': 300,
+          'amino_acid_g': 12,
+          'nitrogen_g': 1.9,
+          'npc_n_ratio': 130,
+        });
+
+    test('mealSlots=1: 経口食事 + 残り2スロットのEN が両方入る', () {
+      final plan = NutritionCalculator.designDay(
+        mode: '食事',
+        dayTargetKcal: 1800,
+        dayTargetProt: 90,
+        weightKg: 60,
+        enProducts: [en()],
+        tpnProducts: const [],
+        ppnProducts: ppns,
+        aminoProduct: amino,
+        mealProducts: meals,
+        mealPac: 1,
+        mealSlots: 1, // 朝1pac, 昼夕EN
+      );
+      expect(plan.items.any((i) => meals.any((m) => m.name == i.name)), isTrue,
+          reason: '経口食事が含まれない');
+      expect(plan.items.any((i) => i.name == '移行EN'), isTrue,
+          reason: '非経口スロットのENが含まれない');
+    });
+
+    test('mealSlots=3(既定): 全経口でENは入らない', () {
+      final plan = NutritionCalculator.designDay(
+        mode: '食事',
+        dayTargetKcal: 1800,
+        dayTargetProt: 90,
+        weightKg: 60,
+        enProducts: [en()],
+        tpnProducts: const [],
+        ppnProducts: ppns,
+        aminoProduct: amino,
+        mealProducts: meals,
+        mealPac: 3, // mealSlots 既定3
+      );
+      expect(plan.items.any((i) => i.name == '移行EN'), isFalse,
+          reason: '全経口なのにENが入った');
+    });
+  });
 }
