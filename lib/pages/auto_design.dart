@@ -295,6 +295,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         carbPresent: cb.carb > 0,
         currentB1Mg: cb.b1,
         b1PerUnitMg: _b1Of(b1Prod),
+        refeedingRisk: _refeedingTier != cr.RefeedingTier.none,
+        alcoholUse: widget.current.conditionTags.contains('alcohol'),
       );
       if (units > 0) {
         plan = DesignPlan(label: plan.label, enKcal: plan.enKcal, items: [

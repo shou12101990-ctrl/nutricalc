@@ -226,18 +226,22 @@ void main() {
       expect(naMEq, lessThan(200));
     });
 
-    test('シナリオ: 腎保存期+重症 → 蛋白衝突は conflict_alert(自動決定しない)', () {
+    test('シナリオ: 腎保存期+重症 → ESPEN腎GLで1.0→1.3に解決(conflictにしない)', () {
       final ctx = computeEvalContext(const PlanState([]),
           weightKg: 60,
           conditionTags: {'renal', 'critical'},
           targetKcal: 1500,
           proteinGoalPerKg: 1.2);
-      expect(evaluate(ctx, cs).any((a) => a.code == 'conflict_alert'), isTrue);
+      final alerts = evaluate(ctx, cs);
+      // マトリクスが衝突を解決するため conflict_alert は出さない
+      expect(alerts.any((a) => a.code == 'conflict_alert'), isFalse);
+      // 0蛋白(空プラン)なので推奨1.0–1.3を下回り protein_condition
+      expect(alerts.any((a) => a.code == 'protein_condition'), isTrue);
     });
 
     test('シナリオ: CRRT+Seなし → セレン補充で se_needed 解消', () {
       final seProd = mk('アセレンド注', '微量元素', {
-        'trace': {'Se': 100}
+        'trace': {'Se': 1.27} // 100µg/本(マスタ単位μmol)
       });
       final actions = buildRepairActions(seProduct: seProd);
       EvalContext evalOf(PlanState p) => computeEvalContext(p,

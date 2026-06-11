@@ -83,6 +83,7 @@ class EvalContext {
   final double totalProteinG;
   final double totalVolumeMl;
   final double? ivGlucoseGramPerDay; // 静脈ブドウ糖のみ（GIR用）。null=未算出
+  final double? carbGramPerDay; // 炭水化物 総量(PN+EN+食事) g/day。null=未算出
   final double? lipidGramPerDay; // 脂質 g/day。null=未算出
   final double lipidHours; // 脂質投与時間（既定24h）
   final double? npcN; // 算出済み NPC/N 比
@@ -115,6 +116,7 @@ class EvalContext {
     required this.totalProteinG,
     required this.totalVolumeMl,
     this.ivGlucoseGramPerDay,
+    this.carbGramPerDay,
     this.lipidGramPerDay,
     this.lipidHours = 24,
     this.npcN,
@@ -151,9 +153,13 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
 
   // ─────────── Hard constraints（error＝足切り） ───────────
 
-  // GIR（糖質制限病態は上限4）
+  // 糖質負荷 hard limit（ESPEN統合: PNグルコース or EN炭水化物 ≤5mg/kg/min=7.2g/kg/day）。
+  //   IVブドウ糖のGIR(糖質制限病態は4)を一次判定とし、超過なら gir_limit。
+  //   IVが上限内でも EN込み総炭水化物が7.2g/kg/day超なら carb_limit。
+  //   同一の糖質過多で二重エラーにしない(gir_limit優先・統合シナリオ)。
   final girLimit =
       glucoseRestrict ? cs.girRestrictMgKgMin : cs.girLimitMgKgMin;
+  var girFired = false;
   if (c.ivGlucoseGramPerDay == null) {
     out.add(const NutritionAlert(
         code: 'gir_limit',
@@ -164,6 +170,7 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
   } else {
     final g = gir(glucoseGramPerDay: c.ivGlucoseGramPerDay!, weightKg: w);
     if (g > girLimit + 1e-9) {
+      girFired = true;
       out.add(NutritionAlert(
           code: 'gir_limit',
           severity: AlertSeverity.error,
@@ -173,6 +180,19 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
           message:
               'GIR ${g.toStringAsFixed(1)} が上限 ${girLimit.toStringAsFixed(0)} mg/kg/min を超過'
               '${glucoseRestrict ? '（糖質制限病態）' : ''}'));
+    }
+  }
+  if (!girFired && c.carbGramPerDay != null && w > 0) {
+    final cgk = c.carbGramPerDay! / w;
+    if (cgk > cs.carbMaxGKgD + 1e-9) {
+      out.add(NutritionAlert(
+          code: 'carb_limit',
+          severity: AlertSeverity.error,
+          value: cgk,
+          limit: cs.carbMaxGKgD,
+          unit: 'g/kg/day',
+          message:
+              '炭水化物 ${cgk.toStringAsFixed(1)} が上限 ${cs.carbMaxGKgD} g/kg/day（5mg/kg/min相当・EN込み）を超過'));
     }
   }
 
@@ -334,29 +354,38 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
         message: 'タンパク質バランスが目標域外: ${parts.join(' / ')}'));
   }
 
-  // 病態タンパク範囲: 病態が範囲を持つとき、AA g/kgが範囲外なら警告。
-  //   複数病態で範囲が重ならない(衝突)なら自動決定せず conflict_alert(医師判断)。
-  final pRanges = proteinRangesFor(c.conditionTags);
-  if (pRanges.isNotEmpty) {
-    final inter = intersectedProteinRange(c.conditionTags);
-    if (inter == null) {
+  // 病態タンパク範囲（腎/AKI/KRT/急性病態はESPEN腎GLマトリクスを最優先）。
+  //   範囲外なら protein_condition。非腎の組合せで範囲が重ならなければ conflict_alert(医師判断)。
+  final rt = renalProteinTarget(c.conditionTags);
+  if (rt != null || proteinRangesFor(c.conditionTags).isNotEmpty) {
+    final er = effectiveProteinRange(c.conditionTags);
+    if (er == null) {
       out.add(NutritionAlert(
           code: 'conflict_alert',
           severity: AlertSeverity.warning,
           unit: 'g/kg',
-          message:
-              'タンパク目標が病態間で衝突（${pRanges.map((r) => '${r.id} ${r.proteinMinPerKg}–${r.proteinMaxPerKg}').join(' / ')}）。自動決定せず現在値を維持'));
-    } else if (c.aaPerKg < inter.min - 1e-9 || c.aaPerKg > inter.max + 1e-9) {
-      final over = c.aaPerKg > inter.max;
+          message: 'タンパク目標が病態間で衝突。自動決定せず現在値を維持'));
+    } else if (c.aaPerKg < er.min - 1e-9 || c.aaPerKg > er.max + 1e-9) {
+      final over = c.aaPerKg > er.max;
       out.add(NutritionAlert(
           code: 'protein_condition',
           severity: AlertSeverity.warning,
           value: c.aaPerKg,
-          target: over ? inter.max : inter.min,
+          target: over ? er.max : er.min,
           unit: 'g/kg',
           message:
-              'AA ${c.aaPerKg.toStringAsFixed(2)} g/kg が病態推奨 ${inter.min}–${inter.max} g/kg を${over ? '超過' : '下回る'}'));
+              'AA ${c.aaPerKg.toStringAsFixed(2)} g/kg が推奨 ${er.min}–${er.max} g/kg を${over ? '超過' : '下回る'}'
+              '${rt != null ? '（${rt.basis}）' : ''}'));
     }
+  }
+
+  // CKD低蛋白食の継続可否は医師判断（急性疾患・重症・大手術が入院理由なら継続しない）。
+  if (rt != null && rt.requiresReview) {
+    out.add(NutritionAlert(
+        code: 'protein_review',
+        severity: AlertSeverity.warning,
+        message:
+            '${rt.basis}: 低蛋白の継続可否は医師判断（急性疾患・重症・大手術が入院理由なら継続しない）'));
   }
 
   // Mn蓄積注意（肝不全）。胆汁うっ滞×Mn製剤は別途 hard error。
@@ -401,9 +430,12 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
             'Na ${c.naMEq!.toStringAsFixed(0)} mEq/日（食塩 ${(c.naMEq! * 0.05844).toStringAsFixed(1)} g）が目標6g（102.7 mEq）超過'));
   }
 
-  // B1(チアミン): 不十分摂取≥5日 かつ 糖質負荷 で 合計B1<200mg なら不足warning。
-  //   Wernicke/refeeding予防。repairの thiamine_needed アクションが逆引きで補充する。
-  if (c.fastingDaysGE5 && c.hasGlucoseLoad) {
+  // thiamine_gate: (refeedingリスク / 長期摂取不良≥5日 / 慢性アルコール) かつ
+  //   糖質(dextrose/feeding)負荷 で B1<200mg なら不足warning。
+  //   ASPEN: feeding/dextrose前に100mg→100mg/dayを5–7日以上 / ESPEN ICU: 100–300mg/day IV 3–4日。
+  final alcoholUse = c.conditionTags.contains('alcohol');
+  final thiamineGate = c.refeedingRisk || c.fastingDaysGE5 || alcoholUse;
+  if (thiamineGate && c.hasGlucoseLoad) {
     final b1 = c.vitaminB1Mg ?? 0;
     if (b1 < 200) {
       out.add(NutritionAlert(
@@ -413,34 +445,73 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
           target: 200,
           unit: 'mg',
           message:
-              'ビタミンB1 ${b1.toStringAsFixed(0)}mg（糖負荷前〜10日は200–300mg推奨）。Wernicke/refeeding予防に高用量B1を追加'));
+              'ビタミンB1 ${b1.toStringAsFixed(0)}mg。feeding/dextrose前〜同時に100mg, 以後100–300mg/dayを継続(ASPEN 5–7日以上/ESPEN 3–4日)。高用量B1を追加'));
+    }
+    // 急性欠乏/Wernicke疑い(アルコール・高度飢餓)は期間延長・高用量を医師判断で。
+    if (alcoholUse) {
+      out.add(const NutritionAlert(
+          code: 'thiamine_review',
+          severity: AlertSeverity.warning,
+          message:
+              'アルコール多飲/高度飢餓: Wernicke・急性B1欠乏が疑われる場合は期間延長・高用量(静注)を医師判断で検討'));
     }
   }
 
-  // Zn欠乏（高排出消化管瘻・大量下痢 / 創傷）: Zn喪失大。標準trace未満で補充候補。
-  if ((c.znUmol ?? 999) < 30 &&
+  // Zn欠乏（高排出消化管瘻 / 創傷 / 熱傷 / active CKRT=高優先）:
+  //   ESPEN PN標準 3–5 mg/day(=45.9–76.5 μmol)。標準下限未満で補充候補。
+  //   消化管損失では最大12 mg/day IV、熱傷は30–35 mg/day 2–3週。
+  if ((c.znUmol ?? 999) < 45.9 &&
       (c.conditionTags.contains('gi_loss') ||
-          c.conditionTags.contains('wound'))) {
+          c.conditionTags.contains('wound') ||
+          c.conditionTags.contains('burn') ||
+          c.conditionTags.contains('crrt'))) {
     out.add(NutritionAlert(
         code: 'zn_needed',
         severity: AlertSeverity.warning,
         value: c.znUmol,
-        target: 30,
+        target: 45.9, // 3 mg
         unit: 'μmol/day',
-        message: 'Zn不足。高排出消化管/創傷ではZn喪失・需要増。亜鉛(Zn)補充を検討'));
+        message:
+            'Zn不足(PN標準3–5mg/day未満)。高排出消化管/創傷ではZn喪失・需要増(消化管損失で最大12mg/day IV)。亜鉛補充を検討'));
   }
 
-  // Se欠乏（CRRT / 創傷）: 水溶性で透析喪失・需要増。
-  if ((c.seUmol ?? 999) < 30 &&
+  // Se欠乏（CRRT / 創傷）: ESPEN PN標準 60–100 μg/day(=0.76–1.27 μmol)。
+  //   血漿Se<0.4μmol/Lなら100μg/day開始、欠乏・高要求で最大200μg/day程度。
+  if ((c.seUmol ?? 999) < 0.76 &&
       (c.conditionTags.contains('crrt') ||
           c.conditionTags.contains('wound'))) {
     out.add(NutritionAlert(
         code: 'se_needed',
         severity: AlertSeverity.warning,
         value: c.seUmol,
-        target: 30,
+        target: 1.27, // 100 μg
         unit: 'μmol/day',
-        message: 'Se不足。CRRT/創傷ではSe喪失・需要増。セレン(Se)補充を検討'));
+        message:
+            'Se不足(PN標準60–100μg/day未満)。CRRT/創傷ではSe喪失・需要増(100μg/dayで開始, 最大200μg/day)。セレン補充を検討'));
+  }
+
+  // CKRT中の微量栄養素 obligation（active CKRTに紐づくmonitor/supplement義務）。
+  //   「2倍量」固定ではなく、標準MVI+traceをベースに想定喪失分を上乗せし採血でモニタ。
+  if (CkrtObligation.appliesTo(c.conditionTags)) {
+    out.add(NutritionAlert(
+        code: 'ckrt_obligation',
+        severity: AlertSeverity.info,
+        message:
+            'CKRT稼働中: 水溶性ビタミン・微量元素の喪失を想定。モニタ ${CkrtObligation.monitor.join('/')}。'
+            '${CkrtObligation.policy}(高優先: ${CkrtObligation.highPriority.join('/')})。'
+            '>${CkrtObligation.cuReviewAfterDays}日はCu欠乏に注意し血中銅測定。'
+            '終了: ${CkrtObligation.stopConditions.join(' / ')}'));
+  }
+
+  // グルタミン（熱傷>20%TBSA / 外傷ICU のみ。一般ICUはroutine追加しない）。
+  final glnRec = glutamineRecommendation(c.conditionTags);
+  if (glnRec != null) {
+    out.add(NutritionAlert(
+        code: 'glutamine_consider',
+        severity: AlertSeverity.info,
+        unit: 'g/kg/day',
+        message:
+            '${glnRec.basis}: ENグルタミン ${glnRec.minPerKg}–${glnRec.maxPerKg} g/kg/day を${glnRec.duration}検討'));
   }
 
   return out;

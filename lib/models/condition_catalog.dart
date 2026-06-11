@@ -31,10 +31,16 @@ class ConditionCatalog {
           '十分なエネルギーを確保し異化を防ぐ。',
     ),
     ConditionDef(
+      id: 'aki',
+      label: '急性腎障害(AKI)',
+      suggestion: 'AKI: 急性/重症病態が無ければ 0.8–1.0 g/kg/day。'
+          '急性・重症やRRTがあれば蛋白を下げず増やす(蛋白制限でRRT開始を遅らせない)。',
+    ),
+    ConditionDef(
       id: 'renal_dialysis',
-      label: '腎不全(透析期)',
-      suggestion: '透析期: 必要蛋白(1.0–1.2 g/kg/day)を確保しつつ'
-          'K/P・水分負荷に配慮。',
+      label: '腎不全(間欠RRT/透析)',
+      suggestion: '間欠RRT/維持透析: 1.3–1.5 g/kg/day を確保しつつ'
+          'K/P・水分負荷に配慮（蛋白制限でRRT開始を遅らせない）。',
     ),
     ConditionDef(
       id: 'liver',
@@ -79,9 +85,23 @@ class ConditionCatalog {
     ),
     ConditionDef(
       id: 'crrt',
-      label: 'CRRT・持続透析',
-      suggestion: '水溶性微量栄養素(Se・B1・Cu・葉酸・VitC)が透析液へ喪失。'
-          'Se・B1は2倍目安で補充し複合traceは継続、血中濃度をモニタ(蓄積でなく欠乏側)。',
+      label: 'CKRT(CRRT/PIRRT)稼働中',
+      suggestion: 'active CKRTは水溶性ビタミン・微量元素の喪失を想定し、'
+          'monitor(Se/Zn/Cu/VitC/葉酸/B1/CRP/Alb)+補充のobligationを立てる。'
+          '高優先はB1/Se/Zn、>2週ではCu欠乏に注意し血中銅測定。'
+          '終了条件: CKRT終了/間欠透析移行/検査・臨床的安定(医師判断)。',
+    ),
+    ConditionDef(
+      id: 'burn',
+      label: '熱傷(>20%TBSA)',
+      suggestion: 'ENグルタミン 0.3–0.5 g/kg/day を10–15日。'
+          'Zn 30–35mg/day IVを2–3週、Se/Cu等の微量元素需要も増大。',
+    ),
+    ConditionDef(
+      id: 'trauma',
+      label: '外傷(ICU)',
+      suggestion: 'ENグルタミン 0.2–0.3 g/kg/day を5日'
+          '(創傷治癒不良なら10–15日)。',
     ),
     ConditionDef(
       id: 'gi_loss',

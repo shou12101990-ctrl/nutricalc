@@ -16,6 +16,10 @@ class ConstraintSet {
   // ── Hard constraints（足切り＝禁忌・絶対上限）──
   final double girLimitMgKgMin; // 静脈ブドウ糖 GIR 上限（糖質制限病態は別途 girRestrictMgKgMin）
   final double girRestrictMgKgMin; // 糖質制限病態（重症/呼吸/糖尿）の GIR 上限
+  // 炭水化物 総量(PNグルコース+EN炭水化物) hard limit。
+  //   ESPEN: ≤5 mg/kg/min = 7.2 g/kg/day = 28.8 kcal/kg/day（目標でなく上限。
+  //   高血糖/インスリン高需要/CO2貯留/refeedingではさらに下げる）。
+  final double carbMaxGKgD;
   final double lipidDayLimitGKgD; // 脂質 1日量上限 g/kg/day
   final double lipidRateLimitGKgH; // 脂質速度上限 g/kg/h
   final double fluidMaxMlKgD; // 総液量 上限 ml/kg/day（通常患者の禁忌上限）
@@ -33,6 +37,7 @@ class ConstraintSet {
     required this.id,
     required this.girLimitMgKgMin,
     required this.girRestrictMgKgMin,
+    required this.carbMaxGKgD,
     required this.lipidDayLimitGKgD,
     required this.lipidRateLimitGKgH,
     required this.fluidMaxMlKgD,
@@ -50,6 +55,7 @@ class ConstraintSet {
         id: 'standard',
         girLimitMgKgMin: ClinicalConst.girLimitMgKgMin, // 5
         girRestrictMgKgMin: ClinicalConst.girWarnMgKgMin, // 4（糖質制限病態）
+        carbMaxGKgD: ClinicalConst.carbMaxGKgDay, // 7.2 (=5mg/kg/min=28.8kcal/kg)
         lipidDayLimitGKgD: ClinicalConst.lipidDayLimitGKgD, // 1.5
         lipidRateLimitGKgH: ClinicalConst.lipidRateLimitGKgH, // 0.125
         fluidMaxMlKgD: 80, // 通常患者の禁忌上限（ゆるめ・基本はINを小さく）
@@ -67,6 +73,7 @@ class ConstraintSet {
     String? id,
     double? girLimitMgKgMin,
     double? girRestrictMgKgMin,
+    double? carbMaxGKgD,
     double? lipidDayLimitGKgD,
     double? lipidRateLimitGKgH,
     double? fluidMaxMlKgD,
@@ -82,6 +89,7 @@ class ConstraintSet {
         id: id ?? this.id,
         girLimitMgKgMin: girLimitMgKgMin ?? this.girLimitMgKgMin,
         girRestrictMgKgMin: girRestrictMgKgMin ?? this.girRestrictMgKgMin,
+        carbMaxGKgD: carbMaxGKgD ?? this.carbMaxGKgD,
         lipidDayLimitGKgD: lipidDayLimitGKgD ?? this.lipidDayLimitGKgD,
         lipidRateLimitGKgH: lipidRateLimitGKgH ?? this.lipidRateLimitGKgH,
         fluidMaxMlKgD: fluidMaxMlKgD ?? this.fluidMaxMlKgD,
@@ -130,6 +138,7 @@ class ScoreWeights {
         alertWeights: {
           // error相当(本来feasibleで除外されるが保険として高く)
           'gir_limit': 10000,
+          'carb_limit': 10000,
           'contraindicated_product': 10000,
           'lipid_day_limit': 10000,
           'fluid_max': 10000,

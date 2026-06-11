@@ -14,6 +14,11 @@ class ClinicalConst {
   static const double girWarnMgKgMin = 4.0; // 重症時の注意域（ASPEN）
   static const double girLimitMgKgMin = 5.0; // ハード上限（ESPEN ICU）
 
+  // ── 炭水化物 総量 hard limit（ESPEN: PNグルコース or EN炭水化物 ≤5mg/kg/min）──
+  //   5 mg/kg/min = 7.2 g/kg/day = 28.8 kcal/kg/day。目標ではなく hard upper limit。
+  static const double carbMaxGKgDay = 7.2;
+  static const double carbMaxKcalKgDay = 28.8;
+
   // ── 脂質負荷速度 ──
   static const double lipidRateWarnGKgH = 0.10; // 注意（成人クリアランス）
   static const double lipidRateLimitGKgH = 0.125; // ハード上限（添付文書）

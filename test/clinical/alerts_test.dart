@@ -69,6 +69,41 @@ void main() {
       expect(find(a, 'gir_limit')?.severity, AlertSeverity.error);
     });
 
+    test('炭水化物総量>7.2g/kg/day(5mg/kg/min相当) → carb_limit error', () {
+      // EN込み総炭水化物 450g/60kg = 7.5 g/kg/day (IVは上限内)
+      final ctx = EvalContext(
+        weightKg: 60,
+        targetKcal: 1800,
+        proteinGoalPerKg: 1.5,
+        totalKcal: 1800,
+        totalProteinG: 90,
+        totalVolumeMl: 2000,
+        ivGlucoseGramPerDay: 300,
+        carbGramPerDay: 450,
+        lipidGramPerDay: 50,
+        npcN: 170,
+      );
+      final a = evaluate(ctx, cs);
+      expect(find(a, 'carb_limit')?.severity, AlertSeverity.error);
+      expect(isFeasible(a), isFalse);
+      // 7.0 g/kg なら出ない
+      final ok = evaluate(
+          EvalContext(
+            weightKg: 60,
+            targetKcal: 1800,
+            proteinGoalPerKg: 1.5,
+            totalKcal: 1800,
+            totalProteinG: 90,
+            totalVolumeMl: 2000,
+            ivGlucoseGramPerDay: 300,
+            carbGramPerDay: 420,
+            lipidGramPerDay: 50,
+            npcN: 170,
+          ),
+          cs);
+      expect(has(ok, 'carb_limit'), isFalse);
+    });
+
     test('脂質>1.5 g/kg/day → lipid_day_limit error', () {
       final a = evaluate(clean(lipid: 100), cs); // 1.67 g/kg
       expect(find(a, 'lipid_day_limit')?.severity, AlertSeverity.error);

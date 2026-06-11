@@ -10,6 +10,8 @@ void main() {
     bool carbPresent = true,
     double currentB1Mg = 0,
     double b1PerUnitMg = 100,
+    bool refeedingRisk = false,
+    bool alcoholUse = false,
   }) =>
       NutritionCalculator.thiamineUnitsToAdd(
         fastingDays: fastingDays,
@@ -17,6 +19,8 @@ void main() {
         carbPresent: carbPresent,
         currentB1Mg: currentB1Mg,
         b1PerUnitMg: b1PerUnitMg,
+        refeedingRisk: refeedingRisk,
+        alcoholUse: alcoholUse,
       );
 
   group('thiamineUnitsToAdd', () {
@@ -29,5 +33,11 @@ void main() {
     test('B1既に50mg → 不足150mgで2本', () => expect(u(currentB1Mg: 50), 2));
     test('B1製剤量0 → 0(ゼロ割回避)', () => expect(u(b1PerUnitMg: 0), 0));
     test('上限10本でクランプ', () => expect(u(b1PerUnitMg: 1), 10));
+    // thiamine_gate: 絶食<5日でも refeedingリスク/アルコールでゲート成立
+    test('gate: 絶食0日でもrefeedingリスクで2本', () =>
+        expect(u(fastingDays: 0, refeedingRisk: true), 2));
+    test('gate: 絶食0日でもアルコール多飲で2本', () =>
+        expect(u(fastingDays: 0, alcoholUse: true), 2));
+    test('gate: いずれも無し(絶食0日)なら0', () => expect(u(fastingDays: 0), 0));
   });
 }

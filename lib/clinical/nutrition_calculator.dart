@@ -3,6 +3,7 @@
 library;
 
 import '../models/models.dart';
+import 'conditions.dart' as cc;
 import 'energy.dart' as ce;
 import 'protein.dart' as cp;
 
@@ -26,11 +27,14 @@ class NutritionCalculator {
       targetEnergyResult(item).kcal;
 
   /// 目標タンパク（g/day）。肥満は理想体重基準（clinical/protein.dart に委譲）。
+  /// 目標タンパク量(g/day)。腎修飾(CKD/AKI/KRT/急性病態)があればESPEN腎GLの
+  /// 代表値を、無ければ患者設定 proteinGoalPerKg を g/kg として用いる。
   static double targetProtein(PatientCase item) => cp.targetProtein(
         actualKg: item.weightKg,
         heightCm: item.heightCm,
         isMale: item.sex == Sex.male,
-        gramPerKg: item.proteinGoalPerKg,
+        gramPerKg:
+            cc.effectiveProteinPerKg(item.conditionTags, item.proteinGoalPerKg),
       );
 
   static AggregateResult aggregate(List<RegimenItem> items,
@@ -281,22 +285,27 @@ class NutritionCalculator {
     return DesignPlan(label: label, items: items);
   }
 
-  /// Refeeding/Wernicke予防の高用量チアミン(B1)自動加注の本数（純粋関数）。
-  /// 条件: 絶食(不十分摂取)≥fastingThresholdDays(既定5) かつ 糖質投与あり かつ
-  ///       栄養開始からの初期frontLoadDays(既定10日)以内 かつ B1合計<targetMg(既定200)。
-  /// 満たすとき目標mgに到達する最小本数(1..10)を返す。非該当は0。
-  /// 出典: NICE CG32(5日以上の不十分摂取=refeedingリスク) / JSPEN(チアミン200–300mg, 糖負荷前〜10日)。
+  /// thiamine_gate: 高用量チアミン(B1)自動加注の本数（純粋関数）。
+  /// ゲート(いずれか): refeedingリスク / 高度低栄養・長期摂取不良(絶食≥5日) /
+  ///   慢性アルコール — かつ 糖質(dextrose/feeding)投与あり。
+  /// 投与: feeding/dextrose前〜同時に開始し, 初期frontLoadDays(既定10日)で
+  ///   合計B1≥targetMg(既定200, ESPEN ICU 100–300mg/day・ASPEN 100mg+100mg/day 5–7日以上を包含)。
+  /// Wernicke疑い等の急性欠乏は自動加注でなく医師判断(thiamine_review)。
   static int thiamineUnitsToAdd({
     required int fastingDays,
     required int feedingDay,
     required bool carbPresent,
     required double currentB1Mg,
     required double b1PerUnitMg,
+    bool refeedingRisk = false,
+    bool alcoholUse = false,
     double targetMg = 200,
     int fastingThresholdDays = 5,
     int frontLoadDays = 10,
   }) {
-    if (fastingDays < fastingThresholdDays) return 0;
+    final gate =
+        refeedingRisk || alcoholUse || fastingDays >= fastingThresholdDays;
+    if (!gate) return 0;
     if (feedingDay < 1 || feedingDay > frontLoadDays) return 0;
     if (!carbPresent) return 0;
     if (b1PerUnitMg <= 0) return 0;

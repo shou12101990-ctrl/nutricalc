@@ -78,6 +78,7 @@ EvalContext computeEvalContext(
     totalProteinG: prot,
     totalVolumeMl: vol,
     ivGlucoseGramPerDay: ivGlucoseG,
+    carbGramPerDay: carbTotalG,
     lipidGramPerDay: lipidG,
     lipidHours: lipidHours,
     npcN: npcN,
@@ -287,7 +288,7 @@ bool _isAminoDominant(Product p) =>
 
 // ─────────── 修復アクション（reduce系） ───────────
 
-/// GIR超過 → 糖液を減量して GIR を上限以下へ。alert: 'gir_limit'。
+/// 糖質過多 → 糖液を減量して上限以下へ。alert: 'gir_limit' / 'carb_limit'。
 class ReduceIvGlucoseAction implements RepairAction {
   const ReduceIvGlucoseAction();
   @override
@@ -297,26 +298,35 @@ class ReduceIvGlucoseAction implements RepairAction {
 
   @override
   bool canApply(PlanState plan, EvalContext ctx, NutritionAlert alert) =>
-      alert.code == 'gir_limit' &&
+      (alert.code == 'gir_limit' || alert.code == 'carb_limit') &&
       _topItem(plan, _isGlucoseDominant, (p) => p.carbBase ?? 0) != null;
 
   @override
   RepairResult apply(PlanState plan, EvalContext ctx, NutritionAlert alert) {
     final top = _topItem(plan, _isGlucoseDominant, (p) => p.carbBase ?? 0);
     if (top == null) return RepairResult(plan, const []);
-    final limit = alert.limit ?? 5; // mg/kg/min
-    final maxGluG = limit * ctx.weightKg * 1440 / 1000;
-    final curIv = ctx.ivGlucoseGramPerDay ?? 0;
+    // 超過g: gir_limit=IVブドウ糖がGIR上限超過 / carb_limit=総炭水化物が7.2g/kg/day超過
+    final double excessG;
+    final String reason;
+    if (alert.code == 'carb_limit') {
+      final limit = alert.limit ?? 7.2; // g/kg/day
+      excessG = (ctx.carbGramPerDay ?? 0) - limit * ctx.weightKg;
+      reason = '炭水化物上限 ${limit.toStringAsFixed(1)} g/kg/day(5mg/kg/min相当)超過のため糖液を減量';
+    } else {
+      final limit = alert.limit ?? 5; // mg/kg/min
+      excessG = (ctx.ivGlucoseGramPerDay ?? 0) - limit * ctx.weightKg * 1440 / 1000;
+      reason = 'GIR上限 ${limit.toStringAsFixed(0)} mg/kg/min 超過のため糖液を減量';
+    }
     final carbPerUnit = top.product.carbBase ?? 0;
-    if (carbPerUnit <= 0 || curIv <= maxGluG) return RepairResult(plan, const []);
-    final removeUnits = ((curIv - maxGluG) / carbPerUnit).ceil();
+    if (carbPerUnit <= 0 || excessG <= 0) return RepairResult(plan, const []);
+    final removeUnits = (excessG / carbPerUnit).ceil();
     final newUnits = (top.units - removeUnits).clamp(0, top.units);
     if (newUnits == top.units) return RepairResult(plan, const []);
     return RepairResult(_withUnits(plan, top.product, newUnits), [
       RepairChange(
-        code: 'gir_limit',
+        code: alert.code,
         label: '自動補正',
-        reason: 'GIR上限 ${limit.toStringAsFixed(0)} mg/kg/min 超過のため糖液を減量',
+        reason: reason,
         beforeText: '${top.product.name} ×${top.units}',
         afterText: newUnits > 0
             ? '${top.product.name} ×$newUnits'
@@ -465,7 +475,7 @@ double _traceOf(Product p, String key) =>
 class AddZincAction implements RepairAction {
   final Product znProduct;
   final double targetUmol;
-  const AddZincAction(this.znProduct, {this.targetUmol = 30});
+  const AddZincAction(this.znProduct, {this.targetUmol = 45.9}); // 3mg(ESPEN PN標準下限)
   @override
   String get id => 'add_zinc';
   @override
@@ -499,7 +509,7 @@ class AddZincAction implements RepairAction {
 class AddSeleniumAction implements RepairAction {
   final Product seProduct;
   final double targetUmol;
-  const AddSeleniumAction(this.seProduct, {this.targetUmol = 30});
+  const AddSeleniumAction(this.seProduct, {this.targetUmol = 1.27}); // 100μg(欠乏時の開始量)
   @override
   String get id => 'add_selenium';
   @override
@@ -540,6 +550,7 @@ Map<String, List<RepairAction>> buildRepairActions({
 }) {
   return {
     'gir_limit': const [ReduceIvGlucoseAction()],
+    'carb_limit': const [ReduceIvGlucoseAction()],
     'lipid_day_limit': const [ReduceLipidAction()],
     'lipid_rate_limit': const [ReduceLipidAction()],
     'na_excess': const [ReduceNaAdditiveAction()],

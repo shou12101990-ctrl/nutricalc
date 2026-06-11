@@ -666,6 +666,7 @@ class _BuilderPageState extends State<BuilderPage>
       totalProteinG: agg.totalProteinG,
       totalVolumeMl: agg.totalVolumeMl,
       ivGlucoseGramPerDay: ivGlu,
+      carbGramPerDay: carbTot,
       lipidGramPerDay: agg.totalFatG,
       npcN: npcN,
       naMEq: na,

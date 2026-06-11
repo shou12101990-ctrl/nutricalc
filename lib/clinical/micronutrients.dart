@@ -9,6 +9,79 @@ library;
 import 'constants.dart';
 import 'infusion.dart' show AlertLevel;
 
+/// 微量元素のEN/PN標準量（ESPEN micronutrient GL 2022）。
+/// 単位はアプリのマスタ単位 μmol/day に整合（元のmg/µg値は label に併記）。
+class TraceStandard {
+  final String element; // 'Zn' 等(マスタtraceキー)
+  final double enMinUmol, enMaxUmol; // EN 1500kcalあたり
+  final double pnMinUmol, pnMaxUmol; // PN標準
+  final String original; // 元単位の表記(mg/µg)
+  final String highNote; // 高要求/欠乏時の扱い
+  const TraceStandard({
+    required this.element,
+    required this.enMinUmol,
+    required this.enMaxUmol,
+    required this.pnMinUmol,
+    required this.pnMaxUmol,
+    required this.original,
+    required this.highNote,
+  });
+}
+
+/// ESPEN標準（μmol換算: μg/原子量 or mg×1000/原子量）。Cr/Moはマスタ未収載=参照値。
+const List<TraceStandard> kTraceStandards = [
+  TraceStandard(
+    element: 'Cr',
+    enMinUmol: 0.7, enMaxUmol: 2.9, // 35–150 µg
+    pnMinUmol: 0.2, pnMaxUmol: 0.3, // 10–15 µg
+    original: 'EN 35–150 µg / PN 10–15 µg',
+    highNote: 'インスリン抵抗性で追加検討',
+  ),
+  TraceStandard(
+    element: 'Cu',
+    enMinUmol: 15.7, enMaxUmol: 47.2, // 1–3 mg
+    pnMinUmol: 4.7, pnMaxUmol: 7.9, // 0.3–0.5 mg
+    original: 'EN 1–3 mg / PN 0.3–0.5 mg',
+    highNote: '重度欠乏ではIV 4–8 mg/day(63–126 μmol)を検討',
+  ),
+  TraceStandard(
+    element: 'Mn',
+    enMinUmol: 36, enMaxUmol: 55, // 2–3 mg
+    pnMinUmol: 1.0, pnMaxUmol: 1.0, // 55 µg
+    original: 'EN 2–3 mg / PN 55 µg',
+    highNote: '胆汁うっ滞/肝不全/長期PNでは過剰注意(Mn-free切替)',
+  ),
+  TraceStandard(
+    element: 'Mo',
+    enMinUmol: 0.5, enMaxUmol: 2.6, // 50–250 µg
+    pnMinUmol: 0.20, pnMaxUmol: 0.26, // 19–25 µg
+    original: 'EN 50–250 µg / PN 19–25 µg',
+    highNote: '通常は標準補充',
+  ),
+  TraceStandard(
+    element: 'Se',
+    enMinUmol: 0.63, enMaxUmol: 1.90, // 50–150 µg
+    pnMinUmol: 0.76, pnMaxUmol: 1.27, // 60–100 µg
+    original: 'EN 50–150 µg / PN 60–100 µg',
+    highNote: '血漿Se<0.4 µmol/Lなら100 µg/day(1.27 μmol)開始, 欠乏・高要求で最大200 µg/day(2.53 μmol)',
+  ),
+  TraceStandard(
+    element: 'Zn',
+    enMinUmol: 153, enMaxUmol: 306, // 10–20 mg
+    pnMinUmol: 45.9, pnMaxUmol: 76.5, // 3–5 mg
+    original: 'EN 10–20 mg / PN 3–5 mg',
+    highNote: '消化管損失で最大12 mg/day IV(184 μmol), 熱傷で30–35 mg/day IVを2–3週',
+  ),
+];
+
+/// element名 → 標準。未収載は null。
+TraceStandard? traceStandardOf(String element) {
+  for (final t in kTraceStandards) {
+    if (t.element == element) return t;
+  }
+  return null;
+}
+
 /// 1製剤の組成寄与（micro=その製剤1単位の組成, multiplier=単位数 or 投与比）。
 class MicroContribution {
   final Map<String, dynamic>? micro;
@@ -278,7 +351,8 @@ List<MicroAlert> microAlerts(
       level: AlertLevel.caution,
       value: 0,
       message:
-          'CRRTで水溶性微量栄養素(Se/B1/Cu/葉酸/VitC)が喪失。Se・B1は2倍目安で補充し複合traceは継続、血中濃度をモニタ',
+          'CKRT稼働中: 水溶性ビタミン・微量元素の喪失を想定し、標準MVI+traceに想定喪失分を上乗せ。'
+          'モニタ Se/Zn/Cu/VitC/葉酸/B1/CRP/Alb(高優先 B1/Se/Zn)。>2週はCu欠乏に注意し血中銅測定',
     ));
   }
   if (giLoss) {
