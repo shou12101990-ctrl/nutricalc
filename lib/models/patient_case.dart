@@ -28,7 +28,9 @@ class PatientCase {
     this.memo = '',
     this.patientId = '',
     List<String>? conditionTags,
-  }) : conditionTags = conditionTags ?? [];
+    List<String>? refeedingFlags,
+  })  : conditionTags = conditionTags ?? [],
+        refeedingFlags = refeedingFlags ?? [];
 
   final String id;
   String caseCode;
@@ -50,6 +52,7 @@ class PatientCase {
   String memo; // 合併症・コメントなど
   String? fastingDate; // 絶食開始日 (ISO date string, null=未設定)
   List<String> conditionTags; // 病態タグ (ConditionCatalog の id 群)
+  List<String> refeedingFlags; // 手動選択したRefeedingリスク基準id (NICE・kRefeedingCriteria)
   String energyModel; // 'harrisBenedict'|'mifflinStJeor'|'kcalPerKg'|'indirectCalorimetry'
   double? kcalPerKgValue; // 簡易式の kcal/kg/day
   double? measuredREE; // 間接熱量測定の実測REE (kcal/day)
@@ -103,6 +106,7 @@ class PatientCase {
         'memo': memo,
         'fastingDate': fastingDate,
         'conditionTags': conditionTags,
+        'refeedingFlags': refeedingFlags,
         'energyModel': energyModel,
         'kcalPerKgValue': kcalPerKgValue,
         'measuredREE': measuredREE,
@@ -140,6 +144,10 @@ class PatientCase {
         conditionTags: (map['conditionTags'] as List?)
             ?.map((e) => e.toString())
             .toList(),
+        refeedingFlags: (map['refeedingFlags'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [],
         energyModel: (map['energyModel'] as String?) ?? 'harrisBenedict',
         kcalPerKgValue: (map['kcalPerKgValue'] as num?)?.toDouble(),
         measuredREE: (map['measuredREE'] as num?)?.toDouble(),

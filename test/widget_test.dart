@@ -52,6 +52,46 @@ void main() {
       expect(patient.selectedProtocolId, 'four_day');
       expect(patient.displayLabel, 'CASE-001 / 01');
       expect(patient.sexLabel, 'M');
+      // 後方互換: refeedingFlags 未保存の旧データは空リスト
+      expect(patient.refeedingFlags, isEmpty);
+    });
+
+    test('refeedingFlags は toMap/fromMap で往復し後方互換を保つ', () {
+      Map<String, dynamic> baseMap() => {
+            'id': 'case-2',
+            'caseCode': 'CASE-002',
+            'currentBed': '02',
+            'age': 60,
+            'heightCm': 160.0,
+            'weightKg': 40.0,
+            'sex': 'female',
+            'activityFactor': 1.0,
+            'stressFactor': 1.0,
+            'proteinGoalPerKg': 1.0,
+            'createdAt': '2026-05-30T00:00:00.000Z',
+            'bedHistory': [],
+            'regimenItems': [],
+            'selectedProtocolId': 'five_day',
+            'zeroMenuConfig': {
+              'targetKcal': 1200,
+              'npcNRatio': 125,
+              'lipidGramPerKg': 0.4,
+              'glucoseProductName': '70% グルコース',
+            },
+          };
+      // 手動フラグ付きで往復
+      final withFlags = PatientCase.fromMap(
+          {...baseMap(), 'refeedingFlags': ['low_electrolyte', 'wtloss_gt15']});
+      expect(withFlags.refeedingFlags, ['low_electrolyte', 'wtloss_gt15']);
+      final round = PatientCase.fromMap(withFlags.toMap());
+      expect(round.refeedingFlags, ['low_electrolyte', 'wtloss_gt15']);
+      // 既定は空リスト（refeedingFlags 未保存）
+      final empty = PatientCase.fromMap(baseMap());
+      expect(empty.refeedingFlags, isEmpty);
+      // 再代入で更新できる（実コードは current.refeedingFlags = [...] で更新）
+      empty.refeedingFlags = ['alcohol_or_drugs'];
+      expect(PatientCase.fromMap(empty.toMap()).refeedingFlags,
+          ['alcohol_or_drugs']);
     });
   });
 }

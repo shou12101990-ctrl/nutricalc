@@ -438,6 +438,10 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
   if (thiamineGate && c.hasGlucoseLoad) {
     final b1 = c.vitaminB1Mg ?? 0;
     if (b1 < 200) {
+      // refeedingリスク(high/extreme)では電解質補充とMVI/traceの束ね(bundle)を明記。
+      final refeedBundle = c.refeedingRisk
+          ? '。Refeedingリスク: K/P/Mgの補充とMVI(総合ビタミン)・微量元素を併用し電解質/血糖を頻回モニタ'
+          : '';
       out.add(NutritionAlert(
           code: 'thiamine_needed',
           severity: AlertSeverity.warning,
@@ -445,7 +449,7 @@ List<NutritionAlert> evaluate(EvalContext c, ConstraintSet cs) {
           target: 200,
           unit: 'mg',
           message:
-              'ビタミンB1 ${b1.toStringAsFixed(0)}mg。feeding/dextrose前〜同時に100mg, 以後100–300mg/dayを継続(ASPEN 5–7日以上/ESPEN 3–4日)。高用量B1を追加'));
+              'ビタミンB1 ${b1.toStringAsFixed(0)}mg。feeding/dextrose前〜同時に100mg, 以後100–300mg/dayを継続(ASPEN 5–7日以上/ESPEN 3–4日)。高用量B1を追加$refeedBundle'));
     }
     // 急性欠乏/Wernicke疑い(アルコール・高度飢餓)は期間延長・高用量を医師判断で。
     if (alcoholUse) {

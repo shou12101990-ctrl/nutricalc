@@ -14,6 +14,9 @@ Future<void> showPatientEditDialog(
   final caseCodeCtrl = TextEditingController(text: current.caseCode);
   final memoCtrl = TextEditingController(text: current.memo);
   final selectedTags = current.conditionTags.toSet();
+  // Refeedingリスク: 手動選択した NICE 基準フラグ（BMI/絶食以外）。
+  final refeedingManualFlags = current.refeedingFlags.toSet();
+  bool refeedingExpanded = current.refeedingFlags.isNotEmpty;
   DateTime? fastingDate = current.fastingDate != null
       ? DateTime.tryParse(current.fastingDate!)
       : null;
@@ -252,6 +255,25 @@ Future<void> showPatientEditDialog(
                   ],
                 ),
                 const SizedBox(height: 8),
+                // Refeedingリスク評価(NICE) — 折りたたみ
+                _buildRefeedingSection(
+                  context: context,
+                  weightKg: current.weightKg,
+                  heightCm: current.heightCm,
+                  fastingDate: fastingDate,
+                  manualFlags: refeedingManualFlags,
+                  expanded: refeedingExpanded,
+                  onToggleExpand: () => setLocal(
+                      () => refeedingExpanded = !refeedingExpanded),
+                  onToggleFlag: (id, sel) => setLocal(() {
+                    if (sel) {
+                      refeedingManualFlags.add(id);
+                    } else {
+                      refeedingManualFlags.remove(id);
+                    }
+                  }),
+                ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: memoCtrl,
                   decoration: const InputDecoration(
@@ -295,6 +317,12 @@ Future<void> showPatientEditDialog(
       .map((c) => c.id)
       .where(selectedTags.contains)
       .toList();
+  // 手動選択したRefeeding基準（手動候補のidに限定して保存・カタログ順を維持）。
+  current.refeedingFlags = cr.kRefeedingCriteria
+      .map((c) => c.id)
+      .where(_isManualRefeedingFlag)
+      .where(refeedingManualFlags.contains)
+      .toList();
   current.fastingDate = fastingDate == null
       ? null
       : '${fastingDate!.year}-${fastingDate!.month.toString().padLeft(2, '0')}-${fastingDate!.day.toString().padLeft(2, '0')}';
@@ -313,6 +341,169 @@ Future<void> showPatientEditDialog(
   }
   await state.persist();
   onSaved?.call();
+}
+
+/// 手動入力すべきRefeeding基準か（BMI/絶食日数から自動で立つ基準=自動扱い、それ以外=手動）。
+bool _isManualRefeedingFlag(String id) =>
+    !id.startsWith('bmi_') && !id.startsWith('intake_');
+
+/// 絶食開始日→現在の日数（null/未来は0）。Refeeding自動フラグの絶食日数に使う。
+int _refeedingFastingDays(DateTime? fastingDate) {
+  if (fastingDate == null) return 0;
+  final now = DateTime.now();
+  final d = DateTime(now.year, now.month, now.day)
+      .difference(
+          DateTime(fastingDate.year, fastingDate.month, fastingDate.day))
+      .inDays;
+  return d < 0 ? 0 : d;
+}
+
+/// 患者編集ダイアログの「Refeedingリスク評価(NICE)」折りたたみセクション。
+/// - 自動フラグ(BMI/絶食日数由来)は読み取り専用チップ。
+/// - 手動フラグ(体重減/低電解質/アルコール・薬物歴)は FilterChip でトグル。
+/// - 自動∪手動を refeedingTierFromFlags で評価し tier と対処を色付き表示。
+Widget _buildRefeedingSection({
+  required BuildContext context,
+  required double weightKg,
+  required double heightCm,
+  required DateTime? fastingDate,
+  required Set<String> manualFlags,
+  required bool expanded,
+  required VoidCallback onToggleExpand,
+  required void Function(String id, bool selected) onToggleFlag,
+}) {
+  final bmi = cbw.bmiOf(weightKg, heightCm);
+  final days = _refeedingFastingDays(fastingDate);
+  final autoFlags = cr.autoRefeedingFlags(bmi: bmi, daysNoIntake: days);
+  // 評価は 自動 ∪ 手動。
+  final allFlags = {...autoFlags, ...manualFlags};
+  final tier = cr.refeedingTierFromFlags(allFlags);
+  final tierColor = switch (tier) {
+    cr.RefeedingTier.extreme => Colors.red.shade700,
+    cr.RefeedingTier.high => Colors.orange.shade800,
+    cr.RefeedingTier.none => Colors.green.shade700,
+  };
+  final manualCriteria =
+      cr.kRefeedingCriteria.where((c) => _isManualRefeedingFlag(c.id)).toList();
+
+  return Container(
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.grey.shade300),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ヘッダ（折りたたみトグル＋tierバッジ）
+        InkWell(
+          onTap: onToggleExpand,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(children: [
+              Icon(Icons.warning_amber_rounded,
+                  size: 16, color: tierColor),
+              const SizedBox(width: 4),
+              const Expanded(
+                child: Text('Refeedingリスク評価 (NICE)',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: tierColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: tierColor.withOpacity(0.5)),
+                ),
+                child: Text(tier.label,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: tierColor,
+                        fontWeight: FontWeight.bold)),
+              ),
+              Icon(expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18, color: Colors.grey.shade600),
+            ]),
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 自動で立つ基準（読み取り専用）
+                Text('自動判定（BMI ${bmi.toStringAsFixed(1)} / 絶食 $days日）',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                const SizedBox(height: 4),
+                if (autoFlags.isEmpty)
+                  Text('該当なし',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade500))
+                else
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final c in cr.kRefeedingCriteria
+                          .where((c) => autoFlags.contains(c.id)))
+                        Chip(
+                          label: Text('${c.label}(自動)',
+                              style: const TextStyle(fontSize: 11)),
+                          backgroundColor: Colors.blueGrey.shade50,
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          side: BorderSide(color: Colors.blueGrey.shade200),
+                        ),
+                    ],
+                  ),
+                const SizedBox(height: 8),
+                // 手動基準（トグル）
+                Text('手動入力（体重減・電解質・既往歴）',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final c in manualCriteria)
+                      FilterChip(
+                        label: Text(c.label,
+                            style: const TextStyle(fontSize: 11)),
+                        selected: manualFlags.contains(c.id),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        onSelected: (sel) => onToggleFlag(c.id, sel),
+                      ),
+                  ],
+                ),
+                if (tier != cr.RefeedingTier.none) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: tierColor.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: tierColor.withOpacity(0.3)),
+                    ),
+                    child: Text(cr.refeedingActionText(tier),
+                        style: TextStyle(
+                            fontSize: 11, color: tierColor, height: 1.4)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 /// TOP画面の患者カード（折りたたみトグル付き）

@@ -1102,7 +1102,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           ? ck.ClinicalConst.girWarnMgKgMin
           : ck.ClinicalConst.girLimitMgKgMin;
 
-  /// Refeeding（NICE）リスク階層。栄養開始日−絶食開始日 と BMI から判定。
+  /// Refeeding（NICE）リスク階層。
+  /// BMI・絶食日数から自動で立つフラグ ∪ 患者編集で手動選択した基準フラグ
+  /// （体重減・低電解質・アルコール/薬物歴 等）を refeedingTierFromFlags で評価する。
+  /// 従来のBMI/絶食自動判定の上位互換（手動入力も連動）。
   cr.RefeedingTier get _refeedingTier {
     final c = widget.current;
     final bmi = cbw.bmiOf(c.weightKg, c.heightCm);
@@ -1113,7 +1116,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           .difference(DateTime(fr.year, fr.month, fr.day))
           .inDays;
     }
-    return cr.refeedingTier(bmi: bmi, daysNoIntake: days);
+    final flags = cr.autoRefeedingFlags(bmi: bmi, daysNoIntake: days)
+      ..addAll(c.refeedingFlags);
+    return cr.refeedingTierFromFlags(flags);
   }
 
   /// Refeedingリスク時、栄養開始からの feeding 日(0始まり)で kcal を上限cap。
@@ -1355,7 +1360,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     }
     final pnMonitorRisk = pnHeavyMaxDay >= 7;
 
-    // Refeeding（NICE）リスク: 絶食日数(preDays)とBMIから判定。
+    // Refeeding（NICE）リスク: 自動フラグ(絶食日数・BMI) ∪ 手動フラグ(体重減/低電解質/既往歴)で判定。
     final refeedTier = _refeedingTier;
     final refeedRisk = refeedTier != cr.RefeedingTier.none;
     // 電解質・微量元素・ビタミンのUL超過: 日毎に集計し栄養素ごとに最高レベル/最早日を採用。
@@ -2069,7 +2074,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     '${_alertDate(preDays + 1, dates, n)}以降（栄養再開初期）'
                         '　Refeeding症候群 ${refeedTier.label}（NICE）',
                 body:
-                    '絶食$preDays日・BMI ${cbw.bmiOf(widget.current.weightKg, widget.current.heightCm).toStringAsFixed(1)}。'
+                    '絶食$preDays日・BMI ${cbw.bmiOf(widget.current.weightKg, widget.current.heightCm).toStringAsFixed(1)}'
+                    '${widget.current.refeedingFlags.isNotEmpty ? '＋手動基準' : ''}。'
                     '初期は10 kcal/kg（超高リスクは5）から開始し4–7日で漸増します'
                     '（本設計は自動でcap済み）。',
                 suggest: cr.refeedingActionText(refeedTier),
