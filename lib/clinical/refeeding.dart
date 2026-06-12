@@ -102,20 +102,20 @@ const List<RefeedingCriterion> kRefeedingCriteria = [
   // 超高リスク（いずれかで extreme）
   RefeedingCriterion(id: 'bmi_lt14', label: 'BMI<14', group: 'extreme'),
   RefeedingCriterion(
-      id: 'intake_gt15d', label: '15日以上ほぼ絶食', group: 'extreme'),
+      id: 'intake_gt15d', label: '15日超ほぼ絶食', group: 'extreme'),
   // major（1つ以上で高リスク）
   RefeedingCriterion(id: 'bmi_lt16', label: 'BMI<16', group: 'major'),
   RefeedingCriterion(
       id: 'wtloss_gt15', label: '3–6ヶ月で>15%体重減', group: 'major'),
   RefeedingCriterion(
-      id: 'intake_lt_gt10d', label: '10日以上ほぼ絶食', group: 'major'),
+      id: 'intake_lt_gt10d', label: '10日超ほぼ絶食', group: 'major'),
   RefeedingCriterion(
       id: 'low_electrolyte', label: '投与前K/P/Mg低値', group: 'major'),
   // minor（2つ以上で高リスク）
   RefeedingCriterion(id: 'bmi_lt18_5', label: 'BMI<18.5', group: 'minor'),
   RefeedingCriterion(id: 'wtloss_gt10', label: '>10%体重減', group: 'minor'),
   RefeedingCriterion(
-      id: 'intake_lt_gt5d', label: '5日以上ほぼ絶食', group: 'minor'),
+      id: 'intake_lt_gt5d', label: '5日超ほぼ絶食', group: 'minor'),
   RefeedingCriterion(
       id: 'alcohol_or_drugs',
       label: 'アルコール/インスリン/化学療法/制酸薬/利尿薬歴',
@@ -129,6 +129,11 @@ RefeedingCriterion? refeedingCriterionById(String id) {
   }
   return null;
 }
+
+/// 手動入力すべき基準か（BMI/絶食日数から自動算出される基準=自動扱い、それ以外=手動）。
+/// 保存・評価で stale な自動フラグ(bmi_*/intake_*)を除外するのに使う。
+bool isManualRefeedingCriterion(String id) =>
+    !id.startsWith('bmi_') && !id.startsWith('intake_');
 
 /// 選択フラグ（基準id集合）から NICE リスク階層を判定。
 /// - extreme該当 → extreme

@@ -343,9 +343,8 @@ Future<void> showPatientEditDialog(
   onSaved?.call();
 }
 
-/// 手動入力すべきRefeeding基準か（BMI/絶食日数から自動で立つ基準=自動扱い、それ以外=手動）。
-bool _isManualRefeedingFlag(String id) =>
-    !id.startsWith('bmi_') && !id.startsWith('intake_');
+/// 手動入力すべきRefeeding基準か（判定は refeeding.dart に集約）。
+bool _isManualRefeedingFlag(String id) => cr.isManualRefeedingCriterion(id);
 
 /// 絶食開始日→現在の日数（null/未来は0）。Refeeding自動フラグの絶食日数に使う。
 int _refeedingFastingDays(DateTime? fastingDate) {

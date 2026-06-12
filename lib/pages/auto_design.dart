@@ -250,6 +250,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         conditionTags: widget.current.conditionTags.toSet(),
         targetKcal: NutritionCalculator.targetEnergy(widget.current),
         proteinGoalPerKg: widget.current.proteinGoalPerKg,
+        refeedingRisk: _refeedingTier != cr.RefeedingTier.none,
       );
 
   /// repair差分のみ DesignPlan へ反映（プレースホルダ・PN部分量は不変）。
@@ -1116,8 +1117,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           .difference(DateTime(fr.year, fr.month, fr.day))
           .inDays;
     }
+    // 保存値は手動基準のみ採用（旧/外部JSONの stale な自動フラグ bmi_*/intake_* を除外）。
     final flags = cr.autoRefeedingFlags(bmi: bmi, daysNoIntake: days)
-      ..addAll(c.refeedingFlags);
+      ..addAll(c.refeedingFlags.where(cr.isManualRefeedingCriterion));
     return cr.refeedingTierFromFlags(flags);
   }
 

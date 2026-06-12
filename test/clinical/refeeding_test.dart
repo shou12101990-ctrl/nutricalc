@@ -80,6 +80,31 @@ void main() {
     });
   });
 
+  group('isManualRefeedingCriterion (stale自動フラグ除外)', () {
+    test('bmi_*/intake_* は自動扱い(=false)', () {
+      expect(isManualRefeedingCriterion('bmi_lt14'), isFalse);
+      expect(isManualRefeedingCriterion('bmi_lt16'), isFalse);
+      expect(isManualRefeedingCriterion('bmi_lt18_5'), isFalse);
+      expect(isManualRefeedingCriterion('intake_gt15d'), isFalse);
+      expect(isManualRefeedingCriterion('intake_lt_gt10d'), isFalse);
+      expect(isManualRefeedingCriterion('intake_lt_gt5d'), isFalse);
+    });
+    test('体重減/電解質/既往歴 は手動扱い(=true)', () {
+      expect(isManualRefeedingCriterion('wtloss_gt15'), isTrue);
+      expect(isManualRefeedingCriterion('wtloss_gt10'), isTrue);
+      expect(isManualRefeedingCriterion('low_electrolyte'), isTrue);
+      expect(isManualRefeedingCriterion('alcohol_or_drugs'), isTrue);
+    });
+    test('保存値に紛れた stale 自動フラグは tier 判定で無視される', () {
+      // 旧JSON等で bmi_lt14(extreme) が手動保存に紛れても、手動filterで除外
+      final stored = ['bmi_lt14', 'low_electrolyte'];
+      final manual = stored.where(isManualRefeedingCriterion).toSet();
+      expect(manual, {'low_electrolyte'});
+      // low_electrolyte は major → high（extremeに昇格しない）
+      expect(refeedingTierFromFlags(manual), RefeedingTier.high);
+    });
+  });
+
   group('refeedingTierFromFlags', () {
     test('major1つ → HIGH', () {
       expect(refeedingTierFromFlags({'bmi_lt16'}), RefeedingTier.high);

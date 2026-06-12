@@ -147,7 +147,7 @@ class PatientCase {
         refeedingFlags: (map['refeedingFlags'] as List?)
                 ?.map((e) => e.toString())
                 .toList() ??
-            const [],
+            <String>[],
         energyModel: (map['energyModel'] as String?) ?? 'harrisBenedict',
         kcalPerKgValue: (map['kcalPerKgValue'] as num?)?.toDouble(),
         measuredREE: (map['measuredREE'] as num?)?.toDouble(),

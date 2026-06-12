@@ -692,6 +692,7 @@ class _BuilderPageState extends State<BuilderPage>
       znUmol: zn,
       seUmol: se,
       hasGlucoseLoad: carbTot > 0,
+      refeedingRisk: _refeedingRiskOf(current),
       fastingDaysGE5: _fastingDaysOf(current) >= 5,
       products: products,
     );
@@ -860,6 +861,17 @@ class _BuilderPageState extends State<BuilderPage>
     return d < 0 ? 0 : d;
   }
 
+  /// Refeeding(NICE)が高リスク以上か。BMI/絶食日数の自動フラグ ∪ 患者編集の手動フラグで判定。
+  /// auto_design の _refeedingTier と同一基準で、個別設計のB1ゲート(thiamine_needed)も連動させる。
+  bool _refeedingRiskOf(PatientCase c) {
+    // 保存値は手動基準のみ採用（旧/外部JSONの stale な自動フラグ bmi_*/intake_* を除外）。
+    final flags = cr.autoRefeedingFlags(
+      bmi: cbw.bmiOf(c.weightKg, c.heightCm),
+      daysNoIntake: _fastingDaysOf(c),
+    )..addAll(c.refeedingFlags.where(cr.isManualRefeedingCriterion));
+    return cr.refeedingTierFromFlags(flags) != cr.RefeedingTier.none;
+  }
+
   /// 現regimen→PlanState(本数ベース。食事タイミングは合計pacを本数化)。
   PlanState _planStateFromRegimen(PatientCase current) {
     final items = <PlanItem>[];
@@ -881,6 +893,7 @@ class _BuilderPageState extends State<BuilderPage>
         conditionTags: current.conditionTags.toSet(),
         targetKcal: NutritionCalculator.targetEnergy(current),
         proteinGoalPerKg: current.proteinGoalPerKg,
+        refeedingRisk: _refeedingRiskOf(current),
         fastingDaysGE5: _fastingDaysOf(current) >= 5,
       );
 
@@ -1462,7 +1475,7 @@ class _BuilderPageState extends State<BuilderPage>
                           ? '製剤併用を集計し, 処方・カルテ記載に向けてサマライズします.'
                           : _builderTabIndex == 1
                               ? '静脈栄養のみで最小のINにする際の逆引き計算を行います.'
-                              : 'フェーズに応じた処方設計を提案し, トレンドを可視化します.',
+                              : 'フェーズに応じた処方プリセットを提案し, トレンドを可視化します',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade600),
