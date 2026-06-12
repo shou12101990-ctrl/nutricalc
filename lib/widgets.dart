@@ -120,10 +120,10 @@ List<Widget> _energyModelFields({
   required ValueChanged<String> onModel,
   required ValueChanged<double> onKcalPerKg,
 }) {
-  // 簡易式の目標 kcal/kg: 10・15 と 20–30(1刻み)。保存済みの端数値があっても
+  // 簡易式の目標 kcal/kg: 5・10・15 と 20–30(1刻み)。保存済みの端数値があっても
   // Dropdownが壊れないよう、現在値も候補に含める。
   final kkItems = <double>{
-    10, 15,
+    5, 10, 15,
     for (int i = 20; i <= 30; i++) i.toDouble(),
     kcalPerKgValue,
   }.toList()

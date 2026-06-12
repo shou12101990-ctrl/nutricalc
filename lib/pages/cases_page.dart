@@ -11,6 +11,7 @@ Future<void> showPatientEditDialog(
   final reeCtrl =
       TextEditingController(text: current.measuredREE?.toStringAsFixed(0) ?? '');
   final patientIdCtrl = TextEditingController(text: current.patientId);
+  final caseCodeCtrl = TextEditingController(text: current.caseCode);
   final memoCtrl = TextEditingController(text: current.memo);
   final selectedTags = current.conditionTags.toSet();
   DateTime? fastingDate = current.fastingDate != null
@@ -37,15 +38,16 @@ Future<void> showPatientEditDialog(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 患者
-                Row(children: [
-                  const Icon(Icons.person, size: 16, color: Colors.black54),
-                  const SizedBox(width: 2),
-                  Text('患者${current.caseCode}',
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.bold)),
-                ]),
-                const SizedBox(height: 6),
+                // 名前/症例名 (編集可)
+                TextField(
+                  controller: caseCodeCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '名前 / 症例名',
+                    prefixIcon: Icon(Icons.person, size: 18),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 // 患者ID (任意・編集可)
                 TextField(
                   controller: patientIdCtrl,
@@ -280,6 +282,9 @@ Future<void> showPatientEditDialog(
   current.kcalPerKgValue = kcalPerKgValue;
   current.measuredREE = double.tryParse(reeCtrl.text.trim());
   current.patientId = patientIdCtrl.text.trim();
+  if (caseCodeCtrl.text.trim().isNotEmpty) {
+    current.caseCode = caseCodeCtrl.text.trim();
+  }
   current.memo = memoCtrl.text.trim();
   // 入室日(入室レコードの changedAt)を更新
   if (admEntry != null && admissionDate != null) {

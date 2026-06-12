@@ -925,7 +925,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text('★ お気に入り製剤を優先して設計します',
+                  const Text('★ 病態別製剤やお気に入り製剤を優先して設計します',
                       style: TextStyle(fontSize: 11, color: Colors.grey)),
                 ],
               ),

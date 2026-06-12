@@ -55,17 +55,10 @@ class _BuilderPageState extends State<BuilderPage>
     final defVit = widget.state.catalog.byCategory('ビタミン').firstOrNull?.name;
     if (defTrace != null) _zeroAdditives.add(defTrace);
     if (defVit != null) _zeroAdditives.add(defVit);
-    // 病態に応じてゼロmenu係数を自動設定（NPC/N・脂質g/kg を中央値に）。病態なしは既定維持。
+    // 病態の栄養制限/推奨をゼロmenuの既定入力(kcal/NPC・N/脂質)へ反映。
     final selCase = widget.state.selectedCase;
     if (selCase != null) {
-      // ゼロmenuの目標kcal既定: 目標カロリーの90%(permissive underfeeding)
-      targetKcalController.text =
-          (NutritionCalculator.targetEnergy(selCase) * 0.9).round().toString();
-      final rc = cc.resolveCoeff(selCase.conditionTags);
-      if (rc != null) {
-        npcnController.text = rc.npcN.toStringAsFixed(0);
-        _lipidGPerKg = double.parse(rc.lipidGPerKg.toStringAsFixed(1));
-      }
+      _applyZeroMenuConditionDefaults(selCase);
     }
     _snapCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 260));
@@ -87,6 +80,26 @@ class _BuilderPageState extends State<BuilderPage>
       setState(() => _chartPanelHeight =
           _chartSnapFrom + (_chartSnapToTarget - _chartSnapFrom) * t);
     });
+  }
+
+  /// 病態の栄養制限/推奨をゼロmenuの既定入力へ反映する。
+  /// ・目標kcal = 目標エネルギーの90%(permissive underfeeding)
+  /// ・NPC/N = 病態タンパク目標(腎マトリクス優先, 無ければ患者g/kg)から目標kcalで逆算
+  ///   → 腎/AKI/RRTの蛋白制限や重症の高タンパクが NPC/N に反映される
+  /// ・脂質g/kg = 病態中央値(resolveCoeff・上限1.0)
+  void _applyZeroMenuConditionDefaults(PatientCase c) {
+    final targetKcal = NutritionCalculator.targetEnergy(c) * 0.9;
+    targetKcalController.text = targetKcal.round().toString();
+    final protPerKg = cc.effectiveProteinPerKg(c.conditionTags, c.proteinGoalPerKg);
+    final protG = protPerKg * c.weightKg;
+    if (protG > 0 && targetKcal > 0) {
+      final npc = (targetKcal - protG * 4) * 6.25 / protG;
+      npcnController.text = npc.clamp(80, 500).round().toString();
+    }
+    final rc = cc.resolveCoeff(c.conditionTags);
+    if (rc != null) {
+      _lipidGPerKg = double.parse(rc.lipidGPerKg.toStringAsFixed(1));
+    }
   }
 
   @override
@@ -1508,9 +1521,36 @@ class _BuilderPageState extends State<BuilderPage>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('投与目標設定',
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall),
+                                Row(children: [
+                                  Expanded(
+                                    child: Text('投与目標設定',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall),
+                                  ),
+                                  if (current.conditionTags.isNotEmpty)
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        _applyZeroMenuConditionDefaults(current);
+                                        setState(() {});
+                                      },
+                                      icon: Icon(Icons.auto_fix_high,
+                                          size: 15,
+                                          color: Colors.teal.shade700),
+                                      label: Text('病態の推奨を反映',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.teal.shade700)),
+                                      style: TextButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                ]),
                                 const Divider(),
                                 TextField(
                                   controller: targetKcalController,
@@ -1854,7 +1894,7 @@ class _BuilderPageState extends State<BuilderPage>
                               ],
                               if (category == '食事') ...[
                                 const SizedBox(height: 4),
-                                Text('経口/経腸の食事製剤（濃厚流動食・栄養サポート食品）。本数を指定',
+                                Text('経口/経腸の食事製剤（濃厚流動食・栄養サポート食品）。朝昼夕の食数(各0〜3pac)を指定',
                                     style: Theme.of(context).textTheme.bodySmall),
                                 if (mainProducts.isEmpty)
                                   Padding(
@@ -1948,7 +1988,7 @@ class _BuilderPageState extends State<BuilderPage>
                                       tileColor: (units >= 1 || partialMl > 0)
                                           ? Colors.blue.shade100
                                           : null,
-                                      trailing: (product.category == 'EN' || product.category == 'EN_AUX')
+                                      trailing: (product.category == 'EN' || product.category == 'EN_AUX' || product.isFood)
                                           ? _MealPicker(
                                               morning: existing?.morning ?? 0,
                                               noon: existing?.noon ?? 0,
@@ -1970,15 +2010,15 @@ class _BuilderPageState extends State<BuilderPage>
                                                     width: 80,
                                                     child: ((product.category == 'TPN' ||
                                                                 product.category == 'PPN') &&
-                                                            (product.volumeMl ?? 0) > 100)
+                                                            (product.volumeMl ?? 0) > 50)
                                                         ? Builder(builder: (_) {
                                                             final bagVol =
                                                                 (product.volumeMl ?? 0).round();
                                                             final maxPartial =
-                                                                ((bagVol - 1) ~/ 100) * 100;
+                                                                ((bagVol - 1) ~/ 50) * 50;
                                                             final opts = <int>[
                                                               0,
-                                                              for (int v = 100; v <= maxPartial; v += 100) v
+                                                              for (int v = 50; v <= maxPartial; v += 50) v
                                                             ];
                                                             final cur =
                                                                 partialMl.clamp(0, maxPartial);
