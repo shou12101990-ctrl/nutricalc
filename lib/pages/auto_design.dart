@@ -763,31 +763,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return Colors.blueGrey.shade600;
   }
 
-  Color _clinicalEventMarkerColor(cev.ClinicalEvent event) {
-    if (event.type == cev.ClinicalEventType.rrtStart) {
-      return event.rrtModality == cev.RrtModality.crrt
-          ? Colors.teal.shade700
-          : Colors.purple.shade700;
-    }
-    final effect = event.effectProfile;
-    if (effect.route != cev.RouteEffect.none ||
-        effect.productFilter.contains(cev.ProductFilterEffect.excludeEnteral)) {
-      return effect.route == cev.RouteEffect.npo ||
-              effect.route == cev.RouteEffect.pnOnly
-          ? Colors.red.shade700
-          : Colors.amber.shade800;
-    }
-    if (effect.fluid != cev.FluidEffect.none) return Colors.blue.shade700;
-    if (effect.energy != cev.EnergyEffect.none ||
-        effect.protein != cev.ProteinEffect.none ||
-        effect.electrolyte != cev.ElectrolyteEffect.none ||
-        effect.micronutrient.isNotEmpty) {
-      return Colors.deepOrange.shade700;
-    }
-    if (effect.productFilter.isNotEmpty) return Colors.deepOrange.shade700;
-    return Colors.blueGrey.shade600;
-  }
-
   /// 処方カード下「アラート」リンクから開く、その日のアラート＋手動修正シート。
   /// 残存アラートごとにリペア候補(repair.dart)を提示し、[採用]でワンタップ適用。
   /// 採用結果は _manualDayOverride[feedingIdx] に保持し、カード/グラフへ即反映。
@@ -1318,11 +1293,41 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   bool _hasEventEnergyCap(int i) {
     final overlay = _overlayForDay(i);
     return overlay.energy == cev.EnergyEffect.restrictFor48h ||
-        overlay.activeEvents.any((e) => e.parameters['cap_kcal_day'] is num);
+        overlay.activeEvents.any((e) => e.parameters['cap_kcal_day'] is num) ||
+        _postRefeedingGlideCap(i, double.infinity) != null;
   }
 
-  double _derivedKcalTarget(int i, double templateTargetKcal) =>
-      _eventHardKcalCap(i, templateTargetKcal) ?? templateTargetKcal;
+  /// Refeedingイベント終了後の緩徐再上げ（glide）上限。
+  /// 終了直後にfullへ跳ねると再Refeedingを起こすため、終了→full を約5日かけて漸増。
+  /// 制限中のcap値から templateTarget へ線形補間し、template側が低ければそちらを優先(min)。
+  static const int _postRefeedingGlideDays = 5;
+  double? _postRefeedingGlideCap(int i, double templateTargetKcal) {
+    final day = i + 1; // _overlayForDay と同じ 1-based feeding-day
+    final w = widget.current.weightKg;
+    double? best;
+    for (final e in _clinicalEvents) {
+      if (e.type != cev.ClinicalEventType.refeedingHypophosphatemia) continue;
+      final end = e.endDay;
+      if (end == null) continue; // 終了日未設定（継続中）はglide対象外
+      final since = day - end; // 終了の翌日=1
+      if (since < 1 || since > _postRefeedingGlideDays) continue;
+      // 制限中のcap値（cap_kcal_day指定 or 10kcal/kg）から full へ漸増。
+      final capParam = e.parameters['cap_kcal_day'];
+      final refeedCap = capParam is num ? capParam.toDouble() : w * 10;
+      final frac = since / _postRefeedingGlideDays; // 1/5 .. 5/5
+      var glide = refeedCap + (templateTargetKcal - refeedCap) * frac;
+      if (glide > templateTargetKcal) glide = templateTargetKcal;
+      if (best == null || glide < best) best = glide;
+    }
+    return best;
+  }
+
+  double _derivedKcalTarget(int i, double templateTargetKcal) {
+    var t = _eventHardKcalCap(i, templateTargetKcal) ?? templateTargetKcal;
+    final glide = _postRefeedingGlideCap(i, templateTargetKcal);
+    if (glide != null && glide < t) t = glide; // 終了後の緩徐再上げ
+    return t;
+  }
 
   double? _hardKcalCapForDay(int i, double derivedTargetKcal) =>
       (_refeedingTier != cr.RefeedingTier.none || _hasEventEnergyCap(i))
@@ -1388,50 +1393,94 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return rows * _eventSpanRowH + 6;
   }
 
+  /// ラベル幅の概算（CJKは広め）。配置判定用。
+  double _estLabelWidth(String s) {
+    var w = 0.0;
+    for (final r in s.runes) {
+      w += r > 0x2E80 ? 10.0 : 6.2; // CJK ~10px / ASCII ~6px (fontSize 9.5)
+    }
+    return w;
+  }
+
   Widget _eventSpanBars(int n, int preDays) {
     if (_cachedChartW <= 0 || n <= 0) return const SizedBox.shrink();
     final rows = _eventSpans(n, preDays).take(_eventSpanMaxRows).toList();
     if (rows.isEmpty) return const SizedBox.shrink();
     final cellW = _cachedChartW / n;
     const rowH = _eventSpanRowH;
+    final cardBg = Theme.of(context).cardColor;
 
-    Widget barFor((int, int, String, Color) s, int r) {
+    // ┝─┤ バー本体（cap＋線＋cap）。
+    Widget bar(Color color) => Row(children: [
+          Container(width: 1.5, height: 8, color: color),
+          Expanded(child: Container(height: 2.5, color: color)),
+          Container(width: 1.5, height: 8, color: color),
+        ]);
+
+    Widget rowWidget((int, int, String, Color) s, int r) {
       final left = s.$1 * cellW;
       final width = (s.$2 - s.$1 + 1) * cellW;
       final color = s.$4;
+      final labelW = _estLabelWidth(s.$3);
+      // 1: バーが十分長い → 中央に記載（線の上に乗せ、背景でマスク）
+      final fitsCenter = labelW + 12 <= width;
+      // 3: 短く、直後に別イベントが続く（CRRT→IRRT等）→ 左端に記載
+      final hasFollower = rows.any((o) =>
+          !identical(o, s) && o.$1 >= s.$2 && o.$1 <= s.$2 + 1);
+
+      final label = Text(s.$3,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.visible,
+          style: TextStyle(
+              fontSize: 9.5,
+              height: 1.0,
+              color: color,
+              fontWeight: FontWeight.bold));
+
+      final children = <Widget>[
+        // バー本体
+        Positioned(left: left, width: width, top: 5, child: bar(color)),
+      ];
+      if (fitsCenter) {
+        // 1: 中央（線を背景色でマスクして ├──CRRT──┤ に見せる）
+        children.add(Positioned(
+          left: left,
+          width: width,
+          top: 2.5,
+          child: Center(
+            child: Container(
+              color: cardBg,
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: label,
+            ),
+          ),
+        ));
+      } else {
+        // 短い → バー外側へ。画面端・自バーと重ならない側を選ぶ（pixel基準）。
+        final rightX = left + width + 3;
+        final leftX = left - labelW - 3;
+        final rightFits = rightX + labelW <= _cachedChartW;
+        final leftFits = leftX >= 0;
+        double x;
+        if (hasFollower && leftFits) {
+          x = leftX; // 3: 後続あり（CRRT→IRRT等）は左端優先
+        } else if (rightFits) {
+          x = rightX; // 2: 右端
+        } else if (leftFits) {
+          x = leftX; // 右に入らなければ左へ退避
+        } else {
+          x = (_cachedChartW - labelW).clamp(0.0, _cachedChartW); // 端でクランプ
+        }
+        children.add(Positioned(left: x, top: 2.5, child: label));
+      }
+
       return Positioned(
-        left: left,
-        width: width,
+        left: 0,
+        width: _cachedChartW,
         top: r * rowH,
         height: rowH,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 3),
-              child: Text(s.$3,
-                  maxLines: 1,
-                  overflow: TextOverflow.visible,
-                  softWrap: false,
-                  style: TextStyle(
-                      fontSize: 9.5,
-                      height: 1.0,
-                      color: color,
-                      fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(height: 1),
-            // ┝────┤ 風: 両端に縦キャップ＋中央の横バー
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Row(children: [
-                Container(width: 1.5, height: 7, color: color),
-                Expanded(child: Container(height: 2.5, color: color)),
-                Container(width: 1.5, height: 7, color: color),
-              ]),
-            ),
-          ],
-        ),
+        child: Stack(clipBehavior: Clip.none, children: children),
       );
     }
 
@@ -1443,7 +1492,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            for (var r = 0; r < rows.length; r++) barFor(rows[r], r),
+            for (var r = 0; r < rows.length; r++) rowWidget(rows[r], r),
           ],
         ),
       ),
@@ -1518,7 +1567,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final effFull = _effectiveFullDay();
     if (effFull > _totalDays) _totalDays = effFull;
     for (final e in _clinicalEvents) {
-      final eventEnd = e.endDay ?? e.startDay;
+      var eventEnd = e.endDay ?? e.startDay;
+      // Refeeding終了後のglide(緩徐再上げ)期間も表示・計算に含める
+      if (e.type == cev.ClinicalEventType.refeedingHypophosphatemia &&
+          e.endDay != null) {
+        eventEnd = e.endDay! + _postRefeedingGlideDays;
+      }
       if (eventEnd > _totalDays) _totalDays = eventEnd;
     }
     // 設定変更を親(チャートパネル)に通知
@@ -2573,14 +2627,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         // 経口リハ開始(濃厚流動食・栄サポ食品・一般食)はフォーク&ナイフアイコン。
         if (flags[5]) mkIconBox(Icons.restaurant, Colors.deepOrange.shade400),
       ];
-      final clinicalEventWidgets = [
-        for (final e in activeClinicalEvents.take(maxClinicalMarkers))
-          mkBox(_clinicalEventShortLabel(e.type), _clinicalEventMarkerColor(e)),
-        if (activeClinicalEvents.length > maxClinicalMarkers)
-          mkBox('+${activeClinicalEvents.length - maxClinicalMarkers}',
-              Colors.blueGrey.shade600),
-      ];
-      final evWidgets = [...fixedEventWidgets, ...clinicalEventWidgets];
+      // 臨床イベントは日付下の期間バー(┝────┤)で表示するため、
+      // 日付軸の色付きマーカーは出さない（重複・色変え不要）。
+      final evWidgets = [...fixedEventWidgets];
 
       Widget? icon;
       if (evWidgets.length == 1) {
@@ -3805,8 +3854,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       return diff < 0 ? 1 : diff + 1;
     }
 
-    String fmtDate(DateTime d) =>
-        '${d.year}/${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
     DateTime startDate = dayToDate(existing?.startDay ?? _enStartDay);
     DateTime? endDate =
         existing?.endDay != null ? dayToDate(existing!.endDay!) : null;
@@ -3848,85 +3895,23 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     if (v != null) setLocal(() => type = v);
                   },
                 ),
-                const SizedBox(height: 8),
-                Row(children: [
-                  // 開始日（カレンダー）
-                  Expanded(
-                    child: InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: startDate,
-                          firstDate:
-                              nutritionDay0.subtract(const Duration(days: 14)),
-                          lastDate: nutritionDay0.add(const Duration(days: 365)),
-                          helpText: '開始日を選択',
-                        );
-                        if (picked != null) {
-                          setLocal(() {
-                            startDate = picked;
-                            if (endDate != null && endDate!.isBefore(startDate)) {
-                              endDate = startDate;
-                            }
-                          });
-                        }
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                            labelText: '開始日',
-                            isDense: true,
-                            suffixIcon: Icon(Icons.calendar_today, size: 16)),
-                        child: Text(
-                            '${fmtDate(startDate)}  (Day${dateToDay(startDate)})',
-                            style: const TextStyle(fontSize: 13)),
-                      ),
-                    ),
-                  ),
-                  if (showEnd) ...[
-                    const SizedBox(width: 8),
-                    // 停止日（カレンダー・任意・未設定=継続中）
-                    Expanded(
-                      child: InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: ctx,
-                            initialDate: endDate ?? startDate,
-                            firstDate: startDate,
-                            lastDate:
-                                nutritionDay0.add(const Duration(days: 365)),
-                            helpText: '停止日を選択（任意）',
-                          );
-                          if (picked != null) setLocal(() => endDate = picked);
-                        },
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: '停止日 (任意)',
-                            isDense: true,
-                            suffixIcon: endDate == null
-                                ? const Icon(Icons.calendar_today, size: 16)
-                                : IconButton(
-                                    icon: const Icon(Icons.clear, size: 16),
-                                    visualDensity: VisualDensity.compact,
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    onPressed: () =>
-                                        setLocal(() => endDate = null),
-                                  ),
-                          ),
-                          child: Text(
-                              endDate == null
-                                  ? '継続中'
-                                  : '${fmtDate(endDate!)}  (Day${dateToDay(endDate!)})',
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  color: endDate == null
-                                      ? Colors.grey
-                                      : null)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ]),
+                const SizedBox(height: 6),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('期間（クリックで開始/終了・ドラッグで一括）',
+                      style: TextStyle(fontSize: 11, color: Colors.black54)),
+                ),
+                _EventRangeCalendar(
+                  nutritionDay0: nutritionDay0,
+                  start: startDate,
+                  end: endDate,
+                  firstDate: nutritionDay0.subtract(const Duration(days: 14)),
+                  lastDate: nutritionDay0.add(const Duration(days: 365)),
+                  onChanged: (s, e) => setLocal(() {
+                    startDate = s;
+                    endDate = e;
+                  }),
+                ),
                 if (type == cev.ClinicalEventType.enHold) ...[
                   const SizedBox(height: 8),
                   TextField(
@@ -4414,5 +4399,243 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     ));
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+}
+
+/// イベント期間用のカスタム範囲カレンダー。
+/// 操作: 単一クリック=開始 / 開始より前をクリック=開始変更 / 後をクリック=終了設定 /
+///       押しっぱドラッグ=開始〜終了を一発設定。
+class _EventRangeCalendar extends StatefulWidget {
+  final DateTime nutritionDay0; // Day1 = この日（Day番号表示）
+  final DateTime start;
+  final DateTime? end;
+  final DateTime firstDate;
+  final DateTime lastDate;
+  final void Function(DateTime start, DateTime? end) onChanged;
+  const _EventRangeCalendar({
+    required this.nutritionDay0,
+    required this.start,
+    required this.end,
+    required this.firstDate,
+    required this.lastDate,
+    required this.onChanged,
+  });
+  @override
+  State<_EventRangeCalendar> createState() => _EventRangeCalendarState();
+}
+
+class _EventRangeCalendarState extends State<_EventRangeCalendar> {
+  static const double _cellH = 30.0;
+  late DateTime _visibleMonth;
+  late DateTime _start;
+  DateTime? _end;
+  DateTime? _anchor;
+  bool _moved = false;
+  Offset _downPos = Offset.zero;
+  static const double _dragSlop = 12.0; // この距離を超えて動いたらドラッグ扱い
+
+  @override
+  void initState() {
+    super.initState();
+    _start = _d(widget.start);
+    _end = widget.end != null ? _d(widget.end!) : null;
+    _visibleMonth = DateTime(_start.year, _start.month);
+  }
+
+  DateTime _d(DateTime x) => DateTime(x.year, x.month, x.day);
+
+  DateTime _firstCell() {
+    final first = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
+    return first.subtract(Duration(days: first.weekday % 7)); // 日曜始まり
+  }
+
+  int _dayNum(DateTime d) =>
+      _d(d).difference(_d(widget.nutritionDay0)).inDays + 1;
+
+  void _commit() => widget.onChanged(_start, _end);
+
+  void _applyTap(DateTime d) {
+    setState(() {
+      if (d.isBefore(_start)) {
+        _start = d; // 前をクリック→開始変更
+      } else if (d.isAfter(_start)) {
+        _end = d; // 後をクリック→終了設定
+      } else {
+        _end = null; // 開始と同日→単一日（終了クリア）
+      }
+    });
+    _commit();
+  }
+
+  DateTime? _dayAt(Offset pos, double gridW) {
+    // グリッド外（右/下/負）は無効。右外を土曜に丸めない。
+    if (gridW <= 0) return null;
+    if (pos.dx < 0 || pos.dy < 0 || pos.dx >= gridW || pos.dy >= _cellH * 6) {
+      return null;
+    }
+    final col = (pos.dx / (gridW / 7)).floor().clamp(0, 6);
+    final row = (pos.dy / _cellH).floor().clamp(0, 5);
+    final d = _firstCell().add(Duration(days: row * 7 + col));
+    if (d.isBefore(_d(widget.firstDate)) || d.isAfter(_d(widget.lastDate))) {
+      return null;
+    }
+    return d;
+  }
+
+  bool _inRange(DateTime d) {
+    if (_end == null) return false;
+    return !d.isBefore(_start) && !d.isAfter(_end!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final first = _firstCell();
+    const wd = ['日', '月', '火', '水', '木', '金', '土'];
+    final accent = Theme.of(context).colorScheme.primary;
+
+    Widget cell(int idx) {
+      final d = first.add(Duration(days: idx));
+      final inMonth = d.month == _visibleMonth.month;
+      final isStart = _d(d) == _start;
+      final isEnd = _end != null && _d(d) == _end;
+      final inRange = _inRange(d);
+      final selectable = !d.isBefore(_d(widget.firstDate)) &&
+          !d.isAfter(_d(widget.lastDate));
+      return SizedBox(
+        height: _cellH,
+        child: Container(
+          margin: const EdgeInsets.all(1),
+          decoration: BoxDecoration(
+            color: (isStart || isEnd)
+                ? accent
+                : inRange
+                    ? accent.withValues(alpha: 0.16)
+                    : null,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            '${d.day}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight:
+                  (isStart || isEnd) ? FontWeight.bold : FontWeight.normal,
+              color: (isStart || isEnd)
+                  ? Colors.white
+                  : !selectable
+                      ? Colors.grey.shade300
+                      : inMonth
+                          ? Colors.black87
+                          : Colors.grey.shade400,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 月ナビ
+        Row(children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left, size: 20),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() => _visibleMonth = DateTime(
+                _visibleMonth.year, _visibleMonth.month - 1)),
+          ),
+          Expanded(
+            child: Text('${_visibleMonth.year}年 ${_visibleMonth.month}月',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right, size: 20),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() => _visibleMonth = DateTime(
+                _visibleMonth.year, _visibleMonth.month + 1)),
+          ),
+        ]),
+        Row(
+          children: [
+            for (var i = 0; i < 7; i++)
+              Expanded(
+                child: Text(wd[i],
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        color: i == 0
+                            ? Colors.red.shade400
+                            : i == 6
+                                ? Colors.blue.shade400
+                                : Colors.black54)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        LayoutBuilder(builder: (_, c) {
+          final gridW = c.maxWidth;
+          return Listener(
+            onPointerDown: (e) {
+              _anchor = _dayAt(e.localPosition, gridW);
+              _moved = false;
+              _downPos = e.localPosition;
+            },
+            onPointerMove: (e) {
+              if (_anchor == null) return;
+              // slop未満の微動はタップ扱い（境界jitterで誤ドラッグしない）
+              if (!_moved && (e.localPosition - _downPos).distance < _dragSlop) {
+                return;
+              }
+              final d = _dayAt(e.localPosition, gridW);
+              if (d == null) return;
+              _moved = true;
+              setState(() {
+                if (!d.isBefore(_anchor!)) {
+                  _start = _anchor!;
+                  _end = d;
+                } else {
+                  _start = d;
+                  _end = _anchor!;
+                }
+              });
+            },
+            onPointerUp: (e) {
+              if (_anchor == null) return;
+              if (_moved) {
+                _commit();
+              } else {
+                _applyTap(_anchor!);
+              }
+              _anchor = null;
+            },
+            // キャンセル時もエディタへ確実に反映（古い日付でSaveされるのを防ぐ）
+            onPointerCancel: (e) {
+              if (_anchor == null) return;
+              if (_moved) _commit();
+              _anchor = null;
+            },
+            child: Column(
+              children: [
+                for (var row = 0; row < 6; row++)
+                  Row(children: [
+                    for (var col = 0; col < 7; col++)
+                      Expanded(child: cell(row * 7 + col)),
+                  ]),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 4),
+        Text(
+          _end == null
+              ? '開始 ${_start.month}/${_start.day} (Day${_dayNum(_start)}) 〜 継続中'
+              : '${_start.month}/${_start.day} (Day${_dayNum(_start)}) 〜 '
+                  '${_end!.month}/${_end!.day} (Day${_dayNum(_end!)})',
+          style: TextStyle(fontSize: 11.5, color: Colors.blueGrey.shade700),
+        ),
+      ],
+    );
   }
 }
