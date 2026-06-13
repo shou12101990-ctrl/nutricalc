@@ -17,6 +17,9 @@ Future<void> showPatientEditDialog(
   // Refeedingリスク: 手動選択した NICE 基準フラグ（BMI/絶食以外）。
   final refeedingManualFlags = current.refeedingFlags.toSet();
   bool refeedingExpanded = current.refeedingFlags.isNotEmpty;
+  // EN開始/遅延判断: 選択した基準フラグ。
+  final enTimingFlags = current.enTimingFlags.toSet();
+  bool enTimingExpanded = current.enTimingFlags.isNotEmpty;
   DateTime? fastingDate = current.fastingDate != null
       ? DateTime.tryParse(current.fastingDate!)
       : null;
@@ -274,6 +277,21 @@ Future<void> showPatientEditDialog(
                   }),
                 ),
                 const SizedBox(height: 8),
+                // EN開始/遅延 判断(ESPEN/ASPEN) — 折りたたみ
+                _buildEnTimingSection(
+                  flags: enTimingFlags,
+                  expanded: enTimingExpanded,
+                  onToggleExpand: () =>
+                      setLocal(() => enTimingExpanded = !enTimingExpanded),
+                  onToggleFlag: (id, sel) => setLocal(() {
+                    if (sel) {
+                      enTimingFlags.add(id);
+                    } else {
+                      enTimingFlags.remove(id);
+                    }
+                  }),
+                ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: memoCtrl,
                   decoration: const InputDecoration(
@@ -322,6 +340,11 @@ Future<void> showPatientEditDialog(
       .map((c) => c.id)
       .where(_isManualRefeedingFlag)
       .where(refeedingManualFlags.contains)
+      .toList();
+  // EN開始/遅延 判断の選択基準（既知idに限定・カタログ順を維持）。
+  current.enTimingFlags = cen.kEnTimingCriteria
+      .map((c) => c.id)
+      .where(enTimingFlags.contains)
       .toList();
   current.fastingDate = fastingDate == null
       ? null
@@ -497,6 +520,119 @@ Widget _buildRefeedingSection({
                             fontSize: 11, color: tierColor, height: 1.4)),
                   ),
                 ],
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// 患者編集ダイアログの「EN開始/遅延 判断(ESPEN/ASPEN)」折りたたみセクション。
+/// 遅延/回避すべき状況・早期EN支持の状況を FilterChip で選択し、
+/// enTimingRecommendation で推奨（避ける/早期開始支持/標準）を色付き表示する。
+Widget _buildEnTimingSection({
+  required Set<String> flags,
+  required bool expanded,
+  required VoidCallback onToggleExpand,
+  required void Function(String id, bool selected) onToggleFlag,
+}) {
+  final rec = cen.enTimingRecommendation(flags);
+  final recColor = switch (rec) {
+    cen.EnTimingRecommendation.avoid => Colors.red.shade700,
+    cen.EnTimingRecommendation.startEarly => Colors.green.shade700,
+    cen.EnTimingRecommendation.startStandard => Colors.blueGrey.shade600,
+  };
+  final avoidCriteria =
+      cen.kEnTimingCriteria.where((c) => c.group == 'avoid').toList();
+  final earlyCriteria =
+      cen.kEnTimingCriteria.where((c) => c.group == 'early').toList();
+
+  Widget chips(List<cen.EnTimingCriterion> list) => Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (final c in list)
+            FilterChip(
+              label: Text(c.label, style: const TextStyle(fontSize: 11)),
+              selected: flags.contains(c.id),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onSelected: (sel) => onToggleFlag(c.id, sel),
+            ),
+        ],
+      );
+
+  return Container(
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.grey.shade300),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: onToggleExpand,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(children: [
+              Icon(Icons.restaurant_menu, size: 16, color: recColor),
+              const SizedBox(width: 4),
+              const Expanded(
+                child: Text('EN開始/遅延 判断 (ESPEN/ASPEN)',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: recColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: recColor.withOpacity(0.5)),
+                ),
+                child: Text(rec.label,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: recColor,
+                        fontWeight: FontWeight.bold)),
+              ),
+              Icon(expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18, color: Colors.grey.shade600),
+            ]),
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('遅延/回避を考慮する状況',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.red.shade700)),
+                const SizedBox(height: 4),
+                chips(avoidCriteria),
+                const SizedBox(height: 8),
+                Text('早期ENが原則支持される状況',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.green.shade700)),
+                const SizedBox(height: 4),
+                chips(earlyCriteria),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: recColor.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: recColor.withOpacity(0.3)),
+                  ),
+                  child: Text(cen.enTimingActionText(rec),
+                      style: TextStyle(
+                          fontSize: 11, color: recColor, height: 1.4)),
+                ),
               ],
             ),
           ),

@@ -50,6 +50,16 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   late List<int> _dayMealPac; // 各Dayの食事 朝昼夕あたりpac数(0=食事なし, 1..3)
   late List<int> _dayMealSlots; // 各Dayの経口スロット数(0=なし, 1..3)。残りはENで補う。
   final List<List<RepairChange>> _dayRepairChanges = []; // 各Dayの自動補正(repair)記録
+  // RSイベント検出(再栄養後の P/K/Mg 低下%)入力。transient(永続化しない=古い検査値を残さない)。
+  bool _rsExpanded = false;
+  bool _rsOrganDysfunction = false;
+  final _rsBaseP = TextEditingController();
+  final _rsCurP = TextEditingController();
+  final _rsBaseK = TextEditingController();
+  final _rsCurK = TextEditingController();
+  final _rsBaseMg = TextEditingController();
+  final _rsCurMg = TextEditingController();
+  bool _labScheduleExpanded = false; // 採血提案カードの展開状態
 
   // EN食上げ固定シーケンス(7日): 10→20→30→40ml/h → 1pac朝昼夕(3) → 2pac朝昼夕(6) → EN単独full
   static const _enRampSequence = ['r10', 'r20', 'r30', 'r40', 'p3', 'p6', 'p6'];
@@ -122,6 +132,16 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   @override
   void dispose() {
     _saveConfig();
+    for (final c in [
+      _rsBaseP,
+      _rsCurP,
+      _rsBaseK,
+      _rsCurK,
+      _rsBaseMg,
+      _rsCurMg
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -326,16 +346,100 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return plan;
   }
 
+  /// その日の処方をアラートエンジンで評価（read-only）。severity順にソート。
+  List<ae.NutritionAlert> _engineDayAlerts(DesignPlan plan) {
+    final ps = _planStateFromDayPlan(plan);
+    if (ps.items.isEmpty) return const [];
+    return ae
+        .evaluate(_evalDayPlan(ps), ae.ConstraintSet.standard())
+        .where((a) => !a.dataMissing)
+        .toList()
+      ..sort((a, b) => a.severity.index.compareTo(b.severity.index));
+  }
+
   /// その日の処方をアラートエンジンで評価（read-only・トレンドのバッジ用）。
   ({int err, int warn}) _engineDayAlertCounts(DesignPlan plan) {
-    final ps = _planStateFromDayPlan(plan);
-    if (ps.items.isEmpty) return (err: 0, warn: 0);
-    final alerts = ae
-        .evaluate(_evalDayPlan(ps), ae.ConstraintSet.standard())
-        .where((a) => !a.dataMissing);
+    final alerts = _engineDayAlerts(plan);
     return (
       err: alerts.where((a) => a.severity == ae.AlertSeverity.error).length,
       warn: alerts.where((a) => a.severity == ae.AlertSeverity.warning).length,
+    );
+  }
+
+  /// ポップアップ固定時、アラートバッジのタップで開く「その日のアラート詳細」。
+  void _showDayAlertDetail(int idx, DesignPlan plan, DateTime date) {
+    final alerts = _engineDayAlerts(plan);
+    Color colOf(ae.AlertSeverity s) => s == ae.AlertSeverity.error
+        ? Colors.red.shade700
+        : s == ae.AlertSeverity.warning
+            ? Colors.orange.shade800
+            : Colors.blueGrey;
+    IconData icoOf(ae.AlertSeverity s) => s == ae.AlertSeverity.error
+        ? Icons.error_outline
+        : s == ae.AlertSeverity.warning
+            ? Icons.warning_amber_rounded
+            : Icons.info_outline;
+    String sevLabel(ae.AlertSeverity s) => s == ae.AlertSeverity.error
+        ? '禁忌'
+        : s == ae.AlertSeverity.warning
+            ? '警告'
+            : '情報';
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${date.month}/${date.day} のアラート詳細',
+            style: const TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: 360,
+          child: alerts.isEmpty
+              ? const Text('この日のアラートはありません。')
+              : SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final a in alerts)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: colOf(a.severity).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: colOf(a.severity)
+                                    .withValues(alpha: 0.5)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Icon(icoOf(a.severity),
+                                    size: 16, color: colOf(a.severity)),
+                                const SizedBox(width: 6),
+                                Text('【${sevLabel(a.severity)}】${a.code}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: colOf(a.severity))),
+                              ]),
+                              const SizedBox(height: 4),
+                              Text(a.message,
+                                  style: const TextStyle(
+                                      fontSize: 12, height: 1.4)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('閉じる')),
+        ],
+      ),
     );
   }
 
@@ -672,6 +776,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             : null,
         aaSupplementBelowFrac: 0.90, // 目標90%未満(=10%以上へこむ)時だけAA補充
         aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
+        conditionTags: widget.current.conditionTags, // ゼロmenuのNPC/N・脂質を病態連動
       );
       // B1自動加注 + repair(Mn-free置換/Na減/Zn・Se補充/タンパク調整)を適用
       final changes = <RepairChange>[];
@@ -1279,6 +1384,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   : null,
               aaSupplementBelowFrac: 0.90, // 目標90%未満時だけAA補充
               aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
+              conditionTags: widget.current.conditionTags, // ゼロmenuのNPC/N・脂質を病態連動
             );
       p = _b1AndRepair(p, i);
       if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
@@ -1365,6 +1471,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // Refeeding（NICE）リスク: 自動フラグ(絶食日数・BMI) ∪ 手動フラグ(体重減/低電解質/既往歴)で判定。
     final refeedTier = _refeedingTier;
     final refeedRisk = refeedTier != cr.RefeedingTier.none;
+    // EN開始/遅延 判断（患者編集で選択した基準から推奨を算出）。
+    final enTimingRec =
+        cen.enTimingRecommendation(widget.current.enTimingFlags.toSet());
+    final enTimingShow = widget.current.enTimingFlags.isNotEmpty;
+    // CKRT稼働（採血提案のトリガー）。
+    final ckrtActive = cc.CkrtObligation.appliesTo(widget.current.conditionTags);
+    // 採血提案カード: refeeding/CKRT/長期PN いずれかで監視が必要なとき表示。
+    final labShow = refeedRisk || ckrtActive || pnMonitorRisk;
     // 電解質・微量元素・ビタミンのUL超過: 日毎に集計し栄養素ごとに最高レベル/最早日を採用。
     final microByNutrient = <String, ({cm.MicroAlert alert, int dayIdx})>{};
     for (int i = 0; i < n; i++) {
@@ -1380,11 +1494,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         thiamineRisk ||
         pnMonitorRisk ||
         refeedRisk ||
+        enTimingShow ||
+        labShow ||
         microAlertsList.isNotEmpty;
     final alertCount = (efadRisk ? 1 : 0) +
         (thiamineRisk && !refeedRisk ? 1 : 0) +
         (pnMonitorRisk ? 1 : 0) +
         (refeedRisk ? 1 : 0) +
+        (enTimingShow ? 1 : 0) +
+        (labShow ? 1 : 0) +
         microAlertsList.length;
 
     // 日付ラベル: 同月内は日のみ, 月が変わる初日はmm/dd
@@ -1857,7 +1975,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                               return const SizedBox.shrink();
                                             }
                                             final red = ac.err > 0;
-                                            return Padding(
+                                            final badge = Padding(
                                               padding: const EdgeInsets.only(
                                                   top: 2),
                                               child: Row(children: [
@@ -1877,7 +1995,27 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                                                 .red.shade700
                                                             : Colors.orange
                                                                 .shade800)),
+                                                // 固定中はタップで詳細できることを示すヒント
+                                                if (isPinned) ...[
+                                                  const SizedBox(width: 4),
+                                                  Text('詳細▸',
+                                                      style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors
+                                                              .blue.shade700)),
+                                                ],
                                               ]),
+                                            );
+                                            // 固定(ピン留め)時のみアラートをタップ→詳細ダイアログ。
+                                            if (!isPinned) return badge;
+                                            return GestureDetector(
+                                              behavior:
+                                                  HitTestBehavior.opaque,
+                                              onTap: () => _showDayAlertDetail(
+                                                  idx, plan, dates[idx]),
+                                              child: badge,
                                             );
                                           }),
                                           Builder(builder: (_) {
@@ -2082,6 +2220,26 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     '（本設計は自動でcap済み）。',
                 suggest: cr.refeedingActionText(refeedTier),
               ),
+            // EN開始/遅延 判断（患者編集で選択した状況からの推奨）
+            if (_alertsExpanded && enTimingShow)
+              _chartAlert(
+                color: switch (enTimingRec) {
+                  cen.EnTimingRecommendation.avoid => Colors.red.shade700,
+                  cen.EnTimingRecommendation.startEarly =>
+                    Colors.green.shade700,
+                  cen.EnTimingRecommendation.startStandard =>
+                    Colors.blueGrey.shade700,
+                },
+                title: 'EN開始/遅延 判断：${enTimingRec.label}',
+                body: '患者編集で選択した状況'
+                    '（${widget.current.enTimingFlags.length}項目）に基づく推奨です。',
+                suggest: cen.enTimingActionText(enTimingRec),
+              ),
+            // 採血(モニタリング)提案
+            if (_alertsExpanded && labShow)
+              _buildLabScheduleCard(refeedTier, ckrtActive, pnHeavyMaxDay),
+            // Refeeding RSイベント検出（再栄養後 P/K/Mg 低下%）
+            if (_alertsExpanded && refeedRisk) _buildRsPanel(),
             for (final m in microAlertsList)
               if (_alertsExpanded)
                 _chartAlert(
@@ -2200,6 +2358,275 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               ),
             ),
           ],
+        ),
+      );
+
+  /// 採血(モニタリング)提案カード（折りたたみ）。
+  /// refeeding/CKRT/長期PN の臨床コンテキストから採血項目・頻度・トリガーを提示。
+  Widget _buildLabScheduleCard(
+      cr.RefeedingTier tier, bool ckrtActive, int pnHeavyMaxDay) {
+    // daysSinceNutritionStart は渡さない(計画ビュー)= 両期間の頻度を併記表示。
+    final suggestions = clab.labSchedule(
+      refeedingTier: tier,
+      ckrtActive: ckrtActive,
+      pnHeavyMaxDay: pnHeavyMaxDay,
+    );
+    final color = Colors.indigo.shade700;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () =>
+                setState(() => _labScheduleExpanded = !_labScheduleExpanded),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(children: [
+                Icon(Icons.science_outlined, size: 18, color: color),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('採血(モニタリング)提案　${suggestions.length}件',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                          fontSize: 12.5)),
+                ),
+                Icon(
+                    _labScheduleExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    size: 18,
+                    color: color),
+              ]),
+            ),
+          ),
+          if (_labScheduleExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final s in suggestions)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(TextSpan(children: [
+                            TextSpan(
+                                text: '${s.panel}　',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: color,
+                                    fontSize: 11.5)),
+                            TextSpan(
+                                text: s.frequency,
+                                style: TextStyle(
+                                    color: color,
+                                    fontSize: 11.5,
+                                    height: 1.35)),
+                          ])),
+                          Text(s.reason,
+                              style: TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 10.5,
+                                  height: 1.3)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Refeeding RSイベント検出パネル（折りたたみ・入力はtransient）。
+  /// 再栄養後の P/K/Mg baseline→current 低下%から RS重症度を分類して表示。
+  Widget _buildRsPanel() {
+    crev.RsLab labOf(TextEditingController b, TextEditingController c) =>
+        crev.RsLab(
+          baseline: double.tryParse(b.text.trim()),
+          current: double.tryParse(c.text.trim()),
+        );
+    final assess = crev.assessRefeedingSyndrome(
+      phosphate: labOf(_rsBaseP, _rsCurP),
+      potassium: labOf(_rsBaseK, _rsCurK),
+      magnesium: labOf(_rsBaseMg, _rsCurMg),
+      organDysfunction: _rsOrganDysfunction,
+    );
+    final color = switch (assess.severity) {
+      crev.RsSeverity.severe => Colors.red.shade700,
+      crev.RsSeverity.moderate => Colors.deepOrange.shade700,
+      crev.RsSeverity.mild => Colors.orange.shade800,
+      crev.RsSeverity.none => Colors.blueGrey.shade600,
+    };
+
+    Widget labRow(String name, TextEditingController b, TextEditingController c,
+        String? dropKey) {
+      final drop = dropKey != null ? assess.dropPercents[dropKey] : null;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(children: [
+          SizedBox(
+              width: 28,
+              child: Text(name,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold))),
+          Expanded(child: _rsField(b, '前値')),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(Icons.arrow_right_alt, size: 16),
+          ),
+          Expanded(child: _rsField(c, '現値')),
+          SizedBox(
+            width: 56,
+            child: Text(
+              drop != null && drop > 0
+                  ? '−${drop.toStringAsFixed(0)}%'
+                  : '—',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: drop != null &&
+                          crev.rsSeverityFromDrop(drop) != crev.RsSeverity.none
+                      ? color
+                      : Colors.black45),
+            ),
+          ),
+        ]),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _rsExpanded = !_rsExpanded),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(children: [
+                Icon(Icons.monitor_heart_outlined, size: 18, color: color),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Refeeding 発症モニタ（P/K/Mg 低下%）',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12.5)),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: color.withValues(alpha: 0.5)),
+                  ),
+                  child: Text(assess.severity.label,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: color,
+                          fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 4),
+                Icon(_rsExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18, color: color),
+              ]),
+            ),
+          ),
+          if (_rsExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('再栄養5日以内の血清値を入力（前値=再栄養前/現値=直近）',
+                      style: TextStyle(
+                          fontSize: 10.5, color: Colors.black54)),
+                  const SizedBox(height: 6),
+                  labRow('P', _rsBaseP, _rsCurP, 'P'),
+                  labRow('K', _rsBaseK, _rsCurK, 'K'),
+                  labRow('Mg', _rsBaseMg, _rsCurMg, 'Mg'),
+                  Row(children: [
+                    SizedBox(
+                      height: 28,
+                      width: 28,
+                      child: Checkbox(
+                        value: _rsOrganDysfunction,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (v) => setState(
+                            () => _rsOrganDysfunction = v ?? false),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Expanded(
+                      child: Text('低下に伴う臓器障害あり（→重症）',
+                          style: TextStyle(fontSize: 11.5)),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: color.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                        '${assess.severity.label}：${crev.rsActionText(assess.severity)}',
+                        style: TextStyle(
+                            fontSize: 11.5, color: color, height: 1.4)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// RSパネルの小さな数値入力欄。
+  Widget _rsField(TextEditingController c, String hint) => SizedBox(
+        height: 34,
+        child: TextField(
+          controller: c,
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 12),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle:
+                const TextStyle(fontSize: 11, color: Colors.black38),
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            border: const OutlineInputBorder(),
+          ),
+          onChanged: (_) => setState(() {}),
         ),
       );
 

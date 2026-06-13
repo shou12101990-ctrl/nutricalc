@@ -12,6 +12,9 @@ import 'clinical/protein.dart' as cp;
 import 'clinical/conditions.dart' as cc;
 import 'clinical/infusion.dart' as ci;
 import 'clinical/refeeding.dart' as cr;
+import 'clinical/refeeding_events.dart' as crev;
+import 'clinical/lab_schedule.dart' as clab;
+import 'clinical/en_timing.dart' as cen;
 import 'clinical/micronutrients.dart' as cm;
 
 // データモデル層（lib/models/）。importで内部使用し、exportで後方互換に再公開。

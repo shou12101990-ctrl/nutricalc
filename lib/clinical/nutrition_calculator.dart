@@ -341,14 +341,20 @@ class NutritionCalculator {
     // タンパク補充ポリシー(自動計算): タンパクがこの割合未満の時だけAA補充(既定1.0=常に目標まで)。
     double aaSupplementBelowFrac = 1.0,
     double? aaSupplementMaxMl, // AA補充の合計ml上限(自動計算=500)。null=無制限。
+    List<String> conditionTags = const [], // 病態タグ: ゼロmenuのNPC/N・脂質を病態連動させる
   }) {
-    // ゼロmenu(静注ブレンド)のitem群を構築
+    // ゼロmenu(静注ブレンド)のitem群を構築。
+    // 病態連動: NPC/N・脂質g/kg は病態係数の中央値(cc.resolveCoeff)を使う。
+    // 病態未設定なら従来既定(NPC/N 125・脂質0.4 g/kg)へフォールバック。
+    final zeroCoeff = cc.resolveCoeff(conditionTags);
+    final zeroNpcN = zeroCoeff?.npcN ?? 125;
+    final zeroLipidGPerKg = zeroCoeff?.lipidGPerKg ?? 0.4;
     List<DesignItem> buildZeroItems(double tKcal) {
       final items = <DesignItem>[];
       final z = zeroMenuSuggestion(
         targetKcal: tKcal,
-        npcNRatio: 125,
-        lipidGramPerKg: 0.4,
+        npcNRatio: zeroNpcN,
+        lipidGramPerKg: zeroLipidGPerKg,
         weightKg: weightKg,
         glucoseProduct: glucoseProduct,
         aminoProduct: aminoProduct,
