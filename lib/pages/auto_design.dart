@@ -1362,10 +1362,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   /// 日付軸の下に、臨床イベントの有効期間を ┝────┤ の帯で表示（§23.3）。
   /// チャートの棒/線座標は触らず、日付列に揃えた帯を別Rowで重ねる。
   /// RRT開始は次のRRTイベント直前まで（無ければ終端まで）。停止は帯にしない。
-  Widget _eventSpanBars(int n, int preDays) {
-    if (_clinicalEvents.isEmpty || n <= 0 || _cachedChartW <= 0) {
-      return const SizedBox.shrink();
-    }
+  static const double _eventSpanRowH = 17.0;
+  static const int _eventSpanMaxRows = 6;
+
+  /// 各臨床イベントの帯スパン (start,end(chart idx),label,color) を算出。
+  List<(int, int, String, Color)> _eventSpans(int n, int preDays) {
+    if (_clinicalEvents.isEmpty || n <= 0) return const [];
     // 各RRT/停止イベントの startDay 昇順（RRT区間の終端算出用）。
     final rrtDays = _clinicalEvents
         .where((e) =>
@@ -1374,8 +1376,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         .map((e) => e.startDay)
         .toList()
       ..sort();
-
-    final spans = <(int, int, String, Color)>[]; // start,end(chart idx),label,color
+    final spans = <(int, int, String, Color)>[];
     for (final e in _clinicalEvents) {
       if (e.type == cev.ClinicalEventType.rrtStop) continue; // 停止は帯にしない
       final startIdx = (preDays + e.startDay - 1).clamp(0, n - 1);
@@ -1397,12 +1398,26 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           : _clinicalEventShortLabel(e.type);
       spans.add((startIdx, endIdx, label, _eventSpanColor(e)));
     }
-    if (spans.isEmpty) return const SizedBox.shrink();
-    // 優先度の高い(=制限的)順に上へ。重なっても行を分けて全て見せる。
+    // 開始位置の早い順に上へ。重なっても行を分けて全て見せる。
     spans.sort((a, b) => a.$1.compareTo(b.$1));
-    final rows = spans.take(6).toList();
+    return spans;
+  }
+
+  /// 期間バー領域の高さ（チャート固定高さに加算してクリップを防ぐ）。
+  double _eventSpanHeight(int n, int preDays) {
+    final c = _eventSpans(n, preDays).length;
+    if (c == 0) return 0;
+    final rows = c > _eventSpanMaxRows ? _eventSpanMaxRows : c;
+    // _eventSpanBars: SizedBox(rows*rowH+2) + Padding(top2+bottom2)=+6
+    return rows * _eventSpanRowH + 6;
+  }
+
+  Widget _eventSpanBars(int n, int preDays) {
+    if (_cachedChartW <= 0 || n <= 0) return const SizedBox.shrink();
+    final rows = _eventSpans(n, preDays).take(_eventSpanMaxRows).toList();
+    if (rows.isEmpty) return const SizedBox.shrink();
     final cellW = _cachedChartW / n;
-    const rowH = 17.0;
+    const rowH = _eventSpanRowH;
 
     Widget barFor((int, int, String, Color) s, int r) {
       final left = s.$1 * cellW;
@@ -2736,8 +2751,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             if (!_trendCollapsed) const SizedBox(height: 8),
             if (!_trendCollapsed)
               // グラフはhoverツールチップ専用(クリック起動は中段の処方カードへ移動)。
+              // plot(184)+axis(66)=250 に、イベント期間バー分の高さを加算してクリップを防ぐ。
               SizedBox(
-                height: 250,
+                height: 250 + _eventSpanHeight(n, preDays),
                 child: MouseRegion(
                   onHover: (e) {
                     if (n == 0) return;
