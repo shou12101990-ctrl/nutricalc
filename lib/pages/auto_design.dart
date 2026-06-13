@@ -35,7 +35,9 @@ class AutoDesignPage extends StatelessWidget {
 class _AutoDesignPageState extends State<AutoDesignInline> {
   int _hoveredBarIdx = -1; // グラフホバー中のバーインデックス (-1=なし)。hoverツールチップ専用。
   bool _alertsExpanded = false; // 栄養管理アラートの展開状態(既定=折り畳み)
-  bool _trendCollapsed = false; // トレンド(栄養の推移)折りたたみ
+  // トレンド表示モード: 0=通常(グラフ表示) / 1=全画面(サジェスト全展開) / 2=折りたたみ。
+  // ボタンで 0→1→2→0 とループ。
+  int _trendViewMode = 0;
   double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
   int _rampDays = 5; // full nutrition達成日(栄養開始からのDay)。この日に等差ランプでfullへ到達。
   // 簡易式の栄養係数の上限を使う「最終日」(until, 栄養開始からのDay)。permissive underfeeding。
@@ -311,9 +313,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       case 'recurrentNpo':
       case 'recurrent_npo':
         return cev.ClinicalEventType.recurrentNpo;
-      case 'suspectedNomi':
-      case 'suspected_nomi':
-        return cev.ClinicalEventType.suspectedNomi;
       case 'refeedingHypophosphatemia':
       case 'refeeding_hypophosphatemia':
         return cev.ClinicalEventType.refeedingHypophosphatemia;
@@ -329,9 +328,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       case 'rrtStart':
       case 'rrt_start':
         return cev.ClinicalEventType.rrtStart;
-      case 'rrtStop':
-      case 'rrt_stop':
-        return cev.ClinicalEventType.rrtStop;
+      // 旧 rrtStop は廃止（モダリティ別の開始＋期間で表現）。読み飛ばす。
       default:
         return null;
     }
@@ -652,10 +649,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       };
 
   String _bandLabel(cad.BandLevel level) => switch (level) {
-        cad.BandLevel.green => 'green',
-        cad.BandLevel.amber => 'amber',
-        cad.BandLevel.red => 'red',
-        cad.BandLevel.hardViolation => 'hard',
+        cad.BandLevel.green => '適正',
+        cad.BandLevel.amber => '要注意',
+        cad.BandLevel.red => '範囲外',
+        cad.BandLevel.hardViolation => '禁忌超過',
       };
 
   List<Widget> _engineBandDots(
@@ -687,8 +684,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final level = target.classify(plan.totalKcal);
       out.add(dot(
         level,
-        'Energy ${_bandLabel(level)}: ${plan.totalKcal.round()}kcal / '
-        'green ${target.greenMinKcal.round()}–${target.greenMaxKcal.round()}kcal',
+        'エネルギー ${_bandLabel(level)}: ${plan.totalKcal.round()}kcal / '
+        '適正帯 ${target.greenMinKcal.round()}–${target.greenMaxKcal.round()}kcal',
       ));
     }
     if (referenceWeight > 0 && dayIndex < result.proteinTargets.length) {
@@ -697,8 +694,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       final level = target.classify(actual);
       out.add(dot(
         level,
-        'Protein ${_bandLabel(level)}: ${actual.toStringAsFixed(2)}g/kg / '
-        'band ${target.minGPerKg.toStringAsFixed(1)}–${target.maxGPerKg.toStringAsFixed(1)}g/kg',
+        'タンパク ${_bandLabel(level)}: ${actual.toStringAsFixed(2)}g/kg / '
+        '目標帯 ${target.minGPerKg.toStringAsFixed(1)}–${target.maxGPerKg.toStringAsFixed(1)}g/kg',
       ));
     }
     return out;
@@ -767,8 +764,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   }
 
   Color _clinicalEventMarkerColor(cev.ClinicalEvent event) {
-    if (event.type == cev.ClinicalEventType.rrtStart ||
-        event.type == cev.ClinicalEventType.rrtStop) {
+    if (event.type == cev.ClinicalEventType.rrtStart) {
       return event.rrtModality == cev.RrtModality.crrt
           ? Colors.teal.shade700
           : Colors.purple.shade700;
@@ -1336,7 +1332,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   /// 臨床イベントの表示色（種別/RRTモダリティで決定）。
   Color _eventSpanColor(cev.ClinicalEvent e) {
     switch (e.type) {
-      case cev.ClinicalEventType.suspectedNomi:
       case cev.ClinicalEventType.recurrentNpo:
         return Colors.red.shade600;
       case cev.ClinicalEventType.enHold:
@@ -1354,8 +1349,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         return e.rrtModality == cev.RrtModality.crrt
             ? Colors.purple.shade600
             : Colors.teal.shade700;
-      case cev.ClinicalEventType.rrtStop:
-        return Colors.blueGrey.shade400;
     }
   }
 
@@ -1368,31 +1361,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   /// 各臨床イベントの帯スパン (start,end(chart idx),label,color) を算出。
   List<(int, int, String, Color)> _eventSpans(int n, int preDays) {
     if (_clinicalEvents.isEmpty || n <= 0) return const [];
-    // 各RRT/停止イベントの startDay 昇順（RRT区間の終端算出用）。
-    final rrtDays = _clinicalEvents
-        .where((e) =>
-            e.type == cev.ClinicalEventType.rrtStart ||
-            e.type == cev.ClinicalEventType.rrtStop)
-        .map((e) => e.startDay)
-        .toList()
-      ..sort();
     final spans = <(int, int, String, Color)>[];
     for (final e in _clinicalEvents) {
-      if (e.type == cev.ClinicalEventType.rrtStop) continue; // 停止は帯にしない
       final startIdx = (preDays + e.startDay - 1).clamp(0, n - 1);
       if (preDays + e.startDay - 1 > n - 1) continue; // タイムライン外
-      int endIdx;
-      if (e.type == cev.ClinicalEventType.rrtStart) {
-        final next = rrtDays.where((d) => d > e.startDay).fold<int?>(
-            null, (m, d) => m == null || d < m ? d : m);
-        endIdx = next != null
-            ? (preDays + next - 1 - 1).clamp(startIdx, n - 1)
-            : n - 1; // open-ended は終端まで
-      } else {
-        endIdx = e.endDay != null
-            ? (preDays + e.endDay! - 1).clamp(startIdx, n - 1)
-            : n - 1; // 終了日未入力は継続中とみなし終端まで
-      }
+      // 期間は endDay で決定。未入力は継続中とみなし終端まで。
+      final endIdx = e.endDay != null
+          ? (preDays + e.endDay! - 1).clamp(startIdx, n - 1)
+          : n - 1;
       final label = e.type == cev.ClinicalEventType.rrtStart
           ? (e.rrtModality?.key ?? 'RRT')
           : _clinicalEventShortLabel(e.type);
@@ -1937,15 +1913,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                               },
                               children: _kcalStepTableRows(),
                             ),
+                            const SizedBox(width: 16),
+                            // 3列目: 主要な臨床経過（イベント名 dd/mm - dd/mm）
+                            _clinicalCourseColumn(),
                           ],
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text('★ 病態別製剤やお気に入り製剤を優先して設計します',
-                          style: TextStyle(fontSize: 11, color: Colors.grey)),
                       _engineSourceBadgeLegend(engineResult),
-                      const SizedBox(height: 8),
-                      _clinicalEventPanel(),
                     ],
                   ),
                 ),
@@ -2358,6 +2333,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final ins = plans.map((p) => p.totalVolumeMl).toList();
     final prots = plans.map((p) => p.totalProteinG).toList();
     final n = plans.length;
+    // アラート(サジェスト)の表示: 折りたたみ(2)では非表示、全画面(1)では強制展開。
+    final alertsShown = _trendViewMode != 2 &&
+        (_alertsExpanded || _trendViewMode == 1);
 
     // 必須脂肪酸欠乏(EFAD)チェック:
     //   絶食開始(chartOrigin)からday14までに脂質が全く補充されていなければアラート。
@@ -2737,19 +2715,37 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           children: [
             Row(children: [
               const Text('トレンド', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 6),
+              Text(
+                switch (_trendViewMode) {
+                  1 => '全画面',
+                  2 => '折りたたみ中',
+                  _ => '',
+                },
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
               const Spacer(),
               IconButton(
+                // 0→1→2→0 でループ（通常→全画面→折りたたみ）
                 icon: Icon(
-                    _trendCollapsed ? Icons.expand_less : Icons.expand_more,
-                    size: 22),
-                tooltip: _trendCollapsed ? '展開' : '折りたたむ',
+                    switch (_trendViewMode) {
+                      0 => Icons.open_in_full, // → 全画面へ
+                      1 => Icons.unfold_less, // → 折りたたみへ
+                      _ => Icons.unfold_more, // → 通常へ
+                    },
+                    size: 20),
+                tooltip: switch (_trendViewMode) {
+                  0 => 'サジェストを全画面表示',
+                  1 => '折りたたむ',
+                  _ => '展開',
+                },
                 visualDensity: VisualDensity.compact,
-                onPressed: () =>
-                    setState(() => _trendCollapsed = !_trendCollapsed),
+                onPressed: () => setState(
+                    () => _trendViewMode = (_trendViewMode + 1) % 3),
               ),
             ]),
-            if (!_trendCollapsed) const SizedBox(height: 8),
-            if (!_trendCollapsed)
+            if (_trendViewMode != 2) const SizedBox(height: 8),
+            if (_trendViewMode != 2)
               // グラフはhoverツールチップ専用(クリック起動は中段の処方カードへ移動)。
               // plot(184)+axis(66)=250 に、イベント期間バー分の高さを加算してクリップを防ぐ。
               SizedBox(
@@ -3111,7 +3107,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 ), // MouseRegion
               ), // SizedBox
             // === 栄養管理アラート（グラフの下・既定は折り畳み、タップで展開） ===
-            if (hasAlerts) ...[
+            if (hasAlerts && _trendViewMode != 2) ...[
               const SizedBox(height: 12),
               InkWell(
                 borderRadius: BorderRadius.circular(8),
@@ -3156,7 +3152,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               ),
               const SizedBox(height: 8),
             ],
-            if (_alertsExpanded && efadRisk)
+            if (alertsShown && efadRisk)
               _chartAlert(
                 color: Colors.orange.shade800,
                 title: '${_alertDate(14, dates, n)}以降　必須脂肪酸欠乏のリスク',
@@ -3165,7 +3161,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 suggest: 'イントラリポス20% 100mL/日（脂質20g）を補充'
                     '（または週2回100mL）',
               ),
-            if (_alertsExpanded && thiamineRisk && !refeedRisk)
+            if (alertsShown && thiamineRisk && !refeedRisk)
               _chartAlert(
                 color: Colors.red.shade700,
                 title: '${_alertDate(preDays + 1, dates, n)}以降（栄養再開・糖負荷時）'
@@ -3174,7 +3170,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     '（貯蔵は約2週間で枯渇）。糖負荷の前〜同時に補充してください。',
                 suggest: 'ビタミンB1（チアミン）100〜300mg/日を静注で補充',
               ),
-            if (_alertsExpanded && pnMonitorRisk)
+            if (alertsShown && pnMonitorRisk)
               _chartAlert(
                 color: Colors.teal.shade700,
                 title:
@@ -3186,7 +3182,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 suggest: '不足時は リン酸Na/KCL/硫酸Mg補正液・微量元素製剤・'
                     '総合ビタミン剤 で補正',
               ),
-            if (_alertsExpanded && refeedRisk)
+            if (alertsShown && refeedRisk)
               _chartAlert(
                 color: Colors.red.shade700,
                 title: '${_alertDate(preDays + 1, dates, n)}以降（栄養再開初期）'
@@ -3199,7 +3195,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 suggest: cr.refeedingActionText(refeedTier),
               ),
             // EN開始/遅延 判断（患者編集で選択した状況からの推奨）
-            if (_alertsExpanded && enTimingShow)
+            if (alertsShown && enTimingShow)
               _chartAlert(
                 color: switch (enTimingRec) {
                   cen.EnTimingRecommendation.avoid => Colors.red.shade700,
@@ -3214,12 +3210,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 suggest: cen.enTimingActionText(enTimingRec),
               ),
             // 採血(モニタリング)提案
-            if (_alertsExpanded && labShow)
+            if (alertsShown && labShow)
               _buildLabScheduleCard(refeedTier, ckrtActive, pnHeavyMaxDay),
             // Refeeding RSイベント検出（再栄養後 P/K/Mg 低下%）
-            if (_alertsExpanded && refeedRisk) _buildRsPanel(),
+            if (alertsShown && refeedRisk) _buildRsPanel(),
             for (final m in microAlertsList)
-              if (_alertsExpanded)
+              if (alertsShown)
                 _chartAlert(
                   color: m.alert.level == ci.AlertLevel.danger
                       ? Colors.red.shade700
@@ -3600,53 +3596,153 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         ),
       );
 
+  /// 設定エリア3列目: 主要な臨床経過。+追加ボタン＋一覧（種類/モダリティ mm/dd 〜 mm/dd）。
+  /// 行タップで編集、×で削除。イベント管理はここに集約。
+  Widget _clinicalCourseColumn() {
+    final base = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    String md(int day) {
+      final d = base.add(Duration(days: day - 1));
+      return '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
+    }
+
+    String headLabel(cev.ClinicalEvent e) {
+      final t = _clinicalEventTypeLabel(e.type);
+      return e.type == cev.ClinicalEventType.rrtStart && e.rrtModality != null
+          ? '$t / ${e.rrtModality!.key}'
+          : t;
+    }
+
+    String rangeText(cev.ClinicalEvent e) =>
+        '${md(e.startDay)} 〜${e.endDay != null ? ' ${md(e.endDay!)}' : ''}';
+
+    final events = [..._clinicalEvents]
+      ..sort((a, b) => a.startDay.compareTo(b.startDay));
+
+    void removeAt(cev.ClinicalEvent e) {
+      final idx = _clinicalEvents.indexOf(e);
+      if (idx < 0) return;
+      setState(() {
+        _clinicalEvents.removeAt(idx);
+        _rebuildDays();
+      });
+      _saveConfig();
+      widget.onSettingsChanged?.call();
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 190),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.event_note_outlined,
+                size: 13, color: Colors.blueGrey.shade700),
+            const SizedBox(width: 3),
+            Text('主要な臨床経過',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueGrey.shade700)),
+            const SizedBox(width: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: () => _showClinicalEventEditor(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.add, size: 14, color: Colors.indigo.shade600),
+                  Text('イベント追加',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade600)),
+                ]),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          if (events.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Text('イベント未設定',
+                  style: TextStyle(fontSize: 11, color: Colors.black45)),
+            )
+          else
+            for (final e in events)
+              InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () => _showClinicalEventEditor(
+                    index: _clinicalEvents.indexOf(e)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text.rich(TextSpan(children: [
+                        TextSpan(
+                            text: headLabel(e),
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _eventSpanColor(e))),
+                        TextSpan(
+                            text: '  ${rangeText(e)}',
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.black54)),
+                      ])),
+                    ),
+                    InkWell(
+                      onTap: () => removeAt(e),
+                      child: Icon(Icons.close,
+                          size: 13, color: Colors.red.shade300),
+                    ),
+                  ]),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
   String _clinicalEventTypeLabel(cev.ClinicalEventType type) {
     switch (type) {
       case cev.ClinicalEventType.enHold:
-        return 'EN hold';
+        return 'EN流量 維持';
       case cev.ClinicalEventType.enIntolerance:
-        return 'EN不耐';
+        return 'EN不耐でPNにスイッチ';
       case cev.ClinicalEventType.recurrentNpo:
-        return '再NPO';
-      case cev.ClinicalEventType.suspectedNomi:
-        return 'NOMI/腸管虚血疑い';
+        return 'NPO管理';
       case cev.ClinicalEventType.refeedingHypophosphatemia:
-        return 'Refeeding低P';
+        return '低P 低K 低Mg (Refeeding症候群)';
       case cev.ClinicalEventType.bunRiseAfterFeeding:
         return 'BUN上昇';
       case cev.ClinicalEventType.cholestasisOrLiverDysfunction:
-        return '胆汁うっ滞/肝障害';
+        return '胆汁うっ滞 / 肝障害';
       case cev.ClinicalEventType.fluidOverload:
         return '溢水';
       case cev.ClinicalEventType.rrtStart:
-        return 'RRT開始';
-      case cev.ClinicalEventType.rrtStop:
-        return 'RRT停止/移行';
+        return 'RRT 開始';
     }
   }
 
   String _clinicalEventShortLabel(cev.ClinicalEventType type) {
     switch (type) {
       case cev.ClinicalEventType.enHold:
-        return 'EN hold';
+        return 'EN維持';
       case cev.ClinicalEventType.enIntolerance:
-        return 'EN不耐';
+        return 'EN不耐→PN';
       case cev.ClinicalEventType.recurrentNpo:
         return 'NPO';
-      case cev.ClinicalEventType.suspectedNomi:
-        return 'NOMI';
       case cev.ClinicalEventType.refeedingHypophosphatemia:
-        return '低P';
+        return '低P/K/Mg';
       case cev.ClinicalEventType.bunRiseAfterFeeding:
-        return 'BUN';
+        return 'BUN↑';
       case cev.ClinicalEventType.cholestasisOrLiverDysfunction:
-        return 'Mn-free';
+        return '胆汁/肝';
       case cev.ClinicalEventType.fluidOverload:
         return '溢水';
       case cev.ClinicalEventType.rrtStart:
         return 'RRT';
-      case cev.ClinicalEventType.rrtStop:
-        return 'RRT移行';
     }
   }
 
@@ -3682,129 +3778,38 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     }
   }
 
-  Widget _clinicalEventPanel() {
-    Widget eventRow(int index, cev.ClinicalEvent e) {
-      final range = e.endDay == null
-          ? 'Day${e.startDay}以降'
-          : 'Day${e.startDay}–${e.endDay}';
-      final sub = <String>[
-        range,
-        if (e.rrtModality != null) e.rrtModality!.key,
-        cst.SourceTierMeta(e.sourceTier).badgeLabel,
-      ].join(' / ');
-      return Container(
-        margin: const EdgeInsets.only(top: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.indigo.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.indigo.withValues(alpha: 0.20)),
-        ),
-        child: Row(children: [
-          Icon(Icons.layers, size: 15, color: Colors.indigo.shade600),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_clinicalEventTypeLabel(e.type),
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.bold)),
-                Text(sub,
-                    style:
-                        const TextStyle(fontSize: 10.5, color: Colors.black54)),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: '編集',
-            icon: const Icon(Icons.edit, size: 16),
-            onPressed: () => _showClinicalEventEditor(index: index),
-            visualDensity: VisualDensity.compact,
-          ),
-          IconButton(
-            tooltip: '削除',
-            icon: const Icon(Icons.delete_outline, size: 16),
-            color: Colors.red.shade400,
-            onPressed: () {
-              setState(() {
-                _clinicalEvents.removeAt(index);
-                _rebuildDays();
-              });
-              _saveConfig();
-              widget.onSettingsChanged?.call();
-            },
-            visualDensity: VisualDensity.compact,
-          ),
-        ]),
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.blueGrey.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.16)),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.timeline, size: 15, color: Colors.blueGrey.shade600),
-          const SizedBox(width: 5),
-          const Text('臨床イベント',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          const Spacer(),
-          TextButton.icon(
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            ),
-            onPressed: () => _showClinicalEventEditor(),
-            icon: const Icon(Icons.add, size: 15),
-            label: const Text('追加', style: TextStyle(fontSize: 12)),
-          ),
-        ]),
-        if (_clinicalEvents.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Text('未設定',
-                style: TextStyle(fontSize: 11, color: Colors.black45)),
-          )
-        else
-          for (var i = 0; i < _clinicalEvents.length; i++)
-            eventRow(i, _clinicalEvents[i]),
-      ]),
-    );
-  }
-
   Future<void> _showClinicalEventEditor({int? index}) async {
     final existing = index != null ? _clinicalEvents[index] : null;
     final typeOptions = [
       cev.ClinicalEventType.enHold,
       cev.ClinicalEventType.enIntolerance,
       cev.ClinicalEventType.recurrentNpo,
-      cev.ClinicalEventType.suspectedNomi,
       cev.ClinicalEventType.refeedingHypophosphatemia,
       cev.ClinicalEventType.bunRiseAfterFeeding,
       cev.ClinicalEventType.cholestasisOrLiverDysfunction,
       cev.ClinicalEventType.fluidOverload,
       cev.ClinicalEventType.rrtStart,
-      cev.ClinicalEventType.rrtStop,
     ];
     var type = existing?.type ?? cev.ClinicalEventType.enHold;
-    var severity = existing?.severity ?? cev.EventSeverity.moderate;
+    // severity は栄養設計に影響しないため UI からは外す（既定 moderate を保持）。
+    final severity = existing?.severity ?? cev.EventSeverity.moderate;
     var rrt = existing?.rrtModality ?? cev.RrtModality.crrt;
-    var nextRrt = _rrtModalityFromKey(
-            existing?.parameters['next_modality']?.toString()) ??
-        cev.RrtModality.irrt;
-    var stopToNone = existing?.type == cev.ClinicalEventType.rrtStop &&
-        existing?.parameters['next_modality']?.toString().toUpperCase() ==
-            'NONE';
-    final startCtrl =
-        TextEditingController(text: '${existing?.startDay ?? _enStartDay}');
-    final endCtrl =
-        TextEditingController(text: existing?.endDay?.toString() ?? '');
+    // 開始/停止はカレンダー(日付)で選ぶ。内部は栄養開始からのDay(1始まり)で保持。
+    final nutritionDay0 =
+        DateTime(_startDate.year, _startDate.month, _startDate.day);
+    DateTime dayToDate(int day) =>
+        nutritionDay0.add(Duration(days: day - 1));
+    int dateToDay(DateTime d) {
+      final diff =
+          DateTime(d.year, d.month, d.day).difference(nutritionDay0).inDays;
+      return diff < 0 ? 1 : diff + 1;
+    }
+
+    String fmtDate(DateTime d) =>
+        '${d.year}/${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
+    DateTime startDate = dayToDate(existing?.startDay ?? _enStartDay);
+    DateTime? endDate =
+        existing?.endDay != null ? dayToDate(existing!.endDay!) : null;
     final holdRateCtrl = TextEditingController(
         text: (existing?.parameters['hold_rate_ml_h'] ?? 20).toString());
     final fluidCapCtrl = TextEditingController(
@@ -3820,17 +3825,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       return s.isEmpty ? null : double.tryParse(s);
     }
 
-    int? parseInt(TextEditingController c) {
-      final s = c.text.trim();
-      return s.isEmpty ? null : int.tryParse(s);
-    }
-
     final saved = await showDialog<cev.ClinicalEvent>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setLocal) {
-        final showEnd = type != cev.ClinicalEventType.rrtStop;
+        const showEnd = true; // 全イベント期間(停止日)を持てる
         return AlertDialog(
-          title: Text(index == null ? '臨床イベント追加' : '臨床イベント編集',
+          title: Text(index == null ? 'イベント追加' : 'イベント編集',
               style: const TextStyle(fontSize: 16)),
           content: SingleChildScrollView(
             child: SizedBox(
@@ -3839,7 +3839,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 DropdownButtonFormField<cev.ClinicalEventType>(
                   value: type,
                   decoration: const InputDecoration(
-                      labelText: 'Event type', isDense: true),
+                      labelText: 'イベント種別', isDense: true),
                   items: typeOptions
                       .map((t) => DropdownMenuItem(
                           value: t, child: Text(_clinicalEventTypeLabel(t))))
@@ -3850,45 +3850,90 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 ),
                 const SizedBox(height: 8),
                 Row(children: [
+                  // 開始日（カレンダー）
                   Expanded(
-                    child: TextField(
-                      controller: startCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                          labelText: 'Start Day', isDense: true),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (showEnd)
-                    Expanded(
-                      child: TextField(
-                        controller: endCtrl,
-                        keyboardType: TextInputType.number,
+                    child: InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: startDate,
+                          firstDate:
+                              nutritionDay0.subtract(const Duration(days: 14)),
+                          lastDate: nutritionDay0.add(const Duration(days: 365)),
+                          helpText: '開始日を選択',
+                        );
+                        if (picked != null) {
+                          setLocal(() {
+                            startDate = picked;
+                            if (endDate != null && endDate!.isBefore(startDate)) {
+                              endDate = startDate;
+                            }
+                          });
+                        }
+                      },
+                      child: InputDecorator(
                         decoration: const InputDecoration(
-                            labelText: 'End Day 任意', isDense: true),
+                            labelText: '開始日',
+                            isDense: true,
+                            suffixIcon: Icon(Icons.calendar_today, size: 16)),
+                        child: Text(
+                            '${fmtDate(startDate)}  (Day${dateToDay(startDate)})',
+                            style: const TextStyle(fontSize: 13)),
                       ),
                     ),
+                  ),
+                  if (showEnd) ...[
+                    const SizedBox(width: 8),
+                    // 停止日（カレンダー・任意・未設定=継続中）
+                    Expanded(
+                      child: InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: endDate ?? startDate,
+                            firstDate: startDate,
+                            lastDate:
+                                nutritionDay0.add(const Duration(days: 365)),
+                            helpText: '停止日を選択（任意）',
+                          );
+                          if (picked != null) setLocal(() => endDate = picked);
+                        },
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: '停止日 (任意)',
+                            isDense: true,
+                            suffixIcon: endDate == null
+                                ? const Icon(Icons.calendar_today, size: 16)
+                                : IconButton(
+                                    icon: const Icon(Icons.clear, size: 16),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () =>
+                                        setLocal(() => endDate = null),
+                                  ),
+                          ),
+                          child: Text(
+                              endDate == null
+                                  ? '継続中'
+                                  : '${fmtDate(endDate!)}  (Day${dateToDay(endDate!)})',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: endDate == null
+                                      ? Colors.grey
+                                      : null)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ]),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<cev.EventSeverity>(
-                  value: severity,
-                  decoration: const InputDecoration(
-                      labelText: 'Severity', isDense: true),
-                  items: cev.EventSeverity.values
-                      .map((s) =>
-                          DropdownMenuItem(value: s, child: Text(s.name)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setLocal(() => severity = v);
-                  },
-                ),
                 if (type == cev.ClinicalEventType.enHold) ...[
                   const SizedBox(height: 8),
                   TextField(
                     controller: holdRateCtrl,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                        labelText: 'Hold rate ml/h', isDense: true),
+                        labelText: 'EN保持速度 (ml/h)', isDense: true),
                   ),
                 ],
                 if (type == cev.ClinicalEventType.rrtStart) ...[
@@ -3896,7 +3941,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   DropdownButtonFormField<cev.RrtModality>(
                     value: rrt,
                     decoration: const InputDecoration(
-                        labelText: 'RRT modality', isDense: true),
+                        labelText: 'RRTモダリティ', isDense: true),
                     items: cev.RrtModality.values
                         .map((m) =>
                             DropdownMenuItem(value: m, child: Text(m.key)))
@@ -3906,30 +3951,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     },
                   ),
                 ],
-                if (type == cev.ClinicalEventType.rrtStop) ...[
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    value: stopToNone,
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('RRT終了（移行なし）',
-                        style: TextStyle(fontSize: 12)),
-                    onChanged: (v) => setLocal(() => stopToNone = v ?? false),
-                  ),
-                  if (!stopToNone)
-                    DropdownButtonFormField<cev.RrtModality>(
-                      value: nextRrt,
-                      decoration: const InputDecoration(
-                          labelText: 'Next modality', isDense: true),
-                      items: cev.RrtModality.values
-                          .map((m) =>
-                              DropdownMenuItem(value: m, child: Text(m.key)))
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) setLocal(() => nextRrt = v);
-                      },
-                    ),
-                ],
                 if (type ==
                     cev.ClinicalEventType.refeedingHypophosphatemia) ...[
                   const SizedBox(height: 8),
@@ -3938,7 +3959,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
-                        labelText: 'Phosphate value 任意', isDense: true),
+                        labelText: '血清P値（任意）', isDense: true),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -3946,7 +3967,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
-                        labelText: 'Energy cap kcal/day 任意', isDense: true),
+                        labelText: 'エネルギー上限 kcal/日（任意）', isDense: true),
                   ),
                 ],
                 if (type == cev.ClinicalEventType.fluidOverload) ...[
@@ -3956,7 +3977,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
-                        labelText: 'Fluid cap ml/kg/day 任意', isDense: true),
+                        labelText: '水分上限 ml/kg/日（任意）', isDense: true),
                   ),
                 ],
                 const SizedBox(height: 8),
@@ -3965,7 +3986,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                   minLines: 1,
                   maxLines: 3,
                   decoration: const InputDecoration(
-                      labelText: 'Manual note 任意', isDense: true),
+                      labelText: 'メモ（任意）', isDense: true),
                 ),
               ]),
             ),
@@ -3976,15 +3997,13 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 child: const Text('キャンセル')),
             FilledButton(
               onPressed: () {
-                final start = parseInt(startCtrl);
-                if (start == null || start < 1) return;
-                final end = showEnd ? parseInt(endCtrl) : null;
+                final start = dateToDay(startDate);
+                if (start < 1) return;
+                final end =
+                    showEnd && endDate != null ? dateToDay(endDate!) : null;
                 final params = <String, Object?>{};
                 if (type == cev.ClinicalEventType.enHold) {
                   params['hold_rate_ml_h'] = parseDouble(holdRateCtrl) ?? 20;
-                }
-                if (type == cev.ClinicalEventType.rrtStop) {
-                  params['next_modality'] = stopToNone ? 'none' : nextRrt.key;
                 }
                 if (type == cev.ClinicalEventType.refeedingHypophosphatemia) {
                   final p = parseDouble(phosphateCtrl);
@@ -4021,8 +4040,6 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     );
 
     for (final c in [
-      startCtrl,
-      endCtrl,
       holdRateCtrl,
       fluidCapCtrl,
       phosphateCtrl,
@@ -4207,7 +4224,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Template → Derived',
+                  Text('テンプレート → 反映後',
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,

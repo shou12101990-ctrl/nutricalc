@@ -97,90 +97,30 @@ int _electrolyteRank(ElectrolyteEffect e) => switch (e) {
 
 // ─────────────── RRT モダリティの畳み込み ───────────────
 
-/// rrt_stop の next_modality（parameters['next_modality']）を解釈。
-/// 'IRRT'/'SLED'/'CRRT' → そのモダリティ、'none'→null、'unknown'/未指定→null。
-({RrtModality? modality, bool unknown}) _parseNextModality(ClinicalEvent stop) {
-  final raw = stop.parameters['next_modality'];
-  final s = raw?.toString().toUpperCase();
-  switch (s) {
-    case 'IRRT':
-      return (modality: RrtModality.irrt, unknown: false);
-    case 'SLED':
-      return (modality: RrtModality.sled, unknown: false);
-    case 'CRRT':
-      return (modality: RrtModality.crrt, unknown: false);
-    case 'NONE':
-      return (modality: null, unknown: false);
-    default:
-      return (modality: null, unknown: true);
-  }
-}
+/// RRT 畳み込み結果。modality=実効モダリティ / runStartDay=その run の開始日。
+typedef _RrtState = ({RrtModality? modality, int? runStartDay});
 
-/// RRT 畳み込み結果。modality=実効モダリティ / runStartDay=現在の連続run開始日 /
-/// unknownStopDay=その日が「次モダリティ不明の停止」遷移日なら停止日（要レビュー）。
-typedef _RrtState = ({
-  RrtModality? modality,
-  int? runStartDay,
-  int? unknownStopDay,
-});
-
-/// start/stop を startDay 昇順に畳み込み、指定 Day（1-based）の状態を決める。
-/// codexレビュー反映:
-/// - 先行 start の無い孤立 rrt_stop は RRT を捏造しない（無視）。
-/// - runStartDay は「現在の連続run」の開始日（停止→再開でリセット）。
-/// - 次モダリティ不明の停止は unknownStopDay として要レビューを残す。
+/// 指定 Day（1-based）の実効 RRT 状態。
+/// 設計（rrtStop 廃止後）: RRT は「モダリティ別の rrtStart＋期間(endDay)」で表す。
+/// CRRT→IRRT 切替は「CRRT 開始-停止、IRRT 開始-停止」の2イベントで表現する。
+/// その日に [startDay, endDay(無ければ∞)] が掛かる rrtStart のうち、開始日が最も遅いものを採用。
+/// runStartDay = その採用イベントの開始日（CRRT継続日数の起算）。
 _RrtState _foldRrt(List<ClinicalEvent> events, int day) {
-  final rrt = events
-      .where((e) =>
-          e.type == ClinicalEventType.rrtStart ||
-          e.type == ClinicalEventType.rrtStop)
-      .toList()
-    ..sort((a, b) {
-      final s = a.startDay.compareTo(b.startDay);
-      return s != 0 ? s : a.id.compareTo(b.id);
-    });
   RrtModality? current;
   int? runStart;
-  int? unknownStopDay;
-  var seenStart = false;
-  for (final e in rrt) {
-    if (e.startDay > day) break;
-    if (e.type == ClinicalEventType.rrtStart) {
-      seenStart = true;
-      unknownStopDay = null; // 新規 start は不明停止状態をクリア
-      final active = e.endDay == null || day <= e.endDay!;
-      if (active) {
-        if (current != e.rrtModality) runStart = e.startDay; // run切替
-        current = e.rrtModality;
-      } else {
-        current = null; // 期間終了（後続イベントがあれば上書きされる）
-        runStart = null;
-      }
-    } else {
-      // rrt_stop。先行 start が無ければ孤立停止＝無視（捏造しない）。
-      if (!seenStart) continue;
-      final parsed = _parseNextModality(e);
-      if (parsed.unknown) {
-        unknownStopDay = e.startDay; // 次不明＝要レビュー
-        current = null;
-        runStart = null;
-      } else {
-        final next = parsed.modality;
-        if (next != current) runStart = next == null ? null : e.startDay;
-        current = next;
-        unknownStopDay = null;
-      }
+  for (final e in events) {
+    if (e.type != ClinicalEventType.rrtStart) continue;
+    final active = day >= e.startDay && (e.endDay == null || day <= e.endDay!);
+    if (!active) continue;
+    if (runStart == null || e.startDay >= runStart) {
+      current = e.rrtModality;
+      runStart = e.startDay;
     }
   }
-  return (
-    modality: current,
-    runStartDay: current == null ? null : runStart,
-    unknownStopDay: current == null ? unknownStopDay : null,
-  );
+  return (modality: current, runStartDay: current == null ? null : runStart);
 }
 
-/// 指定 Day（1-based）の実効 RRT モダリティ。start/stop を startDay 昇順に畳み込む。
-/// open-ended な rrt_start は後続イベントが来るまで継続。endDay 設定があればその日まで。
+/// 指定 Day（1-based）の実効 RRT モダリティ。
 RrtModality? activeRrtModalityOnDay(List<ClinicalEvent> events, int day) =>
     _foldRrt(events, day).modality;
 
@@ -220,8 +160,7 @@ DayOverlay resolveDayOverlay(
 
   // RRT 以外のイベント効果を次元別に集約
   for (final e in active) {
-    if (e.type == ClinicalEventType.rrtStart ||
-        e.type == ClinicalEventType.rrtStop) {
+    if (e.type == ClinicalEventType.rrtStart) {
       continue; // RRTは実効モダリティで別途処理
     }
     final ep = e.effectProfile;
@@ -274,11 +213,6 @@ DayOverlay resolveDayOverlay(
       notes.add('${rrtModality.key}稼働中: クエン酸/乳酸/ブドウ糖など'
           'KRT関連液のカロリーは未入力のため未算入（§17.1）');
     }
-  }
-
-  // RRT停止後の次モダリティ不明（その遷移日）→ 要レビュー（§16.6）。
-  if (rrtState.unknownStopDay == day) {
-    notes.add('RRT停止後の次モダリティが不明: 採血/方針を再確認（§16.6 review）');
   }
 
   return DayOverlay(

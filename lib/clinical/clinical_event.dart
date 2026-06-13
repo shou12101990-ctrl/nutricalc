@@ -156,13 +156,11 @@ enum ClinicalEventType {
   enHold, // §15.1
   enIntolerance, // §15.2
   recurrentNpo, // §15.3
-  suspectedNomi, // §15.4
   refeedingHypophosphatemia, // §15.5
   bunRiseAfterFeeding, // §15.6
   cholestasisOrLiverDysfunction, // §15.7
   fluidOverload, // §15.8
-  rrtStart, // §16.2
-  rrtStop, // §16.6
+  rrtStart, // §16.2（モダリティ別に開始＋期間。切替は別モダリティの開始で表現）
 }
 
 /// 1件の臨床イベント。day は栄養開始起算の 1-based Day index。
@@ -174,7 +172,7 @@ class ClinicalEvent {
   final int? endDay;
   final EventSeverity severity;
   final SourceTier sourceTier;
-  final RrtModality? rrtModality; // rrtStart/rrtStop のとき
+  final RrtModality? rrtModality; // rrtStart のとき
   final Map<String, Object?> parameters;
   final String explanation;
   final int? priorityOverride; // 既定優先度を上書きしたい場合
@@ -224,7 +222,7 @@ class ClinicalEvent {
   bool get isOpenEnded => endDay == null;
 
   /// 指定 Day（1-based）でこのイベントが有効か。
-  /// rrtStop は「その日以降のモダリティ遷移点」を表すため startDay 以降で有効。
+  /// endDay 未設定（null）は open-ended（タイムライン終端まで継続）。
   bool isActiveOnDay(int day) {
     if (day < startDay) return false;
     if (endDay == null) return true; // open-ended
@@ -293,14 +291,11 @@ Map<String, Object?> _objectMapValue(Object? value) {
 
 /// §14 の優先順位（小さいほど先に適用＝より制限的）。
 int defaultPriorityFor(ClinicalEventType type) => switch (type) {
-      // 1: 絶対的GI禁忌 / NOMI / 閉塞 / 穿孔
-      ClinicalEventType.suspectedNomi => 1,
-      // 2: refeeding（重度電解質異常）/ NPO（経路遮断）
-      ClinicalEventType.refeedingHypophosphatemia => 2,
-      ClinicalEventType.recurrentNpo => 2,
+      // 1: refeeding（重度電解質異常）/ NPO（経路遮断・最も制限的）
+      ClinicalEventType.refeedingHypophosphatemia => 1,
+      ClinicalEventType.recurrentNpo => 1,
       // 3: RRT/SLED/CRRT 稼働区間
       ClinicalEventType.rrtStart => 3,
-      ClinicalEventType.rrtStop => 3,
       // 4: 溢水/ショック/高昇圧
       ClinicalEventType.fluidOverload => 4,
       // 5: 肝障害/胆汁うっ滞/高TG
@@ -331,12 +326,8 @@ EffectProfile defaultEffectProfileFor(ClinicalEvent e) {
       return const EffectProfile(
         route: RouteEffect.npo,
         energy: EnergyEffect.reducePercent,
-        micronutrient: {MicronutrientEffect.maintenanceRequired},
-      );
-    case ClinicalEventType.suspectedNomi: // §15.4
-      return const EffectProfile(
-        route: RouteEffect.npo,
         productFilter: {ProductFilterEffect.excludeEnteral},
+        micronutrient: {MicronutrientEffect.maintenanceRequired},
       );
     case ClinicalEventType.refeedingHypophosphatemia: // §15.5
       return const EffectProfile(
@@ -367,11 +358,6 @@ EffectProfile defaultEffectProfileFor(ClinicalEvent e) {
             : FluidEffect.strictBalance,
         electrolyte: ElectrolyteEffect.monitor,
         micronutrient: const {MicronutrientEffect.additionalObligation},
-      );
-    case ClinicalEventType.rrtStop: // §16.6
-      // 次モダリティで再計算（resolver側で next を反映）。ここでは reviewOnly。
-      return const EffectProfile(
-        protein: ProteinEffect.reviewOnly,
       );
   }
 }

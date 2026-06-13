@@ -10,15 +10,8 @@ ClinicalEvent rrtStart(int day, RrtModality m, {int? end, String id = 'rrt'}) =>
         endDay: end,
         rrtModality: m);
 
-ClinicalEvent rrtStop(int day, {String? next, String id = 'stop'}) =>
-    ClinicalEvent(
-        id: id,
-        type: ClinicalEventType.rrtStop,
-        startDay: day,
-        parameters: {'next_modality': next});
-
 void main() {
-  group('activeRrtModalityOnDay', () {
+  group('activeRrtModalityOnDay（rrtStop廃止・モダリティ別start+期間）', () {
     test('CRRT day8開始・停止なし → day8以降ずっとCRRT(§24.6-1)', () {
       final ev = [rrtStart(8, RrtModality.crrt)];
       expect(activeRrtModalityOnDay(ev, 7), isNull);
@@ -26,38 +19,35 @@ void main() {
       expect(activeRrtModalityOnDay(ev, 30), RrtModality.crrt);
     });
 
-    test('CRRT day8開始・day15停止(next none) → day16以降はnull(§24.6-2)', () {
-      final ev = [
-        rrtStart(8, RrtModality.crrt),
-        rrtStop(16, next: 'none'),
-      ];
+    test('CRRT day8開始・day15停止(endDay) → day16以降はnull(§24.6-2)', () {
+      final ev = [rrtStart(8, RrtModality.crrt, end: 15)];
       expect(activeRrtModalityOnDay(ev, 15), RrtModality.crrt);
       expect(activeRrtModalityOnDay(ev, 16), isNull);
       expect(activeRrtModalityOnDay(ev, 20), isNull);
     });
 
-    test('CRRT停止→IRRT遷移 → 遷移後はIRRT(§24.6-3)', () {
+    test('CRRT停止→IRRT開始 で切替を表現 → 遷移後はIRRT(§24.6-3)', () {
+      // CRRT 8-14、IRRT 15- の2イベントで切替を表す
       final ev = [
-        rrtStart(8, RrtModality.crrt),
-        rrtStop(16, next: 'IRRT'),
+        rrtStart(8, RrtModality.crrt, end: 14, id: 'crrt'),
+        rrtStart(15, RrtModality.irrt, id: 'irrt'),
       ];
-      expect(activeRrtModalityOnDay(ev, 15), RrtModality.crrt);
-      expect(activeRrtModalityOnDay(ev, 16), RrtModality.irrt);
+      expect(activeRrtModalityOnDay(ev, 14), RrtModality.crrt);
+      expect(activeRrtModalityOnDay(ev, 15), RrtModality.irrt);
+      expect(activeRrtModalityOnDay(ev, 30), RrtModality.irrt);
     });
 
-    test('endDay設定の rrt_start は期間後に終了', () {
-      final ev = [rrtStart(5, RrtModality.crrt, end: 9)];
-      expect(activeRrtModalityOnDay(ev, 9), RrtModality.crrt);
-      expect(activeRrtModalityOnDay(ev, 10), isNull);
-    });
-
-    test('孤立 rrt_stop(先行startなし) はRRTを捏造しない(codex bug A)', () {
-      final ev = [rrtStop(5, next: 'IRRT')];
-      expect(activeRrtModalityOnDay(ev, 6), isNull);
+    test('境界で重なる場合は開始日が遅い方を採用', () {
+      final ev = [
+        rrtStart(8, RrtModality.crrt, end: 15, id: 'crrt'),
+        rrtStart(15, RrtModality.irrt, id: 'irrt'),
+      ];
+      expect(activeRrtModalityOnDay(ev, 14), RrtModality.crrt);
+      expect(activeRrtModalityOnDay(ev, 15), RrtModality.irrt); // 後の開始が勝つ
     });
   });
 
-  group('CRRT継続日数（停止→再開でリセット・codex bug B）', () {
+  group('CRRT継続日数（モダリティ別runで起算）', () {
     test('単一runは開始日起算で≥14日Cuノート', () {
       final o = resolveDayOverlay([rrtStart(2, RrtModality.crrt)], 15);
       expect(o.notes.any((n) => n.contains('Cu') || n.contains('銅')), isTrue);
@@ -65,8 +55,7 @@ void main() {
 
     test('停止→再開後は再開日起算（最古startで早まらない）', () {
       final ev = [
-        rrtStart(2, RrtModality.crrt, id: 's1'),
-        rrtStop(6, next: 'none', id: 'stop1'),
+        rrtStart(2, RrtModality.crrt, end: 5, id: 's1'),
         rrtStart(10, RrtModality.crrt, id: 's2'),
       ];
       // day12 は再開(day10)から3日目 → Cuノート出ない
@@ -79,24 +68,12 @@ void main() {
     });
   });
 
-  group('RRT停止→次モダリティ不明（要レビュー・§16.6）', () {
-    test('unknown停止日にレビューノート + モダリティnull', () {
-      final ev = [
-        rrtStart(2, RrtModality.crrt),
-        rrtStop(8, next: 'unknown'),
-      ];
-      final o = resolveDayOverlay(ev, 8);
-      expect(o.activeRrtModality, isNull);
-      expect(o.notes.any((n) => n.contains('不明')), isTrue);
-    });
-  });
-
   group('NOMI + CRRT 共存（codex提案の明示テスト）', () {
     test('NOMIで経腸遮断しつつCRRTのprotein/microは生きる', () {
       final ev = [
         rrtStart(8, RrtModality.crrt),
         ClinicalEvent(
-            id: 'n', type: ClinicalEventType.suspectedNomi, startDay: 8),
+            id: 'n', type: ClinicalEventType.recurrentNpo, startDay: 8),
       ];
       final o = resolveDayOverlay(ev, 9);
       expect(o.enteralBlocked, isTrue); // NOMI: 経腸遮断
@@ -152,7 +129,7 @@ void main() {
     test('suspected NOMI → npo + 経腸除外, enteralBlocked(§24.6-6)', () {
       final o = resolveDayOverlay([
         ClinicalEvent(
-            id: 'n', type: ClinicalEventType.suspectedNomi, startDay: 4)
+            id: 'n', type: ClinicalEventType.recurrentNpo, startDay: 4)
       ], 5);
       expect(o.route, RouteEffect.npo);
       expect(o.productFilters.contains(ProductFilterEffect.excludeEnteral),
@@ -189,11 +166,11 @@ void main() {
         ClinicalEvent(
             id: 'h', type: ClinicalEventType.enHold, startDay: 1, endDay: 10),
         ClinicalEvent(
-            id: 'n', type: ClinicalEventType.suspectedNomi, startDay: 5),
+            id: 'n', type: ClinicalEventType.recurrentNpo, startDay: 5),
       ];
       final o = resolveDayOverlay(ev, 6);
       expect(o.route, RouteEffect.npo); // 最も制限的
-      expect(o.activeEvents.first.type, ClinicalEventType.suspectedNomi); // 優先度1
+      expect(o.activeEvents.first.type, ClinicalEventType.recurrentNpo); // 優先度1
     });
 
     test('CRRT + refeeding低P + EN hold は全次元で共存(§24.6-10)', () {
@@ -251,10 +228,10 @@ void main() {
   });
 
   group('優先度定義（§14）', () {
-    test('NOMI<refeeding<RRT<fluid<肝<EN不耐<EN hold<BUN', () {
+    test('NPO/refeeding<RRT<fluid<肝<EN不耐<EN hold<BUN', () {
       int p(ClinicalEventType t) => defaultPriorityFor(t);
-      expect(p(ClinicalEventType.suspectedNomi), 1);
-      expect(p(ClinicalEventType.refeedingHypophosphatemia), 2);
+      expect(p(ClinicalEventType.recurrentNpo), 1);
+      expect(p(ClinicalEventType.refeedingHypophosphatemia), 1);
       expect(p(ClinicalEventType.rrtStart), 3);
       expect(p(ClinicalEventType.fluidOverload), 4);
       expect(p(ClinicalEventType.cholestasisOrLiverDysfunction), 5);

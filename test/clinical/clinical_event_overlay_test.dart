@@ -19,19 +19,20 @@ void main() {
       expect(activeRrtModalityOnDay(events, 30), RrtModality.crrt);
     });
 
-    test('CRRT stop with transition to IRRT recalculates modality', () {
+    test('CRRT→IRRT切替はモダリティ別の開始＋期間で表現', () {
       const events = [
         ClinicalEvent(
           id: 'crrt-start',
           type: ClinicalEventType.rrtStart,
           startDay: 8,
+          endDay: 14,
           rrtModality: RrtModality.crrt,
         ),
         ClinicalEvent(
-          id: 'crrt-stop',
-          type: ClinicalEventType.rrtStop,
+          id: 'irrt-start',
+          type: ClinicalEventType.rrtStart,
           startDay: 15,
-          parameters: {'next_modality': 'IRRT'},
+          rrtModality: RrtModality.irrt,
         ),
       ];
 
@@ -100,7 +101,7 @@ void main() {
       const events = [
         ClinicalEvent(
           id: 'nomi',
-          type: ClinicalEventType.suspectedNomi,
+          type: ClinicalEventType.recurrentNpo,
           startDay: 2,
           severity: EventSeverity.severe,
         ),
