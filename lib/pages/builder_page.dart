@@ -65,7 +65,8 @@ class _BuilderPageState extends State<BuilderPage>
     _snapCtrl.addListener(() {
       if (!mounted) return;
       final t = Curves.easeOut.transform(_snapCtrl.value);
-      setState(() => _summaryHeight = _snapFrom + (_snapToTarget - _snapFrom) * t);
+      setState(
+          () => _summaryHeight = _snapFrom + (_snapToTarget - _snapFrom) * t);
       if (_listScroll.hasClients) {
         final target = (_scrollFrom + (_scrollToTarget - _scrollFrom) * t)
             .clamp(0.0, _listScroll.position.maxScrollExtent);
@@ -89,9 +90,11 @@ class _BuilderPageState extends State<BuilderPage>
   /// ・脂質g/kg = 病態中央値(resolveCoeff・上限1.0)
   void _applyZeroMenuConditionDefaults(PatientCase c) {
     final targetKcal = NutritionCalculator.targetEnergy(c) * 0.9;
+    final referenceWeight = NutritionCalculator.referenceWeightKg(c);
     targetKcalController.text = targetKcal.round().toString();
-    final protPerKg = cc.effectiveProteinPerKg(c.conditionTags, c.proteinGoalPerKg);
-    final protG = protPerKg * c.weightKg;
+    final protPerKg =
+        cc.effectiveProteinPerKg(c.conditionTags, c.proteinGoalPerKg);
+    final protG = protPerKg * referenceWeight;
     if (protG > 0 && targetKcal > 0) {
       final npc = (targetKcal - protG * 4) * 6.25 / protG;
       npcnController.text = npc.clamp(80, 500).round().toString();
@@ -215,11 +218,10 @@ class _BuilderPageState extends State<BuilderPage>
       ..._infusionAlertList(
         glucoseGramPerDay: glucoseGramPerDay,
         lipidGramPerDay: lipidGramPerDay,
-        weightKg: current.weightKg,
+        weightKg: NutritionCalculator.referenceWeightKg(current),
         glucoseRestrict: restrict,
       ),
-      ..._microAlertRows(micro, current,
-          glucoseLoad: glucoseGramPerDay > 0),
+      ..._microAlertRows(micro, current, glucoseLoad: glucoseGramPerDay > 0),
     ];
   }
 
@@ -257,12 +259,13 @@ class _BuilderPageState extends State<BuilderPage>
         fullIN += (p.volumeMl ?? 0) * effOf(item, p, categoryKey);
       }
       // ENのみ投与速度で按分。TPN/PPNはper-product mlがそのまま日量。
-      final factor =
-          (categoryKey == 'EN' && rate > 0 && fullIN > 0) ? (rate * 24) / fullIN : 1.0;
+      final factor = (categoryKey == 'EN' && rate > 0 && fullIN > 0)
+          ? (rate * 24) / fullIN
+          : 1.0;
       for (final item in selected) {
         final p = widget.state.catalog.byId(item.productId)!;
-        contributions.add(
-            cm.MicroContribution(p.micro, effOf(item, p, categoryKey) * factor));
+        contributions.add(cm.MicroContribution(
+            p.micro, effOf(item, p, categoryKey) * factor));
       }
     }
 
@@ -304,8 +307,7 @@ class _BuilderPageState extends State<BuilderPage>
   /// 採用済み(なければ全体)から条件に合う製剤を1つ選ぶ。
   Product? _pickAdoptedProduct(bool Function(Product) test) {
     final all = widget.state.catalog.products.where(test).toList();
-    final adopted =
-        all.where((p) => widget.state.isAdopted(p.id)).toList();
+    final adopted = all.where((p) => widget.state.isAdopted(p.id)).toList();
     if (adopted.isNotEmpty) return adopted.first;
     return all.isNotEmpty ? all.first : null;
   }
@@ -410,8 +412,9 @@ class _BuilderPageState extends State<BuilderPage>
     final activeItems = current.regimenItems.toList();
 
     // 各レジメンアイテムの「本数」: EN朝昼夕が設定されていれば合計、なければ units
-    int unitsOf(RegimenItem item) =>
-        item.hasMealTiming ? (item.morning + item.noon + item.evening) : item.units;
+    int unitsOf(RegimenItem item) => item.hasMealTiming
+        ? (item.morning + item.noon + item.evening)
+        : item.units;
 
     // Excel準拠の本数ベース集計。製剤の kcal/aminoAcidG/fatBase/carbBase/volumeMl は
     // 1パック(1本)あたりの値なので、本数を掛けるだけでよい（密度換算は不要）。
@@ -442,7 +445,11 @@ class _BuilderPageState extends State<BuilderPage>
       }
 
       // 集計（本数/ml ベース）— Excel T19/T20/T21/T23 に対応
-      double fullIN = 0, fullKcal = 0, fullProt = 0, fullFatG = 0, fullCarbG = 0;
+      double fullIN = 0,
+          fullKcal = 0,
+          fullProt = 0,
+          fullFatG = 0,
+          fullCarbG = 0;
       for (final item in selectedItems) {
         final product = widget.state.catalog.byId(item.productId)!;
         final n = effOf(item, product);
@@ -454,8 +461,9 @@ class _BuilderPageState extends State<BuilderPage>
       }
 
       // ENのみ投与速度で「一部投与」按分。TPN/PPN/食事はper-product mlがそのまま日量。
-      final factor =
-          (categoryKey == 'EN' && rate > 0 && fullIN > 0) ? (rate * 24) / fullIN : 1.0;
+      final factor = (categoryKey == 'EN' && rate > 0 && fullIN > 0)
+          ? (rate * 24) / fullIN
+          : 1.0;
 
       totalVolumeMl += fullIN * factor;
       totalKcal += fullKcal * factor;
@@ -583,8 +591,8 @@ class _BuilderPageState extends State<BuilderPage>
                     overflow: TextOverflow.ellipsis),
                 if (sub.isNotEmpty)
                   Text(sub,
-                      style:
-                          TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+                      style: TextStyle(
+                          fontSize: 10.5, color: Colors.grey.shade600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
               ],
@@ -648,8 +656,9 @@ class _BuilderPageState extends State<BuilderPage>
     double b1 = 0, mn = 0, cu = 0, zn = 0, se = 0;
     double ivGlu = 0, carbTot = 0;
     for (final item in current.regimenItems) {
-      final units =
-          item.units > 0 ? item.units : (item.morning + item.noon + item.evening);
+      final units = item.units > 0
+          ? item.units
+          : (item.morning + item.noon + item.evening);
       if (units <= 0) continue;
       final p = widget.state.catalog.byId(item.productId);
       if (p == null) continue;
@@ -671,7 +680,7 @@ class _BuilderPageState extends State<BuilderPage>
       if (!(p.inEnTab || p.isFood)) ivGlu += carb;
     }
     return ae.EvalContext(
-      weightKg: current.weightKg,
+      weightKg: NutritionCalculator.referenceWeightKg(current),
       conditionTags: current.conditionTags.toSet(),
       targetKcal: NutritionCalculator.targetEnergy(current),
       proteinGoalPerKg: current.proteinGoalPerKg,
@@ -756,8 +765,9 @@ class _BuilderPageState extends State<BuilderPage>
                 style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.bold,
-                    color:
-                        hasError ? Colors.red.shade800 : Colors.orange.shade900)),
+                    color: hasError
+                        ? Colors.red.shade800
+                        : Colors.orange.shade900)),
             const Spacer(),
             // 自動修正（feasible かつ softScore 最小へ本数を調整して提案）
             OutlinedButton.icon(
@@ -765,7 +775,8 @@ class _BuilderPageState extends State<BuilderPage>
               icon: const Icon(Icons.healing, size: 14),
               label: const Text('リペア', style: TextStyle(fontSize: 11)),
               style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -889,7 +900,7 @@ class _BuilderPageState extends State<BuilderPage>
   ae.EvalContext _evalOfPlan(PatientCase current, PlanState p) =>
       computeEvalContext(
         p,
-        weightKg: current.weightKg,
+        weightKg: NutritionCalculator.referenceWeightKg(current),
         conditionTags: current.conditionTags.toSet(),
         targetKcal: NutritionCalculator.targetEnergy(current),
         proteinGoalPerKg: current.proteinGoalPerKg,
@@ -970,8 +981,8 @@ class _BuilderPageState extends State<BuilderPage>
     );
     if (!mounted) return;
     if (!outcome.hasRepair) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('自動補正できる項目はありませんでした')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('自動補正できる項目はありませんでした')));
       return;
     }
     final best = outcome.best!;
@@ -1094,9 +1105,7 @@ class _BuilderPageState extends State<BuilderPage>
               '現在 ${protPerKg.toStringAsFixed(1)} g/kg'
               '（${overs.map((d) => '${d.label} 目安${d.proteinCapPerKg!.toStringAsFixed(1)}').join(' / ')} 超）',
               style: TextStyle(
-                  fontSize: 12,
-                  color: textColor,
-                  fontWeight: FontWeight.w600),
+                  fontSize: 12, color: textColor, fontWeight: FontWeight.w600),
             ),
         ],
       ),
@@ -1118,7 +1127,7 @@ class _BuilderPageState extends State<BuilderPage>
       targetKcal: double.tryParse(targetKcalController.text) ?? targetKcal,
       npcNRatio: double.tryParse(npcnController.text) ?? 125,
       lipidGramPerKg: _lipidGPerKg,
-      weightKg: current.weightKg,
+      weightKg: NutritionCalculator.referenceWeightKg(current),
       glucoseProduct: widget.state.adoptedByBase(glucoseSource),
       aminoProduct: widget.state.adoptedAminoForZero(),
       lipidProduct: widget.state.adoptedLipidForZero(),
@@ -1171,9 +1180,8 @@ class _BuilderPageState extends State<BuilderPage>
     // 朝 > 昼 > 夕 > ★ > 未選択
     products.sort((a, b) {
       int groupOf(Product p) {
-        final item = current.regimenItems
-            .where((e) => e.productId == p.id)
-            .firstOrNull;
+        final item =
+            current.regimenItems.where((e) => e.productId == p.id).firstOrNull;
         if (item != null && item.hasMealTiming) {
           if (item.morning > 0) return 0;
           if (item.noon > 0) return 1;
@@ -1183,6 +1191,7 @@ class _BuilderPageState extends State<BuilderPage>
         if (widget.state.isEffectiveFavorite(p.id)) return 4;
         return 5;
       }
+
       return groupOf(a).compareTo(groupOf(b));
     });
 
@@ -1224,24 +1233,24 @@ class _BuilderPageState extends State<BuilderPage>
       }
       return m.entries.map((e) {
         final vol = widget.state.catalog.byName(e.key)?.volumeMl;
-        final amt = vol != null ? '${(vol * e.value).round()} ml' : '${e.value}管';
+        final amt =
+            vol != null ? '${(vol * e.value).round()} ml' : '${e.value}管';
         final nm = e.value > 1 ? '${e.key} ×${e.value}' : e.key;
         return '$nm  $amt';
       }).toList();
     })();
 
-
     final screenH = MediaQuery.of(context).size.height;
     final _mqPad = MediaQuery.of(context).padding;
     // パネルの最大高さ = 画面高さ - ステータスバー - AppBar - ホームインジケータ - パディング16
-    final maxSummaryH = (screenH - _mqPad.top - kToolbarHeight - _mqPad.bottom - 16.0)
-        .clamp(200.0, screenH);
+    final maxSummaryH =
+        (screenH - _mqPad.top - kToolbarHeight - _mqPad.bottom - 16.0)
+            .clamp(200.0, screenH);
 
     // 入室日・栄養開始日 (ヘッダー表示用)
     String _mmdd(DateTime? d) => d == null ? '—' : '${d.month}/${d.day}';
     final _admissionDate = (() {
-      final e =
-          current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
+      final e = current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
       return e != null ? DateTime.tryParse(e.changedAt) : null;
     })();
     final _nutritionStart = (() {
@@ -1253,94 +1262,93 @@ class _BuilderPageState extends State<BuilderPage>
         : null;
 
     return Scaffold(
-          appBar: AppBar(
-            leading: const BackButton(),
-            title: const Text('処方ビルダー'),
-          ),
-          body: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  controller: _listScroll,
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Card(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: _builderCardCollapsed
-                            ? null
-                            : () => _editPatientParams(context, current),
-                        child: Padding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: _builderCardCollapsed ? 2 : 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                if (!_builderCardCollapsed) ...[
-                                  const Icon(Icons.person, size: 18),
-                                  const SizedBox(width: 2),
-                                  Text(current.caseCode,
-                                      style:
-                                          Theme.of(context).textTheme.titleLarge),
-                                  const SizedBox(width: 12),
-                                  const Icon(Icons.bed, size: 18),
-                                  const SizedBox(width: 2),
-                                  Text(current.currentBed,
-                                      style:
-                                          Theme.of(context).textTheme.titleLarge),
-                                  const Spacer(),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, size: 20),
-                                    tooltip: '患者情報を編集',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () =>
-                                        _editPatientParams(context, current),
-                                  ),
-                                ] else
-                                  const Spacer(),
-                                if (current.conditionTags.isNotEmpty)
-                                  IconButton(
-                                    icon: Icon(Icons.lightbulb,
-                                        size: 20, color: Colors.amber.shade700),
-                                    tooltip: '病態サジェスト',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => showDialog(
-                                      context: context,
-                                      builder: (_) => Dialog(
-                                        backgroundColor: Colors.transparent,
-                                        elevation: 0,
-                                        insetPadding: const EdgeInsets.symmetric(
-                                            horizontal: 24, vertical: 80),
-                                        child: GestureDetector(
-                                          onTap: () => Navigator.pop(context),
-                                          child: SingleChildScrollView(
-                                            child: _conditionSuggestionBanner(
-                                                current, aggregate),
-                                          ),
+      appBar: AppBar(
+        leading: const BackButton(),
+        title: const Text('処方ビルダー'),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              controller: _listScroll,
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: _builderCardCollapsed
+                        ? null
+                        : () => _editPatientParams(context, current),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: _builderCardCollapsed ? 2 : 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (!_builderCardCollapsed) ...[
+                                const Icon(Icons.person, size: 18),
+                                const SizedBox(width: 2),
+                                Text(current.caseCode,
+                                    style:
+                                        Theme.of(context).textTheme.titleLarge),
+                                const SizedBox(width: 12),
+                                const Icon(Icons.bed, size: 18),
+                                const SizedBox(width: 2),
+                                Text(current.currentBed,
+                                    style:
+                                        Theme.of(context).textTheme.titleLarge),
+                                const Spacer(),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 20),
+                                  tooltip: '患者情報を編集',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () =>
+                                      _editPatientParams(context, current),
+                                ),
+                              ] else
+                                const Spacer(),
+                              if (current.conditionTags.isNotEmpty)
+                                IconButton(
+                                  icon: Icon(Icons.lightbulb,
+                                      size: 20, color: Colors.amber.shade700),
+                                  tooltip: '病態サジェスト',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => showDialog(
+                                    context: context,
+                                    builder: (_) => Dialog(
+                                      backgroundColor: Colors.transparent,
+                                      elevation: 0,
+                                      insetPadding: const EdgeInsets.symmetric(
+                                          horizontal: 24, vertical: 80),
+                                      child: GestureDetector(
+                                        onTap: () => Navigator.pop(context),
+                                        child: SingleChildScrollView(
+                                          child: _conditionSuggestionBanner(
+                                              current, aggregate),
                                         ),
                                       ),
                                     ),
                                   ),
-                                IconButton(
-                                  icon: Icon(
-                                      _builderCardCollapsed
-                                          ? Icons.expand_more
-                                          : Icons.expand_less,
-                                      size: 22),
-                                  tooltip: _builderCardCollapsed
-                                      ? '患者情報を展開'
-                                      : '折りたたむ',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () => setState(() =>
-                                      _builderCardCollapsed =
-                                          !_builderCardCollapsed),
                                 ),
-                              ],
-                            ),
-                            if (!_builderCardCollapsed) ...[
+                              IconButton(
+                                icon: Icon(
+                                    _builderCardCollapsed
+                                        ? Icons.expand_more
+                                        : Icons.expand_less,
+                                    size: 22),
+                                tooltip:
+                                    _builderCardCollapsed ? '患者情報を展開' : '折りたたむ',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => setState(() =>
+                                    _builderCardCollapsed =
+                                        !_builderCardCollapsed),
+                              ),
+                            ],
+                          ),
+                          if (!_builderCardCollapsed) ...[
                             const SizedBox(height: 4),
                             // 入室日 / 絶食開始日 / 栄養開始日
                             Text(
@@ -1370,14 +1378,14 @@ class _BuilderPageState extends State<BuilderPage>
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             Builder(builder: (_) {
-                              final er = NutritionCalculator
-                                  .targetEnergyResult(current);
-                              final showW = (er.feedingWeightKg -
-                                          er.actualWeightKg)
-                                      .abs() >=
-                                  0.1;
-                              final bmi = cbw.bmiOf(
-                                  current.weightKg, current.heightCm);
+                              final er = NutritionCalculator.targetEnergyResult(
+                                  current);
+                              final showW =
+                                  (er.feedingWeightKg - er.actualWeightKg)
+                                          .abs() >=
+                                      0.1;
+                              final bmi =
+                                  cbw.bmiOf(current.weightKg, current.heightCm);
                               return Text(
                                 '式 ${ce.energyModelFromId(current.energyModel).label}'
                                 ' / BMI ${bmi.toStringAsFixed(1)} ${cbw.obesityClass(bmi)}'
@@ -1386,6 +1394,40 @@ class _BuilderPageState extends State<BuilderPage>
                                     .textTheme
                                     .bodySmall
                                     ?.copyWith(color: Colors.blueGrey),
+                              );
+                            }),
+                            // §8 参照体重ガイダンス: 平時体重入力＋浮腫/AKIなら
+                            // NutritionCalculator.referenceWeightKg が自動で平時体重を採用する。
+                            // 適用条件は referenceWeightKg と一致（edema/aki/fluid_overload ＋ 実−平時>1kg）。
+                            Builder(builder: (_) {
+                              final usual = current.usualWeightKg;
+                              if (usual == null || usual <= 0) {
+                                return const SizedBox.shrink();
+                              }
+                              final tags = current.conditionTags.toSet();
+                              final edemaRisk =
+                                  tags.contains('fluid_overload') ||
+                                      tags.contains('aki') ||
+                                      tags.contains('edema');
+                              final diff = current.weightKg - usual;
+                              // referenceWeightKg と同条件: 病態あり＋実が平時より1kg超で自動適用。
+                              final applied = edemaRisk && diff > 1.0;
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  applied
+                                      ? '⚖ 浮腫/AKI: 栄養計算の参照体重に平時 ${usual.toStringAsFixed(1)}kg を'
+                                          '自動採用中（実 ${current.weightKg.toStringAsFixed(1)}kg は過大評価のため）'
+                                      : '⚖ 平時体重 ${usual.toStringAsFixed(1)}kg を登録済み'
+                                          '（浮腫/AKIタグ＋実>平時+1kg で参照体重に自動採用）',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                          color: applied
+                                              ? Colors.deepOrange.shade700
+                                              : Colors.blueGrey),
+                                ),
                               );
                             }),
                             // 過剰栄養アラート (H-B×係数 + 高SF + >30kcal/kg)
@@ -1413,8 +1455,7 @@ class _BuilderPageState extends State<BuilderPage>
                                           horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: Colors.teal.shade50,
-                                        borderRadius:
-                                            BorderRadius.circular(10),
+                                        borderRadius: BorderRadius.circular(10),
                                         border: Border.all(
                                             color: Colors.teal.shade200),
                                       ),
@@ -1428,701 +1469,540 @@ class _BuilderPageState extends State<BuilderPage>
                                 ],
                               ),
                             ],
-                            ],
                           ],
-                        ),
-                      ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // 3タブ切替 (個別選択 / ゼロmenu / 自動計算)
-                    Center(
-                      child: SegmentedButton<int>(
-                        segments: const [
-                          ButtonSegment<int>(
-                            value: 0,
-                            label: Text('個別選択'),
-                            icon: Icon(Icons.list_alt),
-                          ),
-                          ButtonSegment<int>(
-                            value: 1,
-                            label: Text('ゼロmenu'),
-                            icon: Icon(Icons.science),
-                          ),
-                          ButtonSegment<int>(
-                            value: 2,
-                            label: Text('自動計算'),
-                            icon: Icon(Icons.auto_awesome),
-                          ),
                         ],
-                        selected: {_builderTabIndex},
-                        onSelectionChanged: (Set<int> newSelection) {
-                          setState(() => _builderTabIndex = newSelection.first);
-                          // 自動計算タブ初回表示時: AutoDesignInline のinitState完了後に
-                          // もう一度 setState してグラフパネルを描画する
-                          if (newSelection.first == 2) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() {});
-                            });
-                          }
-                        },
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    // タブごとの説明書き
-                    Text(
-                      _builderTabIndex == 0
-                          ? '製剤併用を集計し, 処方・カルテ記載に向けてサマライズします.'
-                          : _builderTabIndex == 1
-                              ? '静脈栄養のみで最小のINにする際の逆引き計算を行います.'
-                              : 'フェーズに応じた処方プリセットを提案し, トレンドを可視化します',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600),
-                    ),
-                    const SizedBox(height: 12),
-                    // ゼロmenu タブ
-                    Visibility(
-                      visible: _builderTabIndex == 1,
-                      maintainState: true,
-                      child: Builder(builder: (context) {
-                        Product? prod(String? n) =>
-                            n == null ? null : widget.state.catalog.byName(n);
-                        double round10(double v) => (v / 10).round() * 10.0;
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // 3タブ切替 (個別選択 / ゼロmenu / 自動計算)
+                Center(
+                  child: SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment<int>(
+                        value: 0,
+                        label: Text('個別選択'),
+                        icon: Icon(Icons.list_alt),
+                      ),
+                      ButtonSegment<int>(
+                        value: 1,
+                        label: Text('ゼロmenu'),
+                        icon: Icon(Icons.science),
+                      ),
+                      ButtonSegment<int>(
+                        value: 2,
+                        label: Text('自動計算'),
+                        icon: Icon(Icons.auto_awesome),
+                      ),
+                    ],
+                    selected: {_builderTabIndex},
+                    onSelectionChanged: (Set<int> newSelection) {
+                      setState(() => _builderTabIndex = newSelection.first);
+                      // 自動計算タブ初回表示時: AutoDesignInline のinitState完了後に
+                      // もう一度 setState してグラフパネルを描画する
+                      if (newSelection.first == 2) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) setState(() {});
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // タブごとの説明書き
+                Text(
+                  _builderTabIndex == 0
+                      ? '複数製剤の集計と, 処方 / カルテ記載に寄せたサマライズをします'
+                      : _builderTabIndex == 1
+                          ? '静脈栄養のみで最小のINにする際の逆引き計算を行います.'
+                          : 'フェーズに応じた処方テンプレートを提案, トレンドも可視化します.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 12),
+                // ゼロmenu タブ
+                Visibility(
+                  visible: _builderTabIndex == 1,
+                  maintainState: true,
+                  child: Builder(builder: (context) {
+                    Product? prod(String? n) =>
+                        n == null ? null : widget.state.catalog.byName(n);
+                    double round10(double v) => (v / 10).round() * 10.0;
 
-                        // 本体(ベース)の使用量を10ml単位に丸め (IN/kcal/PFCはサマリーカードで集計)
-                        final aminoMl = round10(zeroMenu.aminoVolumeMl);
-                        final gluMl = round10(zeroMenu.glucoseVolumeMl);
-                        final lipMl = round10(zeroMenu.lipidVolumeMl);
+                    // 本体(ベース)の使用量を10ml単位に丸め (IN/kcal/PFCはサマリーカードで集計)
+                    final aminoMl = round10(zeroMenu.aminoVolumeMl);
+                    final gluMl = round10(zeroMenu.glucoseVolumeMl);
+                    final lipMl = round10(zeroMenu.lipidVolumeMl);
 
-                        const rowH = 32.0;
-                        Widget dataRow(String label, String val,
-                                {bool bold = false, Color? color}) =>
-                            SizedBox(
-                              height: rowH,
-                              child: Row(children: [
-                                // 長い加注製剤名は折り返さず、末尾を省略(…)して容量の手前で切る
-                                Expanded(
-                                    child: Text(label,
-                                        maxLines: 1,
-                                        softWrap: false,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontSize: 13,
-                                            color: color,
-                                            fontWeight: bold
-                                                ? FontWeight.bold
-                                                : FontWeight.normal))),
-                                const SizedBox(width: 6),
-                                Text(val,
+                    const rowH = 32.0;
+                    Widget dataRow(String label, String val,
+                            {bool bold = false, Color? color}) =>
+                        SizedBox(
+                          height: rowH,
+                          child: Row(children: [
+                            // 長い加注製剤名は折り返さず、末尾を省略(…)して容量の手前で切る
+                            Expanded(
+                                child: Text(label,
                                     maxLines: 1,
                                     softWrap: false,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                         fontSize: 13,
                                         color: color,
                                         fontWeight: bold
                                             ? FontWeight.bold
-                                            : FontWeight.normal)),
-                              ]),
-                            );
-
-                        // ── 本体タブ: 投与目標設定 ──
-                        final bodyCard = Card(
-                          margin: EdgeInsets.zero,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(children: [
-                                  Expanded(
-                                    child: Text('投与目標設定',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleSmall),
-                                  ),
-                                  if (current.conditionTags.isNotEmpty)
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        _applyZeroMenuConditionDefaults(current);
-                                        setState(() {});
-                                      },
-                                      icon: Icon(Icons.auto_fix_high,
-                                          size: 15,
-                                          color: Colors.teal.shade700),
-                                      label: Text('病態の推奨を反映',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.teal.shade700)),
-                                      style: TextButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                    ),
-                                ]),
-                                const Divider(),
-                                TextField(
-                                  controller: targetKcalController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: '投与カロリー',
-                                    suffixText: targetKcalController.text.isNotEmpty
-                                        ? 'kcal'
-                                        : null,
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        vertical: 6, horizontal: 4),
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                                const SizedBox(height: 6),
-                                TextField(
-                                  controller: npcnController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'タンパク投与量 (NPC/N)',
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                        vertical: 6, horizontal: 4),
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                DropdownButtonFormField<double>(
-                                  value: _lipidGPerKg,
-                                  isExpanded: true,
-                                  decoration: const InputDecoration(
-                                    labelText: '脂質量',
-                                    suffixText: 'g/kg/day',
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                        vertical: 6, horizontal: 4),
-                                  ),
-                                  items: [
-                                    for (int i = 0; i <= 10; i++)
-                                      DropdownMenuItem(
-                                        value: i / 10.0,
-                                        child: Text((i / 10.0).toStringAsFixed(1)),
-                                      ),
-                                  ],
-                                  onChanged: (v) => setState(
-                                      () => _lipidGPerKg = v ?? _lipidGPerKg),
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: glucoseSource,
-                                  decoration: const InputDecoration(
-                                      labelText: '糖質', isDense: true),
-                                  items: const [
-                                    DropdownMenuItem(
-                                        value: 'ハイカリックRF',
-                                        child: Text('ハイカリックRF')),
-                                    DropdownMenuItem(
-                                        value: '70% グルコース',
-                                        child: Text('70% グルコース')),
-                                    DropdownMenuItem(
-                                        value: '8%グルコース',
-                                        child: Text('8%グルコース')),
-                                  ],
-                                  onChanged: (v) => setState(
-                                      () => glucoseSource = v ?? glucoseSource),
-                                ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton(
-                                    onPressed: () {
-                                      current.zeroMenuConfig = ZeroMenuConfig(
-                                        targetKcal: double.tryParse(
-                                                targetKcalController.text) ??
-                                            targetKcal,
-                                        npcNRatio: double.tryParse(
-                                                npcnController.text) ??
-                                            125,
-                                        lipidGramPerKg: _lipidGPerKg,
-                                        glucoseProductName: glucoseSource,
-                                      );
-                                      widget.state.persist();
-                                      setState(() {});
-                                    },
-                                    child: const Text('保存'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                                            : FontWeight.normal))),
+                            const SizedBox(width: 6),
+                            Text(val,
+                                maxLines: 1,
+                                softWrap: false,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: color,
+                                    fontWeight: bold
+                                        ? FontWeight.bold
+                                        : FontWeight.normal)),
+                          ]),
                         );
 
-                        // ── 加注タブ: 製剤を1リストから選んで追加 ──
-                        final addCard = Card(
-                          margin: EdgeInsets.zero,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('加注製剤 (電解質・微量元素・ビタミン)',
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall),
-                                const Divider(),
-                                _additivePicker(_zeroAdditives),
-                              ],
-                            ),
-                          ),
-                        );
-
-                        // ── 製剤構成 (タンパク→脂肪→糖質の順) ──
-                        final compCard = Card(
-                          margin: EdgeInsets.zero,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('製剤構成',
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall),
-                                const Divider(),
-                                Text('本体',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade600)),
-                                dataRow(aminoProduct?.name ?? 'アミノ酸製剤',
-                                    '${aminoMl.round()} ml'),
-                                dataRow(lipidProduct?.name ?? '脂肪乳剤',
-                                    '${lipMl.round()} ml'),
-                                dataRow(glucoseSource, '${gluMl.round()} ml'),
-                                if (_zeroAdditives.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text('加注',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade600)),
-                                  ..._zeroAdditives.map((n) => dataRow(n,
-                                      prod(n)?.volumeMl != null
-                                          ? '${prod(n)!.volumeMl!.round()} ml'
-                                          : '1管')),
-                                ],
-                                Builder(builder: (_) {
-                                  final gluProd =
-                                      widget.state.adoptedByBase(glucoseSource);
-                                  final gluKcal = (gluProd != null &&
-                                          (gluProd.volumeMl ?? 0) > 0)
-                                      ? gluMl *
-                                          (gluProd.kcal ?? 0) /
-                                          gluProd.volumeMl!
-                                      : 0.0;
-                                  return _infusionAlerts(
-                                    glucoseGramPerDay: gluKcal / 4,
-                                    lipidGramPerDay: zeroMenu.lipidGram,
-                                    weightKg: current.weightKg,
-                                    glucoseRestrict: cc
-                                            .resolveCoeff(current.conditionTags)
-                                            ?.glucoseRestrict ??
-                                        false,
-                                  );
-                                }),
-                              ],
-                            ),
-                          ),
-                        );
-
-                        return Column(
+                    // ── 本体タブ: 投与目標設定 ──
+                    final bodyCard = Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // サブタブ: 本体 / 加注 (中央寄せ)
-                            Center(
-                              child: SegmentedButton<int>(
-                                segments: const [
-                                  ButtonSegment(value: 0, label: Text('本体')),
-                                  ButtonSegment(value: 1, label: Text('加注')),
-                                ],
-                                selected: {_zeroSubTab},
-                                showSelectedIcon: false,
-                                onSelectionChanged: (s) =>
-                                    setState(() => _zeroSubTab = s.first),
+                            Row(children: [
+                              Expanded(
+                                child: Text('投与目標設定',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall),
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                    child: _zeroSubTab == 0 ? bodyCard : addCard),
-                                const SizedBox(width: 8),
-                                Expanded(child: compCard),
-                              ],
-                            ),
-                          ],
-                        );
-                      }),
-                    ),
-                    // タブ内容: EN/TPN/PPN 選択 (インデックス 0)
-                    Visibility(
-                      visible: _builderTabIndex == 0,
-                      maintainState: true,
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('処方ビルダー',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              const SizedBox(height: 8),
-                              Builder(builder: (context) {
-                                final activeCategories = ['EN', 'TPN', 'PPN']
-                                    .where((cat) =>
-                                        _selectedProductsForCategory(cat)
-                                            .isNotEmpty)
-                                    .toList();
-                                if (activeCategories.isEmpty) {
-                                  return const Text('採用製剤を製剤マスタで選択してください');
-                                }
-                                // 加注・食事タブは常時選択可。EN/TPN/PPNは採用製剤がある時のみ
-                                final tabCats = [...activeCategories, '加注', '食事'];
-                                final effectiveCategory =
-                                    tabCats.contains(category)
-                                        ? category
-                                        : activeCategories.first;
-                                if (effectiveCategory != category) {
-                                  WidgetsBinding.instance.addPostFrameCallback(
-                                      (_) => setState(
-                                          () => category = effectiveCategory));
-                                }
-                                // EN/TPN/PPN タブ + ドロップダウン（選択中カテゴリに対応）
-                                // TPN/PPN流量オプション: 24hかけて(0) + 5〜60ml/h(5刻み)
-                                final pnRateOptions = <double>[0,
-                                  ...List.generate(12, (i) => (i + 1) * 5.0)];
-                                String pnRateLabel(double v) =>
-                                    v <= 0 ? '24hかけて' : '${v.toInt()}ml/h';
-                                final curPnRate = effectiveCategory == 'TPN'
-                                    ? _tpnRateMlPerHour
-                                    : _ppnRateMlPerHour;
-                                // スイッチを画面中央、DDをスイッチ右端〜右壁の中間に配置
-                                return Row(
-                                  children: [
-                                    const Expanded(child: SizedBox()), // 左スペーサー
-                                    SizedBox(
-                                      width: 60.0 * tabCats.length,
-                                      child: SegmentedButton<String>(
-                                        showSelectedIcon: false,
-                                        style: ButtonStyle(
-                                          visualDensity: VisualDensity.compact,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        segments: tabCats
-                                            .map((cat) => ButtonSegment(
-                                                value: cat, label: Text(cat)))
-                                            .toList(),
-                                        selected: {effectiveCategory},
-                                        onSelectionChanged: (newSel) =>
-                                            setState(() => category = newSel.first),
-                                      ),
-                                    ),
-                                    // 右半分: DDをスイッチ右端〜右壁の中間に配置
-                                    Expanded(
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(left: 12),
-                                          child: (effectiveCategory == '加注' ||
-                                                  effectiveCategory == '食事')
-                                            ? const SizedBox.shrink()
-                                            : effectiveCategory == 'EN'
-                                            ? DropdownButton<double>(
-                                              value: _enRateMlPerHour,
-                                              isDense: true,
-                                              items: _infusionRateOptions
-                                                  .map((v) => DropdownMenuItem(
-                                                      value: v,
-                                                      child: Text(_rateLabel(v),
-                                                          style: const TextStyle(fontSize: 13))))
-                                                  .toList(),
-                                              onChanged: (v) async {
-                                                setState(() => _enRateMlPerHour = v ?? 0);
-                                                if ((v ?? 0) > 0) {
-                                                  await _adjustEnUnitsForRate(current);
-                                                  if (mounted) setState(() {});
-                                                }
-                                              },
-                                            )
-                                            : DropdownButton<double>(
-                                              value: curPnRate,
-                                              isDense: true,
-                                              items: pnRateOptions
-                                                  .map((v) => DropdownMenuItem(
-                                                      value: v,
-                                                      child: Text(pnRateLabel(v),
-                                                          style: const TextStyle(fontSize: 13))))
-                                                  .toList(),
-                                              onChanged: (v) {
-                                                final rate = v ?? 0;
-                                                setState(() {
-                                                  if (effectiveCategory == 'TPN') {
-                                                    _tpnRateMlPerHour = rate;
-                                                  } else {
-                                                    _ppnRateMlPerHour = rate;
-                                                  }
-                                                });
-                                              },
-                                            ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }),
-                              if (category == '加注') ...[
-                                const SizedBox(height: 8),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => setState(() {
-                                      _selectAdditives
-                                        ..clear()
-                                        ..addAll(
-                                            _recommendedSelectAdditives(current));
-                                    }),
-                                    icon: Icon(Icons.auto_fix_high,
-                                        size: 16, color: Colors.indigo.shade600),
-                                    label: const Text('推奨加注を自動セット（重複回避）',
-                                        style: TextStyle(fontSize: 12)),
-                                    style: OutlinedButton.styleFrom(
-                                        visualDensity: VisualDensity.compact),
+                              if (current.conditionTags.isNotEmpty)
+                                TextButton.icon(
+                                  onPressed: () {
+                                    _applyZeroMenuConditionDefaults(current);
+                                    setState(() {});
+                                  },
+                                  icon: Icon(Icons.auto_fix_high,
+                                      size: 15, color: Colors.teal.shade700),
+                                  label: Text('病態の推奨を反映',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.teal.shade700)),
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
                                 ),
-                                Text(
-                                    'ベースに微量元素/ビタミンが内蔵なら加注せず、胆汁うっ滞/肝障害ではMn-freeを選択。',
-                                    style: TextStyle(
-                                        fontSize: 10.5,
-                                        color: Colors.grey.shade600)),
-                                const SizedBox(height: 6),
-                                _additivePicker(_selectAdditives),
-                              ],
-                              if (category == '食事') ...[
-                                const SizedBox(height: 4),
-                                Text('経口/経腸の食事製剤（濃厚流動食・栄養サポート食品）。朝昼夕の食数(各0〜3pac)を指定',
-                                    style: Theme.of(context).textTheme.bodySmall),
-                                if (mainProducts.isEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: Text(
-                                        '採用された食事製剤がありません（製剤マスタの「食事」タブで採用してください）',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(color: Colors.grey)),
+                            ]),
+                            const Divider(),
+                            TextField(
+                              controller: targetKcalController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: '投与カロリー',
+                                suffixText: targetKcalController.text.isNotEmpty
+                                    ? 'kcal'
+                                    : null,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 6, horizontal: 4),
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: npcnController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'タンパク投与量 (NPC/N)',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                    vertical: 6, horizontal: 4),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<double>(
+                              value: _lipidGPerKg,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: '脂質量',
+                                suffixText: 'g/kg/day',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                    vertical: 6, horizontal: 4),
+                              ),
+                              items: [
+                                for (int i = 0; i <= 10; i++)
+                                  DropdownMenuItem(
+                                    value: i / 10.0,
+                                    child: Text((i / 10.0).toStringAsFixed(1)),
                                   ),
                               ],
-                              if (category != '加注' && category != '食事') ...[
-                                const SizedBox(height: 4),
-                                Text('ENは8h毎, TPN/PPNは24h毎に交換',
-                                    style: Theme.of(context).textTheme.bodySmall),
+                              onChanged: (v) => setState(
+                                  () => _lipidGPerKg = v ?? _lipidGPerKg),
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: glucoseSource,
+                              decoration: const InputDecoration(
+                                  labelText: '糖質', isDense: true),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'ハイカリックRF', child: Text('ハイカリックRF')),
+                                DropdownMenuItem(
+                                    value: '70% グルコース',
+                                    child: Text('70% グルコース')),
+                                DropdownMenuItem(
+                                    value: '8%グルコース', child: Text('8%グルコース')),
                               ],
-                              const SizedBox(height: 8),
-                              AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 380),
-                                transitionBuilder: (child, anim) {
-                                  final slide = Tween(
-                                    begin: const Offset(0, -0.12),
-                                    end: Offset.zero,
-                                  ).animate(CurvedAnimation(parent: anim, curve: Curves.easeInOutSine));
-                                  return SlideTransition(
-                                    position: slide,
-                                    child: FadeTransition(opacity: anim, child: child),
+                              onChanged: (v) => setState(
+                                  () => glucoseSource = v ?? glucoseSource),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: () {
+                                  current.zeroMenuConfig = ZeroMenuConfig(
+                                    targetKcal: double.tryParse(
+                                            targetKcalController.text) ??
+                                        targetKcal,
+                                    npcNRatio:
+                                        double.tryParse(npcnController.text) ??
+                                            125,
+                                    lipidGramPerKg: _lipidGPerKg,
+                                    glucoseProductName: glucoseSource,
                                   );
+                                  widget.state.persist();
+                                  setState(() {});
                                 },
-                                child: Column(
-                                  key: ValueKey(products.map((p) => p.id).join(',')),
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                              ...mainProducts.map((product) {
-                                final existing = current.regimenItems
-                                    .where((e) => e.productId == product.id)
-                                    .firstOrNull;
-                                final units = existing?.units ?? 0;
-                                final partialMl = existing?.partialMl ?? 0;
-                                final isFavorite =
-                                    widget.state.isFavorite(product.id);
-                                final isAutoFav = widget.state
-                                    .isAutoFavorite(product.id, current);
-                                final classification = product.productType;
-                                final attributes =
-                                    product.content.trim().isNotEmpty
-                                        ? product.content
-                                        : '性状不明';
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ListTile(
-                                      isThreeLine: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: IconButton(
-                                        tooltip: isAutoFav
-                                            ? '病態タグにより自動 (タップで固定)'
-                                            : null,
-                                        onPressed: () async {
-                                          await widget.state
-                                              .toggleFavorite(product.id);
-                                          setState(() {});
-                                        },
-                                        icon: Icon(
-                                            (isFavorite || isAutoFav)
-                                                ? Icons.star
-                                                : Icons.star_border,
-                                            color: isFavorite
-                                                ? Colors.orange
-                                                : isAutoFav
-                                                    ? Colors.teal
-                                                    : null),
-                                      ),
-                                      title: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(product.name),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '$classification / $attributes',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall,
-                                          ),
-                                        ],
-                                      ),
-                                      subtitle: Text(
-                                          '${product.volumeMlString} / ${product.kcalString} / ${product.aminoString}'),
-                                      tileColor: (units >= 1 || partialMl > 0)
-                                          ? Colors.blue.shade100
-                                          : null,
-                                      trailing: (product.category == 'EN' || product.category == 'EN_AUX' || product.isFood)
-                                          ? _MealPicker(
-                                              morning: existing?.morning ?? 0,
-                                              noon: existing?.noon ?? 0,
-                                              evening: existing?.evening ?? 0,
-                                              onChanged: (m, n, e) async {
-                                                await widget.state.setMealUnits(current.id, product, m, n, e);
-                                                setState(() {});
-                                              },
-                                            )
-                                          : SizedBox(
-                                              // 全非EN行で固定幅。部分量スロット(固定80)+本数ステッパー(固定)を
-                                              // 同じ並びで配置し、行ごとの横位置のガタつきを構造的に無くす。
-                                              width: 176,
-                                              child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.end,
-                                                children: [
-                                                  // 部分量スロット(固定幅80): 該当しない行は空でも幅を確保して位置を保持
-                                                  SizedBox(
-                                                    width: 80,
-                                                    child: ((product.category == 'TPN' ||
-                                                                product.category == 'PPN') &&
-                                                            (product.volumeMl ?? 0) > 50)
-                                                        ? Builder(builder: (_) {
-                                                            final bagVol =
-                                                                (product.volumeMl ?? 0).round();
-                                                            final maxPartial =
-                                                                ((bagVol - 1) ~/ 50) * 50;
-                                                            final opts = <int>[
-                                                              0,
-                                                              for (int v = 50; v <= maxPartial; v += 50) v
-                                                            ];
-                                                            final cur =
-                                                                partialMl.clamp(0, maxPartial);
-                                                            return DropdownButton<int>(
-                                                              value: cur,
-                                                              isDense: true,
-                                                              isExpanded: true, // スロット幅いっぱい=内容で幅が変わらない
-                                                              underline:
-                                                                  const SizedBox.shrink(),
-                                                              items: opts
-                                                                  .map((v) => DropdownMenuItem(
-                                                                      value: v,
-                                                                      child: Text(
-                                                                          v == 0 ? '+0' : '+${v}ml',
-                                                                          style: const TextStyle(
-                                                                              fontSize: 13))))
-                                                                  .toList(),
-                                                              onChanged: (v) async {
-                                                                await widget.state.setPartialMl(
-                                                                    current.id, product, v ?? 0);
-                                                                setState(() {});
-                                                              },
-                                                            );
-                                                          })
-                                                        : null,
-                                                  ),
-                                                  IconButton(
-                                                    visualDensity: VisualDensity.compact,
-                                                    padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(
-                                                        minWidth: 28, minHeight: 32),
-                                                    onPressed: () async {
-                                                      await widget.state.setUnits(current.id, product, (units - 1).clamp(0, 99));
-                                                      setState(() {});
-                                                    },
-                                                    icon: const Icon(Icons.remove_circle_outline),
-                                                  ),
-                                                  SizedBox(
-                                                    width: 24,
-                                                    child: Text('$units',
-                                                        textAlign: TextAlign.center,
-                                                        style: const TextStyle(
-                                                            fontSize: 16,
-                                                            fontWeight: FontWeight.bold)),
-                                                  ),
-                                                  IconButton(
-                                                    visualDensity: VisualDensity.compact,
-                                                    padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(
-                                                        minWidth: 28, minHeight: 32),
-                                                    onPressed: () async {
-                                                      await widget.state.setUnits(current.id, product, units + 1);
-                                                      setState(() {});
-                                                    },
-                                                    icon: const Icon(Icons.add_circle_outline),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                      onTap: () => setState(() {
-                                        if (expandedProducts.contains(product.id))
-                                          expandedProducts.remove(product.id);
-                                        else
-                                          expandedProducts.add(product.id);
-                                      }),
+                                child: const Text('保存'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+
+                    // ── 加注タブ: 製剤を1リストから選んで追加 ──
+                    final addCard = Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('加注製剤 (電解質・微量元素・ビタミン)',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const Divider(),
+                            _additivePicker(_zeroAdditives),
+                          ],
+                        ),
+                      ),
+                    );
+
+                    // ── 製剤構成 (タンパク→脂肪→糖質の順) ──
+                    final compCard = Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('製剤構成',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const Divider(),
+                            Text('本体',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey.shade600)),
+                            dataRow(aminoProduct?.name ?? 'アミノ酸製剤',
+                                '${aminoMl.round()} ml'),
+                            dataRow(lipidProduct?.name ?? '脂肪乳剤',
+                                '${lipMl.round()} ml'),
+                            dataRow(glucoseSource, '${gluMl.round()} ml'),
+                            if (_zeroAdditives.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text('加注',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600)),
+                              ..._zeroAdditives.map((n) => dataRow(
+                                  n,
+                                  prod(n)?.volumeMl != null
+                                      ? '${prod(n)!.volumeMl!.round()} ml'
+                                      : '1管')),
+                            ],
+                            Builder(builder: (_) {
+                              final gluProd =
+                                  widget.state.adoptedByBase(glucoseSource);
+                              final gluKcal = (gluProd != null &&
+                                      (gluProd.volumeMl ?? 0) > 0)
+                                  ? gluMl *
+                                      (gluProd.kcal ?? 0) /
+                                      gluProd.volumeMl!
+                                  : 0.0;
+                              return _infusionAlerts(
+                                glucoseGramPerDay: gluKcal / 4,
+                                lipidGramPerDay: zeroMenu.lipidGram,
+                                weightKg: NutritionCalculator.referenceWeightKg(
+                                    current),
+                                glucoseRestrict: cc
+                                        .resolveCoeff(current.conditionTags)
+                                        ?.glucoseRestrict ??
+                                    false,
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // サブタブ: 本体 / 加注 (中央寄せ)
+                        Center(
+                          child: SegmentedButton<int>(
+                            segments: const [
+                              ButtonSegment(value: 0, label: Text('本体')),
+                              ButtonSegment(value: 1, label: Text('加注')),
+                            ],
+                            selected: {_zeroSubTab},
+                            showSelectedIcon: false,
+                            onSelectionChanged: (s) =>
+                                setState(() => _zeroSubTab = s.first),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                                child: _zeroSubTab == 0 ? bodyCard : addCard),
+                            const SizedBox(width: 8),
+                            Expanded(child: compCard),
+                          ],
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+                // タブ内容: EN/TPN/PPN 選択 (インデックス 0)
+                Visibility(
+                  visible: _builderTabIndex == 0,
+                  maintainState: true,
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('処方ビルダー',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          Builder(builder: (context) {
+                            final activeCategories = ['EN', 'TPN', 'PPN']
+                                .where((cat) =>
+                                    _selectedProductsForCategory(cat)
+                                        .isNotEmpty)
+                                .toList();
+                            if (activeCategories.isEmpty) {
+                              return const Text('採用製剤を製剤マスタで選択してください');
+                            }
+                            // 加注・食事タブは常時選択可。EN/TPN/PPNは採用製剤がある時のみ
+                            final tabCats = [...activeCategories, '加注', '食事'];
+                            final effectiveCategory = tabCats.contains(category)
+                                ? category
+                                : activeCategories.first;
+                            if (effectiveCategory != category) {
+                              WidgetsBinding.instance.addPostFrameCallback(
+                                  (_) => setState(
+                                      () => category = effectiveCategory));
+                            }
+                            // EN/TPN/PPN タブ + ドロップダウン（選択中カテゴリに対応）
+                            // TPN/PPN流量オプション: 24hかけて(0) + 5〜60ml/h(5刻み)
+                            final pnRateOptions = <double>[
+                              0,
+                              ...List.generate(12, (i) => (i + 1) * 5.0)
+                            ];
+                            String pnRateLabel(double v) =>
+                                v <= 0 ? '24hかけて' : '${v.toInt()}ml/h';
+                            final curPnRate = effectiveCategory == 'TPN'
+                                ? _tpnRateMlPerHour
+                                : _ppnRateMlPerHour;
+                            // スイッチを画面中央、DDをスイッチ右端〜右壁の中間に配置
+                            return Row(
+                              children: [
+                                const Expanded(child: SizedBox()), // 左スペーサー
+                                SizedBox(
+                                  width: 60.0 * tabCats.length,
+                                  child: SegmentedButton<String>(
+                                    showSelectedIcon: false,
+                                    style: ButtonStyle(
+                                      visualDensity: VisualDensity.compact,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
-                                    if (expandedProducts.contains(product.id) &&
-                                        product.notes?.trim().isNotEmpty ==
-                                            true)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                            left: 56.0,
-                                            right: 8.0,
-                                            bottom: 8.0),
-                                        child: Text(product.notes!),
-                                      ),
-                                  ],
-                                );
-                              }),
-                              if (helperProducts.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                Text('EN補助製剤',
+                                    segments: tabCats
+                                        .map((cat) => ButtonSegment(
+                                            value: cat, label: Text(cat)))
+                                        .toList(),
+                                    selected: {effectiveCategory},
+                                    onSelectionChanged: (newSel) =>
+                                        setState(() => category = newSel.first),
+                                  ),
+                                ),
+                                // 右半分: DDをスイッチ右端〜右壁の中間に配置
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 12),
+                                      child: (effectiveCategory == '加注' ||
+                                              effectiveCategory == '食事')
+                                          ? const SizedBox.shrink()
+                                          : effectiveCategory == 'EN'
+                                              ? DropdownButton<double>(
+                                                  value: _enRateMlPerHour,
+                                                  isDense: true,
+                                                  items: _infusionRateOptions
+                                                      .map((v) => DropdownMenuItem(
+                                                          value: v,
+                                                          child: Text(
+                                                              _rateLabel(v),
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          13))))
+                                                      .toList(),
+                                                  onChanged: (v) async {
+                                                    setState(() =>
+                                                        _enRateMlPerHour =
+                                                            v ?? 0);
+                                                    if ((v ?? 0) > 0) {
+                                                      await _adjustEnUnitsForRate(
+                                                          current);
+                                                      if (mounted)
+                                                        setState(() {});
+                                                    }
+                                                  },
+                                                )
+                                              : DropdownButton<double>(
+                                                  value: curPnRate,
+                                                  isDense: true,
+                                                  items: pnRateOptions
+                                                      .map((v) => DropdownMenuItem(
+                                                          value: v,
+                                                          child: Text(
+                                                              pnRateLabel(v),
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          13))))
+                                                      .toList(),
+                                                  onChanged: (v) {
+                                                    final rate = v ?? 0;
+                                                    setState(() {
+                                                      if (effectiveCategory ==
+                                                          'TPN') {
+                                                        _tpnRateMlPerHour =
+                                                            rate;
+                                                      } else {
+                                                        _ppnRateMlPerHour =
+                                                            rate;
+                                                      }
+                                                    });
+                                                  },
+                                                ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }),
+                          if (category == '加注') ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: () => setState(() {
+                                  _selectAdditives
+                                    ..clear()
+                                    ..addAll(
+                                        _recommendedSelectAdditives(current));
+                                }),
+                                icon: Icon(Icons.auto_fix_high,
+                                    size: 16, color: Colors.indigo.shade600),
+                                label: const Text('推奨加注を自動セット（重複回避）',
+                                    style: TextStyle(fontSize: 12)),
+                                style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact),
+                              ),
+                            ),
+                            Text(
+                                'ベースに微量元素/ビタミンが内蔵なら加注せず、胆汁うっ滞/肝障害ではMn-freeを選択。',
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: Colors.grey.shade600)),
+                            const SizedBox(height: 6),
+                            _additivePicker(_selectAdditives),
+                          ],
+                          if (category == '食事') ...[
+                            const SizedBox(height: 4),
+                            Text(
+                                '経口/経腸の食事製剤（濃厚流動食・栄養サポート食品）。朝昼夕の食数(各0〜3pac)を指定',
+                                style: Theme.of(context).textTheme.bodySmall),
+                            if (mainProducts.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                    '採用された食事製剤がありません（製剤マスタの「食事」タブで採用してください）',
                                     style: Theme.of(context)
                                         .textTheme
-                                        .titleMedium),
-                                const SizedBox(height: 8),
-                                ...helperProducts.map((product) {
+                                        .bodySmall
+                                        ?.copyWith(color: Colors.grey)),
+                              ),
+                          ],
+                          if (category != '加注' && category != '食事') ...[
+                            const SizedBox(height: 4),
+                            Text('ENは8h毎, TPN/PPNは24h毎に交換',
+                                style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                          const SizedBox(height: 8),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 380),
+                            transitionBuilder: (child, anim) {
+                              final slide = Tween(
+                                begin: const Offset(0, -0.12),
+                                end: Offset.zero,
+                              ).animate(CurvedAnimation(
+                                  parent: anim, curve: Curves.easeInOutSine));
+                              return SlideTransition(
+                                position: slide,
+                                child:
+                                    FadeTransition(opacity: anim, child: child),
+                              );
+                            },
+                            child: Column(
+                              key:
+                                  ValueKey(products.map((p) => p.id).join(',')),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ...mainProducts.map((product) {
                                   final existing = current.regimenItems
                                       .where((e) => e.productId == product.id)
                                       .firstOrNull;
                                   final units = existing?.units ?? 0;
+                                  final partialMl = existing?.partialMl ?? 0;
                                   final isFavorite =
                                       widget.state.isFavorite(product.id);
                                   final isAutoFav = widget.state
@@ -2174,20 +2054,158 @@ class _BuilderPageState extends State<BuilderPage>
                                         ),
                                         subtitle: Text(
                                             '${product.volumeMlString} / ${product.kcalString} / ${product.aminoString}'),
-                                        tileColor: units >= 1
+                                        tileColor: (units >= 1 || partialMl > 0)
                                             ? Colors.blue.shade100
                                             : null,
-                                        trailing: _MealPicker(
-                                          morning: existing?.morning ?? 0,
-                                          noon: existing?.noon ?? 0,
-                                          evening: existing?.evening ?? 0,
-                                          onChanged: (m, n, e) async {
-                                            await widget.state.setMealUnits(current.id, product, m, n, e);
-                                            setState(() {});
-                                          },
-                                        ),
+                                        trailing: (product.category == 'EN' ||
+                                                product.category == 'EN_AUX' ||
+                                                product.isFood)
+                                            ? _MealPicker(
+                                                morning: existing?.morning ?? 0,
+                                                noon: existing?.noon ?? 0,
+                                                evening: existing?.evening ?? 0,
+                                                onChanged: (m, n, e) async {
+                                                  await widget.state
+                                                      .setMealUnits(current.id,
+                                                          product, m, n, e);
+                                                  setState(() {});
+                                                },
+                                              )
+                                            : SizedBox(
+                                                // 全非EN行で固定幅。部分量スロット(固定80)+本数ステッパー(固定)を
+                                                // 同じ並びで配置し、行ごとの横位置のガタつきを構造的に無くす。
+                                                width: 176,
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.end,
+                                                  children: [
+                                                    // 部分量スロット(固定幅80): 該当しない行は空でも幅を確保して位置を保持
+                                                    SizedBox(
+                                                      width: 80,
+                                                      child: ((product.category ==
+                                                                      'TPN' ||
+                                                                  product.category ==
+                                                                      'PPN') &&
+                                                              (product.volumeMl ??
+                                                                      0) >
+                                                                  50)
+                                                          ? Builder(
+                                                              builder: (_) {
+                                                              final bagVol =
+                                                                  (product.volumeMl ??
+                                                                          0)
+                                                                      .round();
+                                                              final maxPartial =
+                                                                  ((bagVol - 1) ~/
+                                                                          50) *
+                                                                      50;
+                                                              final opts =
+                                                                  <int>[
+                                                                0,
+                                                                for (int v = 50;
+                                                                    v <=
+                                                                        maxPartial;
+                                                                    v += 50)
+                                                                  v
+                                                              ];
+                                                              final cur =
+                                                                  partialMl.clamp(
+                                                                      0,
+                                                                      maxPartial);
+                                                              return DropdownButton<
+                                                                  int>(
+                                                                value: cur,
+                                                                isDense: true,
+                                                                isExpanded:
+                                                                    true, // スロット幅いっぱい=内容で幅が変わらない
+                                                                underline:
+                                                                    const SizedBox
+                                                                        .shrink(),
+                                                                items: opts
+                                                                    .map((v) => DropdownMenuItem(
+                                                                        value:
+                                                                            v,
+                                                                        child: Text(
+                                                                            v == 0
+                                                                                ? '+0'
+                                                                                : '+${v}ml',
+                                                                            style:
+                                                                                const TextStyle(fontSize: 13))))
+                                                                    .toList(),
+                                                                onChanged:
+                                                                    (v) async {
+                                                                  await widget
+                                                                      .state
+                                                                      .setPartialMl(
+                                                                          current
+                                                                              .id,
+                                                                          product,
+                                                                          v ??
+                                                                              0);
+                                                                  setState(
+                                                                      () {});
+                                                                },
+                                                              );
+                                                            })
+                                                          : null,
+                                                    ),
+                                                    IconButton(
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      padding: EdgeInsets.zero,
+                                                      constraints:
+                                                          const BoxConstraints(
+                                                              minWidth: 28,
+                                                              minHeight: 32),
+                                                      onPressed: () async {
+                                                        await widget.state
+                                                            .setUnits(
+                                                                current.id,
+                                                                product,
+                                                                (units - 1)
+                                                                    .clamp(
+                                                                        0, 99));
+                                                        setState(() {});
+                                                      },
+                                                      icon: const Icon(Icons
+                                                          .remove_circle_outline),
+                                                    ),
+                                                    SizedBox(
+                                                      width: 24,
+                                                      child: Text('$units',
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          style: const TextStyle(
+                                                              fontSize: 16,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold)),
+                                                    ),
+                                                    IconButton(
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      padding: EdgeInsets.zero,
+                                                      constraints:
+                                                          const BoxConstraints(
+                                                              minWidth: 28,
+                                                              minHeight: 32),
+                                                      onPressed: () async {
+                                                        await widget.state
+                                                            .setUnits(
+                                                                current.id,
+                                                                product,
+                                                                units + 1);
+                                                        setState(() {});
+                                                      },
+                                                      icon: const Icon(Icons
+                                                          .add_circle_outline),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
                                         onTap: () => setState(() {
-                                          if (expandedProducts.contains(product.id))
+                                          if (expandedProducts
+                                              .contains(product.id))
                                             expandedProducts.remove(product.id);
                                           else
                                             expandedProducts.add(product.id);
@@ -2207,420 +2225,859 @@ class _BuilderPageState extends State<BuilderPage>
                                     ],
                                   );
                                 }),
-                              ],
-                            ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // タブ内容: 自動計算 (インデックス 2)
-                    Visibility(
-                      visible: _builderTabIndex == 2,
-                      maintainState: true,
-                      child: AutoDesignInline(
-                          key: _autoDesignKey,
-                          state: widget.state,
-                          current: current,
-                          onSettingsChanged: () { if (mounted) setState(() {}); }),
-                    ),
-                  ],
-                ),
-              ),
-        // サマリーパネル（個別選択/ゼロmenuのみ。自動計算タブでは非表示）
-        if (_builderTabIndex != 2) SafeArea(
-            top: false,
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxSummaryH),
-                child: Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                        color: Theme.of(context).colorScheme.outline.withOpacity(0.4),
-                        width: 0.8),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                    Flexible(
-                      fit: FlexFit.loose,
-                      child: ClipRect(
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(children: [
-                                  Text('サマリー',
+                                if (helperProducts.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Text('EN補助製剤',
                                       style: Theme.of(context)
                                           .textTheme
                                           .titleMedium),
-                                  const Spacer(),
-                                  IconButton(
-                                    icon: Icon(
-                                        _summaryCollapsed
-                                            ? Icons.expand_less
-                                            : Icons.expand_more,
-                                        size: 22),
-                                    tooltip:
-                                        _summaryCollapsed ? '展開' : '折りたたむ',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => setState(() =>
-                                        _summaryCollapsed = !_summaryCollapsed),
-                                  ),
-                                ]),
-                                if (!_summaryCollapsed) const SizedBox(height: 8),
-                                // ── 2カード: 処方+サマリー | 円グラフ（画面幅に応じてレスポンシブ）──
-                                if (!_summaryCollapsed)
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                  final availW = constraints.maxWidth;
-                                  final scale = (availW / 380).clamp(0.72, 1.0);
-                                  final chartSize = (150 * scale).roundToDouble();
-                                  final labelFs = (12.5 * scale).clamp(10.0, 12.5);
-                                  return ConstrainedBox(
-                                  constraints: const BoxConstraints(minHeight: 200),
-                                  child: IntrinsicHeight(
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      // 処方カード
-                                      Expanded(
-                                        flex: 3,
-                                        child: Card(
-                                          margin: const EdgeInsets.all(0),
-                                          color: Colors.pink.shade50,
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(10),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              mainAxisAlignment: MainAxisAlignment.start,
-                                              children: [
-                                                // ── サマリー数値 ──
-                                                Builder(builder: (context) {
-                                                  final w = current.weightKg;
-                                                  final protPerKg = w > 0 ? aggregate.totalProteinG / w : 0.0;
-                                                  final fatPerKg = w > 0 ? aggregate.totalFatG / w : 0.0;
-                                                    final ss = TextStyle(fontSize: labelFs);
-                                                  return Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text('合計', style: TextStyle(fontSize: labelFs, fontWeight: FontWeight.bold)),
-                                                      const SizedBox(height: 2),
-                                                      Text('IN ${aggregate.totalVolumeMl.round()}ml, 総カロリー ${aggregate.totalKcal.round()}kcal', style: ss),
-                                                      Text('タンパク ${aggregate.totalProteinG.toStringAsFixed(1)}g/day (${protPerKg.toStringAsFixed(1)}g/kg)', style: ss),
-                                                      Text('NPC/N比 ${aggregate.npcNText}', style: ss),
-                                                      Text('脂質 ${fatPerKg.toStringAsFixed(1)}g/kg/day', style: ss),
-                                                    ],
-                                                  );
-                                                }),
-                                                const Divider(height: 14),
-                                                Text('処方', style: TextStyle(fontSize: labelFs, fontWeight: FontWeight.bold)),
-                                                const SizedBox(height: 6),
-                                                if (isScratchMode) ...[
-                                                  Text('${scratchInfusionRateMlPerHour.round()} ml/h', style: const TextStyle(fontSize: 12.5)),
-                                                  const SizedBox(height: 4),
-                                                  if (zeroMenu.aminoVolumeMl > 0 && aminoProduct != null)
-                                                    Text('${aminoProduct.name}  $scratchAminoUnits', style: const TextStyle(fontSize: 12.5)),
-                                                  if (zeroMenu.lipidVolumeMl > 0 && lipidProduct != null)
-                                                    Text('${lipidProduct.name}  $scratchLipidUnits', style: const TextStyle(fontSize: 12.5)),
-                                                  if (zeroMenu.glucoseVolumeMl > 0 && glucoseProduct != null)
-                                                    Text('${glucoseProduct.name}  $scratchGlucoseUnits', style: const TextStyle(fontSize: 12.5)),
-                                                  // 加注製剤
-                                                  for (final l in scratchAdditiveLines)
-                                                    Text(l, style: const TextStyle(fontSize: 12.5)),
-                                                ] else ...[
-                                                  Builder(builder: (c) {
-                                                    final ts = TextStyle(fontSize: labelFs);
-                                                    final tpnItems = current.regimenItems.where((i) {
-                                                      final p = widget.state.catalog.byId(i.productId);
-                                                      return p != null && p.category == 'TPN' && (i.units > 0 || i.partialMl > 0);
-                                                    }).toList();
-                                                    final ppnItems = current.regimenItems.where((i) {
-                                                      final p = widget.state.catalog.byId(i.productId);
-                                                      return p != null && p.category == 'PPN' && (i.units > 0 || i.partialMl > 0);
-                                                    }).toList();
-                                                    String pnAmt(RegimenItem i) {
-                                                      if (i.units > 0 && i.partialMl > 0) return '${i.units}本+${i.partialMl}ml';
-                                                      if (i.units > 0) return '${i.units}本';
-                                                      return '${i.partialMl}ml';
-                                                    }
-                                                    // EN朝昼夕 (meal timingが設定されているもののみ)
-                                                    final enItems = current.regimenItems.where((item) {
-                                                      final p = widget.state.catalog.byId(item.productId);
-                                                      return p != null && (p.category == 'EN' || p.category == 'EN_AUX') && item.hasMealTiming;
-                                                    }).toList();
-                                                    // 食事(濃厚流動食・栄養サポート食品): 本数指定のもの
-                                                    final foodItems = current.regimenItems.where((item) {
-                                                      final p = widget.state.catalog.byId(item.productId);
-                                                      return p != null && p.isFood && item.units > 0;
-                                                    }).toList();
-                                                    Widget mealRow(String label, int Function(RegimenItem) getter) {
-                                                      final items = enItems.where((i) => getter(i) > 0).toList();
-                                                      if (items.isEmpty) return const SizedBox.shrink();
-                                                      final desc = items.map((i) {
-                                                        final p = widget.state.catalog.byId(i.productId)!;
-                                                        return '${p.name} ${getter(i)}pac';
-                                                      }).join(' / ');
-                                                      return Padding(
-                                                        padding: const EdgeInsets.only(bottom: 2),
-                                                        child: Text('$label  $desc', style: ts),
-                                                      );
-                                                    }
-                                                    final hasAny = enItems.isNotEmpty || tpnItems.isNotEmpty || ppnItems.isNotEmpty || foodItems.isNotEmpty || (isScratchMode ? _zeroAdditives : _selectAdditives).isNotEmpty;
-                                                    if (!hasAny) return const Text('(未選択)', style: TextStyle(fontSize: 12.5, color: Colors.grey));
-                                                    return Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        if (enItems.isNotEmpty) ...[
-                                                          mealRow('朝', (i) => i.morning),
-                                                          mealRow('昼', (i) => i.noon),
-                                                          mealRow('夕', (i) => i.evening),
-                                                        ],
-                                                        ...tpnItems.map((i) {
-                                                          final p = widget.state.catalog.byId(i.productId)!;
-                                                          final volMl = (p.volumeMl ?? 0) * i.units + i.partialMl;
-                                                          final rateMlH = (_tpnRateMlPerHour > 0 ? _tpnRateMlPerHour : volMl / 24).round();
-                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('TPN  ${p.name} ${pnAmt(i)}  ${rateMlH}ml/h', style: ts));
-                                                        }),
-                                                        ...ppnItems.map((i) {
-                                                          final p = widget.state.catalog.byId(i.productId)!;
-                                                          final volMl = (p.volumeMl ?? 0) * i.units + i.partialMl;
-                                                          final rateMlH = (_ppnRateMlPerHour > 0 ? _ppnRateMlPerHour : volMl / 24).round();
-                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('PPN  ${p.name} ${pnAmt(i)}  ${rateMlH}ml/h', style: ts));
-                                                        }),
-                                                        ...foodItems.map((i) {
-                                                          final p = widget.state.catalog.byId(i.productId)!;
-                                                          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('食事  ${p.name} ${i.units}本', style: ts));
-                                                        }),
-                                                        ...scratchAdditiveLines.map((l) => Padding(
-                                                            padding: const EdgeInsets.only(bottom: 2),
-                                                            child: Text('加注  $l', style: ts))),
-                                                      ],
-                                                    );
-                                                  }),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // 円グラフ + 凡例 + 縦棒%nut カード
-                                      Expanded(
-                                        flex: 2,
-                                        child: Card(
-                                          margin: const EdgeInsets.all(0),
-                                          color: Colors.blue.shade50,
-                                          child: Padding(
-                                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                // ドーナツグラフ: カードの縦中央に配置するため Expanded で空間を埋める
-                                                Expanded(
-                                                  child: Center(
-                                                  child: SizedBox(
-                                                  width: chartSize,
-                                                  height: chartSize,
-                                                  child: Stack(
-                                                    alignment: Alignment.center,
-                                                    children: [
-                                                      PieChart(
-                                                        PieChartData(
-                                                          startDegreeOffset: 270,
-                                                          sectionsSpace: 2,
-                                                          centerSpaceRadius: (28 * scale).clamp(18, 28),
-                                                          sections: [
-                                                            PieChartSectionData(
-                                                              value: aggregate.proteinPercent <= 0 ? 0 : aggregate.proteinKcal,
-                                                              color: Colors.blue,
-                                                              title: aggregate.proteinPercent < 5 ? '' : '${aggregate.proteinPercent.toStringAsFixed(0)}%',
-                                                              titleStyle: TextStyle(fontSize: (12 * scale).clamp(9.0, 12.0), color: Colors.black, fontWeight: FontWeight.bold),
-                                                              titlePositionPercentageOffset: 0.47,
-                                                              radius: (52 * scale).clamp(34, 52),
-                                                            ),
-                                                            PieChartSectionData(
-                                                              value: aggregate.fatPercent <= 0 ? 0 : aggregate.fatKcal,
-                                                              color: Colors.orange,
-                                                              title: aggregate.fatPercent < 5 ? '' : '${aggregate.fatPercent.toStringAsFixed(0)}%',
-                                                              titleStyle: TextStyle(fontSize: (12 * scale).clamp(9.0, 12.0), color: Colors.black, fontWeight: FontWeight.bold),
-                                                              titlePositionPercentageOffset: 0.47,
-                                                              radius: (52 * scale).clamp(34, 52),
-                                                            ),
-                                                            PieChartSectionData(
-                                                              value: aggregate.carbPercent <= 0 ? 0 : aggregate.carbKcal,
-                                                              color: Colors.yellow.shade700,
-                                                              title: aggregate.carbPercent < 5 ? '' : '${aggregate.carbPercent.toStringAsFixed(0)}%',
-                                                              titleStyle: TextStyle(fontSize: (12 * scale).clamp(9.0, 12.0), color: Colors.black, fontWeight: FontWeight.bold),
-                                                              titlePositionPercentageOffset: 0.47,
-                                                              radius: (52 * scale).clamp(34, 52),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                      // 中央: 目標達成率
-                                                      Center(
-                                                        child: Text(
-                                                          '${aggregate.targetPercent(targetKcal).toStringAsFixed(0)}%',
-                                                          style: TextStyle(
-                                                              fontSize: (16 * scale).clamp(12.0, 16.0),
-                                                              fontWeight: FontWeight.bold),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),   // Stack
-                                                  ),   // SizedBox
-                                                  ),   // Center
-                                                ),     // Expanded
-                                                // PFC凡例（ドーナツ下端から10px）
-                                                const SizedBox(height: 10),
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    _PfcLegendItem(color: Colors.blue, label: 'P'),
-                                                    const SizedBox(width: 12),
-                                                    _PfcLegendItem(color: Colors.orange, label: 'F'),
-                                                    const SizedBox(width: 12),
-                                                    _PfcLegendItem(color: Colors.yellow.shade700, label: 'C'),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),   // Row
-                                  ),   // IntrinsicHeight
-                                  );   // ConstrainedBox (return)
-                                  }), // LayoutBuilder
-                                // ── アラート（サマリー下部・個別/ゼロ共通）──
-                                if (!_summaryCollapsed)
-                                Builder(builder: (_) {
-                                  double gluG;
-                                  double lipidG;
-                                  cm.MicroTotals micro;
-                                  if (isScratchMode) {
-                                    final gluProd =
-                                        widget.state.adoptedByBase(glucoseSource);
-                                    final gluKcal = (gluProd != null &&
-                                            (gluProd.volumeMl ?? 0) > 0)
-                                        ? zeroMenu.glucoseVolumeMl *
-                                            (gluProd.kcal ?? 0) /
-                                            gluProd.volumeMl!
-                                        : 0.0;
-                                    gluG = gluKcal / 4;
-                                    lipidG = zeroMenu.lipidGram;
-                                    micro = cm.aggregateMicro([
-                                      for (final n in _zeroAdditives)
-                                        cm.MicroContribution(
-                                            widget.state.catalog.byName(n)?.micro,
-                                            1),
-                                    ]);
-                                  } else {
-                                    final pm = _parenteralMacros(current);
-                                    gluG = pm.glucoseG;
-                                    lipidG = pm.lipidG;
-                                    micro = _microWithRates(current);
-                                  }
-                                  final rows = _summaryAlertWidgets(
-                                    current: current,
-                                    glucoseGramPerDay: gluG,
-                                    lipidGramPerDay: lipidG,
-                                    micro: micro,
-                                  );
-                                  final alerts =
-                                      _nutritionAlerts(current, aggregate);
-                                  if (rows.isEmpty && alerts.isEmpty) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  final errN = alerts
-                                      .where((a) =>
-                                          a.severity == ae.AlertSeverity.error)
-                                      .length;
-                                  final warnN = alerts
-                                      .where((a) =>
-                                          a.severity == ae.AlertSeverity.warning)
-                                      .length;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 10),
-                                    child: Column(
+                                  const SizedBox(height: 8),
+                                  ...helperProducts.map((product) {
+                                    final existing = current.regimenItems
+                                        .where((e) => e.productId == product.id)
+                                        .firstOrNull;
+                                    final units = existing?.units ?? 0;
+                                    final isFavorite =
+                                        widget.state.isFavorite(product.id);
+                                    final isAutoFav = widget.state
+                                        .isAutoFavorite(product.id, current);
+                                    final classification = product.productType;
+                                    final attributes =
+                                        product.content.trim().isNotEmpty
+                                            ? product.content
+                                            : '性状不明';
+                                    return Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        InkWell(
-                                          onTap: () => setState(() =>
-                                              _riskCollapsed = !_riskCollapsed),
-                                          child: Row(children: [
-                                            const Icon(
-                                                Icons
-                                                    .notifications_active_outlined,
-                                                size: 16,
-                                                color: Colors.deepOrange),
-                                            const SizedBox(width: 4),
-                                            const Text('リスク・補充サジェスト',
-                                                style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 13,
-                                                    color: Colors.black54)),
-                                            const SizedBox(width: 6),
-                                            if (errN > 0)
-                                              _riskBadge('禁忌$errN',
-                                                  Colors.red.shade600),
-                                            if (warnN > 0)
-                                              _riskBadge('警告$warnN',
-                                                  Colors.orange.shade700),
-                                            const Spacer(),
-                                            Icon(
-                                                _riskCollapsed
-                                                    ? Icons.expand_more
-                                                    : Icons.expand_less,
-                                                size: 18,
-                                                color: Colors.black45),
-                                          ]),
+                                        ListTile(
+                                          isThreeLine: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: IconButton(
+                                            tooltip: isAutoFav
+                                                ? '病態タグにより自動 (タップで固定)'
+                                                : null,
+                                            onPressed: () async {
+                                              await widget.state
+                                                  .toggleFavorite(product.id);
+                                              setState(() {});
+                                            },
+                                            icon: Icon(
+                                                (isFavorite || isAutoFav)
+                                                    ? Icons.star
+                                                    : Icons.star_border,
+                                                color: isFavorite
+                                                    ? Colors.orange
+                                                    : isAutoFav
+                                                        ? Colors.teal
+                                                        : null),
+                                          ),
+                                          title: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(product.name),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '$classification / $attributes',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                          subtitle: Text(
+                                              '${product.volumeMlString} / ${product.kcalString} / ${product.aminoString}'),
+                                          tileColor: units >= 1
+                                              ? Colors.blue.shade100
+                                              : null,
+                                          trailing: _MealPicker(
+                                            morning: existing?.morning ?? 0,
+                                            noon: existing?.noon ?? 0,
+                                            evening: existing?.evening ?? 0,
+                                            onChanged: (m, n, e) async {
+                                              await widget.state.setMealUnits(
+                                                  current.id, product, m, n, e);
+                                              setState(() {});
+                                            },
+                                          ),
+                                          onTap: () => setState(() {
+                                            if (expandedProducts
+                                                .contains(product.id))
+                                              expandedProducts
+                                                  .remove(product.id);
+                                            else
+                                              expandedProducts.add(product.id);
+                                          }),
                                         ),
-                                        if (!_riskCollapsed) ...[
-                                          _nutritionAlertPanel(
-                                              current, aggregate),
-                                          const SizedBox(height: 4),
-                                          ...rows,
-                                        ],
+                                        if (expandedProducts
+                                                .contains(product.id) &&
+                                            product.notes?.trim().isNotEmpty ==
+                                                true)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                                left: 56.0,
+                                                right: 8.0,
+                                                bottom: 8.0),
+                                            child: Text(product.notes!),
+                                          ),
                                       ],
-                                    ),
-                                  );
-                                }),
+                                    );
+                                  }),
+                                ],
                               ],
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
+                ),
+                // タブ内容: 自動計算 (インデックス 2)
+                Visibility(
+                  visible: _builderTabIndex == 2,
+                  maintainState: true,
+                  child: AutoDesignInline(
+                      key: _autoDesignKey,
+                      state: widget.state,
+                      current: current,
+                      onSettingsChanged: () {
+                        if (mounted) setState(() {});
+                      }),
+                ),
+              ],
+            ),
+          ),
+          // サマリーパネル（個別選択/ゼロmenuのみ。自動計算タブでは非表示）
+          if (_builderTabIndex != 2)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxSummaryH),
+                  child: Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withOpacity(0.4),
+                          width: 0.8),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: ClipRect(
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Text('サマリー',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium),
+                                      const Spacer(),
+                                      IconButton(
+                                        icon: Icon(
+                                            _summaryCollapsed
+                                                ? Icons.expand_less
+                                                : Icons.expand_more,
+                                            size: 22),
+                                        tooltip:
+                                            _summaryCollapsed ? '展開' : '折りたたむ',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => setState(() =>
+                                            _summaryCollapsed =
+                                                !_summaryCollapsed),
+                                      ),
+                                    ]),
+                                    if (!_summaryCollapsed)
+                                      const SizedBox(height: 8),
+                                    // ── 2カード: 処方+サマリー | 円グラフ（画面幅に応じてレスポンシブ）──
+                                    if (!_summaryCollapsed)
+                                      LayoutBuilder(
+                                          builder: (context, constraints) {
+                                        final availW = constraints.maxWidth;
+                                        final scale =
+                                            (availW / 380).clamp(0.72, 1.0);
+                                        final chartSize =
+                                            (150 * scale).roundToDouble();
+                                        final labelFs =
+                                            (12.5 * scale).clamp(10.0, 12.5);
+                                        return ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              minHeight: 200),
+                                          child: IntrinsicHeight(
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                // 処方カード
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Card(
+                                                    margin:
+                                                        const EdgeInsets.all(0),
+                                                    color: Colors.pink.shade50,
+                                                    child: Padding(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              10),
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          // ── サマリー数値 ──
+                                                          Builder(builder:
+                                                              (context) {
+                                                            final w = current
+                                                                .weightKg;
+                                                            final protPerKg = w >
+                                                                    0
+                                                                ? aggregate
+                                                                        .totalProteinG /
+                                                                    w
+                                                                : 0.0;
+                                                            final fatPerKg = w >
+                                                                    0
+                                                                ? aggregate
+                                                                        .totalFatG /
+                                                                    w
+                                                                : 0.0;
+                                                            final ss = TextStyle(
+                                                                fontSize:
+                                                                    labelFs);
+                                                            return Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Text('合計',
+                                                                    style: TextStyle(
+                                                                        fontSize:
+                                                                            labelFs,
+                                                                        fontWeight:
+                                                                            FontWeight.bold)),
+                                                                const SizedBox(
+                                                                    height: 2),
+                                                                Text(
+                                                                    'IN ${aggregate.totalVolumeMl.round()}ml, 総カロリー ${aggregate.totalKcal.round()}kcal',
+                                                                    style: ss),
+                                                                Text(
+                                                                    'タンパク ${aggregate.totalProteinG.toStringAsFixed(1)}g/day (${protPerKg.toStringAsFixed(1)}g/kg)',
+                                                                    style: ss),
+                                                                Text(
+                                                                    'NPC/N比 ${aggregate.npcNText}',
+                                                                    style: ss),
+                                                                Text(
+                                                                    '脂質 ${fatPerKg.toStringAsFixed(1)}g/kg/day',
+                                                                    style: ss),
+                                                              ],
+                                                            );
+                                                          }),
+                                                          const Divider(
+                                                              height: 14),
+                                                          Text('処方',
+                                                              style: TextStyle(
+                                                                  fontSize:
+                                                                      labelFs,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold)),
+                                                          const SizedBox(
+                                                              height: 6),
+                                                          if (isScratchMode) ...[
+                                                            Text(
+                                                                '${scratchInfusionRateMlPerHour.round()} ml/h',
+                                                                style: const TextStyle(
+                                                                    fontSize:
+                                                                        12.5)),
+                                                            const SizedBox(
+                                                                height: 4),
+                                                            if (zeroMenu.aminoVolumeMl >
+                                                                    0 &&
+                                                                aminoProduct !=
+                                                                    null)
+                                                              Text(
+                                                                  '${aminoProduct.name}  $scratchAminoUnits',
+                                                                  style: const TextStyle(
+                                                                      fontSize:
+                                                                          12.5)),
+                                                            if (zeroMenu.lipidVolumeMl >
+                                                                    0 &&
+                                                                lipidProduct !=
+                                                                    null)
+                                                              Text(
+                                                                  '${lipidProduct.name}  $scratchLipidUnits',
+                                                                  style: const TextStyle(
+                                                                      fontSize:
+                                                                          12.5)),
+                                                            if (zeroMenu.glucoseVolumeMl >
+                                                                    0 &&
+                                                                glucoseProduct !=
+                                                                    null)
+                                                              Text(
+                                                                  '${glucoseProduct.name}  $scratchGlucoseUnits',
+                                                                  style: const TextStyle(
+                                                                      fontSize:
+                                                                          12.5)),
+                                                            // 加注製剤
+                                                            for (final l
+                                                                in scratchAdditiveLines)
+                                                              Text(l,
+                                                                  style: const TextStyle(
+                                                                      fontSize:
+                                                                          12.5)),
+                                                          ] else ...[
+                                                            Builder(
+                                                                builder: (c) {
+                                                              final ts = TextStyle(
+                                                                  fontSize:
+                                                                      labelFs);
+                                                              final tpnItems =
+                                                                  current
+                                                                      .regimenItems
+                                                                      .where(
+                                                                          (i) {
+                                                                final p = widget
+                                                                    .state
+                                                                    .catalog
+                                                                    .byId(i
+                                                                        .productId);
+                                                                return p !=
+                                                                        null &&
+                                                                    p.category ==
+                                                                        'TPN' &&
+                                                                    (i.units >
+                                                                            0 ||
+                                                                        i.partialMl >
+                                                                            0);
+                                                              }).toList();
+                                                              final ppnItems =
+                                                                  current
+                                                                      .regimenItems
+                                                                      .where(
+                                                                          (i) {
+                                                                final p = widget
+                                                                    .state
+                                                                    .catalog
+                                                                    .byId(i
+                                                                        .productId);
+                                                                return p !=
+                                                                        null &&
+                                                                    p.category ==
+                                                                        'PPN' &&
+                                                                    (i.units >
+                                                                            0 ||
+                                                                        i.partialMl >
+                                                                            0);
+                                                              }).toList();
+                                                              String pnAmt(
+                                                                  RegimenItem
+                                                                      i) {
+                                                                if (i.units >
+                                                                        0 &&
+                                                                    i.partialMl >
+                                                                        0)
+                                                                  return '${i.units}本+${i.partialMl}ml';
+                                                                if (i.units > 0)
+                                                                  return '${i.units}本';
+                                                                return '${i.partialMl}ml';
+                                                              }
+
+                                                              // EN朝昼夕 (meal timingが設定されているもののみ)
+                                                              final enItems = current
+                                                                  .regimenItems
+                                                                  .where(
+                                                                      (item) {
+                                                                final p = widget
+                                                                    .state
+                                                                    .catalog
+                                                                    .byId(item
+                                                                        .productId);
+                                                                return p !=
+                                                                        null &&
+                                                                    (p.category ==
+                                                                            'EN' ||
+                                                                        p.category ==
+                                                                            'EN_AUX') &&
+                                                                    item.hasMealTiming;
+                                                              }).toList();
+                                                              // 食事(濃厚流動食・栄養サポート食品): 本数指定のもの
+                                                              final foodItems =
+                                                                  current
+                                                                      .regimenItems
+                                                                      .where(
+                                                                          (item) {
+                                                                final p = widget
+                                                                    .state
+                                                                    .catalog
+                                                                    .byId(item
+                                                                        .productId);
+                                                                return p !=
+                                                                        null &&
+                                                                    p.isFood &&
+                                                                    item.units >
+                                                                        0;
+                                                              }).toList();
+                                                              Widget mealRow(
+                                                                  String label,
+                                                                  int Function(
+                                                                          RegimenItem)
+                                                                      getter) {
+                                                                final items = enItems
+                                                                    .where((i) =>
+                                                                        getter(
+                                                                            i) >
+                                                                        0)
+                                                                    .toList();
+                                                                if (items
+                                                                    .isEmpty)
+                                                                  return const SizedBox
+                                                                      .shrink();
+                                                                final desc =
+                                                                    items.map(
+                                                                        (i) {
+                                                                  final p = widget
+                                                                      .state
+                                                                      .catalog
+                                                                      .byId(i
+                                                                          .productId)!;
+                                                                  return '${p.name} ${getter(i)}pac';
+                                                                }).join(' / ');
+                                                                return Padding(
+                                                                  padding:
+                                                                      const EdgeInsets
+                                                                          .only(
+                                                                          bottom:
+                                                                              2),
+                                                                  child: Text(
+                                                                      '$label  $desc',
+                                                                      style:
+                                                                          ts),
+                                                                );
+                                                              }
+
+                                                              final hasAny = enItems
+                                                                      .isNotEmpty ||
+                                                                  tpnItems
+                                                                      .isNotEmpty ||
+                                                                  ppnItems
+                                                                      .isNotEmpty ||
+                                                                  foodItems
+                                                                      .isNotEmpty ||
+                                                                  (isScratchMode
+                                                                          ? _zeroAdditives
+                                                                          : _selectAdditives)
+                                                                      .isNotEmpty;
+                                                              if (!hasAny)
+                                                                return const Text(
+                                                                    '(未選択)',
+                                                                    style: TextStyle(
+                                                                        fontSize:
+                                                                            12.5,
+                                                                        color: Colors
+                                                                            .grey));
+                                                              return Column(
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .start,
+                                                                children: [
+                                                                  if (enItems
+                                                                      .isNotEmpty) ...[
+                                                                    mealRow(
+                                                                        '朝',
+                                                                        (i) => i
+                                                                            .morning),
+                                                                    mealRow(
+                                                                        '昼',
+                                                                        (i) => i
+                                                                            .noon),
+                                                                    mealRow(
+                                                                        '夕',
+                                                                        (i) => i
+                                                                            .evening),
+                                                                  ],
+                                                                  ...tpnItems
+                                                                      .map((i) {
+                                                                    final p = widget
+                                                                        .state
+                                                                        .catalog
+                                                                        .byId(i
+                                                                            .productId)!;
+                                                                    final volMl =
+                                                                        (p.volumeMl ?? 0) *
+                                                                                i.units +
+                                                                            i.partialMl;
+                                                                    final rateMlH = (_tpnRateMlPerHour >
+                                                                                0
+                                                                            ? _tpnRateMlPerHour
+                                                                            : volMl /
+                                                                                24)
+                                                                        .round();
+                                                                    return Padding(
+                                                                        padding: const EdgeInsets
+                                                                            .only(
+                                                                            bottom:
+                                                                                2),
+                                                                        child: Text(
+                                                                            'TPN  ${p.name} ${pnAmt(i)}  ${rateMlH}ml/h',
+                                                                            style:
+                                                                                ts));
+                                                                  }),
+                                                                  ...ppnItems
+                                                                      .map((i) {
+                                                                    final p = widget
+                                                                        .state
+                                                                        .catalog
+                                                                        .byId(i
+                                                                            .productId)!;
+                                                                    final volMl =
+                                                                        (p.volumeMl ?? 0) *
+                                                                                i.units +
+                                                                            i.partialMl;
+                                                                    final rateMlH = (_ppnRateMlPerHour >
+                                                                                0
+                                                                            ? _ppnRateMlPerHour
+                                                                            : volMl /
+                                                                                24)
+                                                                        .round();
+                                                                    return Padding(
+                                                                        padding: const EdgeInsets
+                                                                            .only(
+                                                                            bottom:
+                                                                                2),
+                                                                        child: Text(
+                                                                            'PPN  ${p.name} ${pnAmt(i)}  ${rateMlH}ml/h',
+                                                                            style:
+                                                                                ts));
+                                                                  }),
+                                                                  ...foodItems
+                                                                      .map((i) {
+                                                                    final p = widget
+                                                                        .state
+                                                                        .catalog
+                                                                        .byId(i
+                                                                            .productId)!;
+                                                                    return Padding(
+                                                                        padding: const EdgeInsets
+                                                                            .only(
+                                                                            bottom:
+                                                                                2),
+                                                                        child: Text(
+                                                                            '食事  ${p.name} ${i.units}本',
+                                                                            style:
+                                                                                ts));
+                                                                  }),
+                                                                  ...scratchAdditiveLines.map((l) => Padding(
+                                                                      padding: const EdgeInsets
+                                                                          .only(
+                                                                          bottom:
+                                                                              2),
+                                                                      child: Text(
+                                                                          '加注  $l',
+                                                                          style:
+                                                                              ts))),
+                                                                ],
+                                                              );
+                                                            }),
+                                                          ],
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                // 円グラフ + 凡例 + 縦棒%nut カード
+                                                Expanded(
+                                                  flex: 2,
+                                                  child: Card(
+                                                    margin:
+                                                        const EdgeInsets.all(0),
+                                                    color: Colors.blue.shade50,
+                                                    child: Padding(
+                                                      padding: const EdgeInsets
+                                                          .fromLTRB(
+                                                          12, 8, 12, 10),
+                                                      child: Column(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          // ドーナツグラフ: カードの縦中央に配置するため Expanded で空間を埋める
+                                                          Expanded(
+                                                            child: Center(
+                                                              child: SizedBox(
+                                                                width:
+                                                                    chartSize,
+                                                                height:
+                                                                    chartSize,
+                                                                child: Stack(
+                                                                  alignment:
+                                                                      Alignment
+                                                                          .center,
+                                                                  children: [
+                                                                    PieChart(
+                                                                      PieChartData(
+                                                                        startDegreeOffset:
+                                                                            270,
+                                                                        sectionsSpace:
+                                                                            2,
+                                                                        centerSpaceRadius: (28 * scale).clamp(
+                                                                            18,
+                                                                            28),
+                                                                        sections: [
+                                                                          PieChartSectionData(
+                                                                            value: aggregate.proteinPercent <= 0
+                                                                                ? 0
+                                                                                : aggregate.proteinKcal,
+                                                                            color:
+                                                                                Colors.blue,
+                                                                            title: aggregate.proteinPercent < 5
+                                                                                ? ''
+                                                                                : '${aggregate.proteinPercent.toStringAsFixed(0)}%',
+                                                                            titleStyle: TextStyle(
+                                                                                fontSize: (12 * scale).clamp(9.0, 12.0),
+                                                                                color: Colors.black,
+                                                                                fontWeight: FontWeight.bold),
+                                                                            titlePositionPercentageOffset:
+                                                                                0.47,
+                                                                            radius:
+                                                                                (52 * scale).clamp(34, 52),
+                                                                          ),
+                                                                          PieChartSectionData(
+                                                                            value: aggregate.fatPercent <= 0
+                                                                                ? 0
+                                                                                : aggregate.fatKcal,
+                                                                            color:
+                                                                                Colors.orange,
+                                                                            title: aggregate.fatPercent < 5
+                                                                                ? ''
+                                                                                : '${aggregate.fatPercent.toStringAsFixed(0)}%',
+                                                                            titleStyle: TextStyle(
+                                                                                fontSize: (12 * scale).clamp(9.0, 12.0),
+                                                                                color: Colors.black,
+                                                                                fontWeight: FontWeight.bold),
+                                                                            titlePositionPercentageOffset:
+                                                                                0.47,
+                                                                            radius:
+                                                                                (52 * scale).clamp(34, 52),
+                                                                          ),
+                                                                          PieChartSectionData(
+                                                                            value: aggregate.carbPercent <= 0
+                                                                                ? 0
+                                                                                : aggregate.carbKcal,
+                                                                            color:
+                                                                                Colors.yellow.shade700,
+                                                                            title: aggregate.carbPercent < 5
+                                                                                ? ''
+                                                                                : '${aggregate.carbPercent.toStringAsFixed(0)}%',
+                                                                            titleStyle: TextStyle(
+                                                                                fontSize: (12 * scale).clamp(9.0, 12.0),
+                                                                                color: Colors.black,
+                                                                                fontWeight: FontWeight.bold),
+                                                                            titlePositionPercentageOffset:
+                                                                                0.47,
+                                                                            radius:
+                                                                                (52 * scale).clamp(34, 52),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                    ),
+                                                                    // 中央: 目標達成率
+                                                                    Center(
+                                                                      child:
+                                                                          Text(
+                                                                        '${aggregate.targetPercent(targetKcal).toStringAsFixed(0)}%',
+                                                                        style: TextStyle(
+                                                                            fontSize: (16 * scale).clamp(12.0,
+                                                                                16.0),
+                                                                            fontWeight:
+                                                                                FontWeight.bold),
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ), // Stack
+                                                              ), // SizedBox
+                                                            ), // Center
+                                                          ), // Expanded
+                                                          // PFC凡例（ドーナツ下端から10px）
+                                                          const SizedBox(
+                                                              height: 10),
+                                                          Row(
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .center,
+                                                            children: [
+                                                              _PfcLegendItem(
+                                                                  color: Colors
+                                                                      .blue,
+                                                                  label: 'P'),
+                                                              const SizedBox(
+                                                                  width: 12),
+                                                              _PfcLegendItem(
+                                                                  color: Colors
+                                                                      .orange,
+                                                                  label: 'F'),
+                                                              const SizedBox(
+                                                                  width: 12),
+                                                              _PfcLegendItem(
+                                                                  color: Colors
+                                                                      .yellow
+                                                                      .shade700,
+                                                                  label: 'C'),
+                                                            ],
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ), // Row
+                                          ), // IntrinsicHeight
+                                        ); // ConstrainedBox (return)
+                                      }), // LayoutBuilder
+                                    // ── アラート（サマリー下部・個別/ゼロ共通）──
+                                    if (!_summaryCollapsed)
+                                      Builder(builder: (_) {
+                                        double gluG;
+                                        double lipidG;
+                                        cm.MicroTotals micro;
+                                        if (isScratchMode) {
+                                          final gluProd = widget.state
+                                              .adoptedByBase(glucoseSource);
+                                          final gluKcal = (gluProd != null &&
+                                                  (gluProd.volumeMl ?? 0) > 0)
+                                              ? zeroMenu.glucoseVolumeMl *
+                                                  (gluProd.kcal ?? 0) /
+                                                  gluProd.volumeMl!
+                                              : 0.0;
+                                          gluG = gluKcal / 4;
+                                          lipidG = zeroMenu.lipidGram;
+                                          micro = cm.aggregateMicro([
+                                            for (final n in _zeroAdditives)
+                                              cm.MicroContribution(
+                                                  widget.state.catalog
+                                                      .byName(n)
+                                                      ?.micro,
+                                                  1),
+                                          ]);
+                                        } else {
+                                          final pm = _parenteralMacros(current);
+                                          gluG = pm.glucoseG;
+                                          lipidG = pm.lipidG;
+                                          micro = _microWithRates(current);
+                                        }
+                                        final rows = _summaryAlertWidgets(
+                                          current: current,
+                                          glucoseGramPerDay: gluG,
+                                          lipidGramPerDay: lipidG,
+                                          micro: micro,
+                                        );
+                                        final alerts = _nutritionAlerts(
+                                            current, aggregate);
+                                        if (rows.isEmpty && alerts.isEmpty) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        final errN = alerts
+                                            .where((a) =>
+                                                a.severity ==
+                                                ae.AlertSeverity.error)
+                                            .length;
+                                        final warnN = alerts
+                                            .where((a) =>
+                                                a.severity ==
+                                                ae.AlertSeverity.warning)
+                                            .length;
+                                        return Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 10),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              InkWell(
+                                                onTap: () => setState(() =>
+                                                    _riskCollapsed =
+                                                        !_riskCollapsed),
+                                                child: Row(children: [
+                                                  const Icon(
+                                                      Icons
+                                                          .notifications_active_outlined,
+                                                      size: 16,
+                                                      color: Colors.deepOrange),
+                                                  const SizedBox(width: 4),
+                                                  const Text('リスク・補充サジェスト',
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13,
+                                                          color:
+                                                              Colors.black54)),
+                                                  const SizedBox(width: 6),
+                                                  if (errN > 0)
+                                                    _riskBadge('禁忌$errN',
+                                                        Colors.red.shade600),
+                                                  if (warnN > 0)
+                                                    _riskBadge('警告$warnN',
+                                                        Colors.orange.shade700),
+                                                  const Spacer(),
+                                                  Icon(
+                                                      _riskCollapsed
+                                                          ? Icons.expand_more
+                                                          : Icons.expand_less,
+                                                      size: 18,
+                                                      color: Colors.black45),
+                                                ]),
+                                              ),
+                                              if (!_riskCollapsed) ...[
+                                                _nutritionAlertPanel(
+                                                    current, aggregate),
+                                                const SizedBox(height: 4),
+                                                ...rows,
+                                              ],
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-            // 栄養の推移パネル（自動計算タブのみ。サマリーと同じドラッグ仕様）
-            if (_builderTabIndex == 2)
-              _buildAutoChartPanel(screenH),
-          ],
-        ),
+          // 栄養の推移パネル（自動計算タブのみ。サマリーと同じドラッグ仕様）
+          if (_builderTabIndex == 2) _buildAutoChartPanel(screenH),
+        ],
+      ),
     );
   }
 
   Widget _buildAutoChartPanel(double screenH) {
     final _cqPad = MediaQuery.of(context).padding;
-    final maxPanel = (screenH - _cqPad.top - kToolbarHeight - _cqPad.bottom - 16.0)
-        .clamp(200.0, screenH);
+    final maxPanel =
+        (screenH - _cqPad.top - kToolbarHeight - _cqPad.bottom - 16.0)
+            .clamp(200.0, screenH);
     if (_chartPanelHeight > maxPanel) _chartPanelHeight = maxPanel;
     return SafeArea(
       top: false,
@@ -2632,10 +3089,7 @@ class _BuilderPageState extends State<BuilderPage>
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outline
-                      .withOpacity(0.4),
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.4),
                   width: 0.8),
             ),
             child: Column(
@@ -2673,8 +3127,7 @@ class _BuilderPageState extends State<BuilderPage>
   final _autoDesignKey = GlobalKey<_AutoDesignPageState>();
 
   /// 患者パラメータをまとめて編集するダイアログ
-  Future<void> _editPatientParams(
-          BuildContext context, PatientCase current) =>
+  Future<void> _editPatientParams(BuildContext context, PatientCase current) =>
       showPatientEditDialog(context, widget.state, current, onSaved: () {
         if (mounted) setState(() {});
         widget.refresh();

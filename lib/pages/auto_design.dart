@@ -1,9 +1,14 @@
 part of '../main.dart';
 
 class AutoDesignInline extends StatefulWidget {
-  const AutoDesignInline({super.key, required this.state, required this.current, this.onSettingsChanged});
+  const AutoDesignInline(
+      {super.key,
+      required this.state,
+      required this.current,
+      this.onSettingsChanged});
   final AppState state;
   final PatientCase current;
+
   /// 設定変更時に親ウィジェットへ通知（チャートパネルのリアルタイム更新用）
   final VoidCallback? onSettingsChanged;
 
@@ -28,8 +33,7 @@ class AutoDesignPage extends StatelessWidget {
 }
 
 class _AutoDesignPageState extends State<AutoDesignInline> {
-  int _hoveredBarIdx = -1;  // グラフホバー中のバーインデックス (-1=なし)
-  int _selectedBarIdx = -1; // タップ固定のバーインデックス (-1=なし)
+  int _hoveredBarIdx = -1; // グラフホバー中のバーインデックス (-1=なし)。hoverツールチップ専用。
   bool _alertsExpanded = false; // 栄養管理アラートの展開状態(既定=折り畳み)
   bool _trendCollapsed = false; // トレンド(栄養の推移)折りたたみ
   double _cachedChartW = 300.0; // LayoutBuilderで更新するチャート実幅
@@ -50,6 +54,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   late List<int> _dayMealPac; // 各Dayの食事 朝昼夕あたりpac数(0=食事なし, 1..3)
   late List<int> _dayMealSlots; // 各Dayの経口スロット数(0=なし, 1..3)。残りはENで補う。
   final List<List<RepairChange>> _dayRepairChanges = []; // 各Dayの自動補正(repair)記録
+  // 手動修正: 処方カード下「アラート」リンク→リペア候補をワンタップ採用した結果(feedingDay index→上書きプラン)。
+  // セッション内のみ保持(永続化しない)。設定変更(_rebuildDays)で破棄=プラン再生成と整合。
+  final Map<int, DesignPlan> _manualDayOverride = {};
+  final Map<int, List<RepairChange>> _manualDayChanges =
+      {}; // 手動採用の差分記録(カード/シート表示用)
+  final List<cev.ClinicalEvent> _clinicalEvents = []; // 自動設計イベントオーバーレイ（保存対象）
+  cad.AutoDesignResult? _engineResult; // メタデータ専用read-model（処方生成には使わない）
+  String? _engineCacheKey;
   // RSイベント検出(再栄養後の P/K/Mg 低下%)入力。transient(永続化しない=古い検査値を残さない)。
   bool _rsExpanded = false;
   bool _rsOrganDysfunction = false;
@@ -107,13 +119,24 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       // 「未選択(—)」でドロップダウンが横長になるのを防ぐ。
       _oralRehabStartDay = (cfg['oralRehabStartDay'] as num?)?.toInt() ??
           (_enStartDay + _enRampDays).clamp(1, 28);
-      _startDate =
-          DateTime.tryParse(cfg['startDate'] as String? ?? '') ?? DateTime.now();
+      _startDate = DateTime.tryParse(cfg['startDate'] as String? ?? '') ??
+          DateTime.now();
       _kcalStep20Day = (cfg['kcalStep20Day'] as num?)?.toInt() ?? 2;
       _kcalStep25Day = (cfg['kcalStep25Day'] as num?)?.toInt() ?? 4;
       _kcalStepAuto = (cfg['kcalStepAuto'] as bool?) ?? true;
       final pid = cfg['pnProductId'] as String?;
-      _pnProduct = pid != null ? widget.state.catalog.byId(pid) : (tpn.isNotEmpty ? tpn.first : null);
+      _pnProduct = pid != null
+          ? widget.state.catalog.byId(pid)
+          : (tpn.isNotEmpty ? tpn.first : null);
+      final rawEvents = cfg['clinicalEvents'];
+      if (rawEvents is List) {
+        _clinicalEvents
+          ..clear()
+          ..addAll(rawEvents
+              .whereType<Map>()
+              .map((e) => _clinicalEventFromMap(e))
+              .whereType<cev.ClinicalEvent>());
+      }
     } else {
       final p = widget.state.protocols.firstWhere(
           (e) => e.id == widget.current.selectedProtocolId,
@@ -127,6 +150,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       _startDate = admissionDate.add(const Duration(days: 2));
     }
     _rebuildDays();
+  }
+
+  @override
+  void didUpdateWidget(covariant AutoDesignInline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.current != widget.current ||
+        _engineCacheKey != _engineInputCacheKey()) {
+      _invalidateEngineResult();
+    }
   }
 
   @override
@@ -155,8 +187,180 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       'kcalStep20Day': _kcalStep20Day,
       'kcalStep25Day': _kcalStep25Day,
       'kcalStepAuto': _kcalStepAuto,
+      'clinicalEvents': _clinicalEvents.map(_clinicalEventToMap).toList(),
     };
     widget.state.persist();
+  }
+
+  void _invalidateEngineResult() {
+    _engineResult = null;
+    _engineCacheKey = null;
+  }
+
+  String _engineInputCacheKey() => jsonEncode({
+        'patientId': widget.current.id,
+        'weightKg': widget.current.weightKg,
+        'usualWeightKg': widget.current.usualWeightKg,
+        'conditionTags': [...widget.current.conditionTags]..sort(),
+        'fastingDate': widget.current.fastingDate,
+        'energyModel': widget.current.energyModel,
+        'kcalPerKgValue': widget.current.kcalPerKgValue,
+        'measuredREE': widget.current.measuredREE,
+        'activityFactor': widget.current.activityFactor,
+        'stressFactor': widget.current.stressFactor,
+        'refeedingFlags': [...widget.current.refeedingFlags]..sort(),
+        'rampDays': _rampDays,
+        'enStartDay': _enStartDay,
+        'oralRehabStartDay': _oralRehabStartDay,
+        'totalDays': _totalDays,
+        'startDate': _startDate.toIso8601String(),
+        'refeedingTier': _refeedingTier.name,
+        'events': _clinicalEvents.map(_clinicalEventToMap).toList(),
+      });
+
+  cad.AutoDesignResult get _engineReadModel {
+    final key = _engineInputCacheKey();
+    final cached = _engineResult;
+    if (cached != null && _engineCacheKey == key) return cached;
+    final built = const cad.AutoDesignEngine().build(_autoDesignInput());
+    _engineResult = built;
+    _engineCacheKey = key;
+    return built;
+  }
+
+  cad.AutoDesignInput _autoDesignInput() => cad.AutoDesignInput(
+        weightKg: widget.current.weightKg,
+        usualOrPrehospitalWeightKg: widget.current.usualWeightKg,
+        conditionTags: widget.current.conditionTags.toSet(),
+        events: List<cev.ClinicalEvent>.unmodifiable(_clinicalEvents),
+        rampDays: _rampDays,
+        enStartDay: _enStartDay,
+        oralRehabStartDay: _oralRehabStartDay,
+        totalDays: _totalDays,
+        estimatedFullKcal: NutritionCalculator.targetEnergy(widget.current),
+        refeedingTier: _refeedingTier,
+        feedingStartDay: 1,
+        krtFluidCaloriesStatus: cad.OptionalCaloriesStatus.unknown,
+        eventEnergyCapKcalByDay: _eventEnergyCapKcalByDay(),
+      );
+
+  Map<int, double> _eventEnergyCapKcalByDay() {
+    final caps = <int, double>{};
+    for (var day = 1; day <= _totalDays; day++) {
+      final overlay = cov.resolveDayOverlay(_clinicalEvents, day);
+      double? cap;
+      if (overlay.energy == cev.EnergyEffect.restrictFor48h) {
+        cap = widget.current.weightKg * 10;
+      }
+      for (final event in overlay.activeEvents) {
+        final value = event.parameters['cap_kcal_day'];
+        if (value is num) {
+          final kcal = value.toDouble();
+          cap = cap == null ? kcal : (cap < kcal ? cap : kcal);
+        }
+      }
+      if (cap != null) caps[day] = cap;
+    }
+    return caps;
+  }
+
+  Map<String, dynamic> _clinicalEventToMap(cev.ClinicalEvent e) => {
+        'id': e.id,
+        'type': e.type.name,
+        'startDay': e.startDay,
+        'endDay': e.endDay,
+        'severity': e.severity.name,
+        'sourceTier': cst.SourceTierMeta(e.sourceTier).key,
+        'rrtModality': e.rrtModality?.key,
+        'parameters': e.parameters,
+        'explanation': e.explanation,
+      };
+
+  cev.ClinicalEvent? _clinicalEventFromMap(Map raw) {
+    final type = _clinicalEventTypeFromKey(raw['type']?.toString());
+    if (type == null) return null;
+    final startDay = (raw['startDay'] as num?)?.toInt();
+    if (startDay == null || startDay < 1) return null;
+    final params = raw['parameters'] is Map
+        ? Map<String, Object?>.from(raw['parameters'] as Map)
+        : <String, Object?>{};
+    return cev.ClinicalEvent(
+      id: raw['id']?.toString() ??
+          'event_${DateTime.now().microsecondsSinceEpoch}',
+      type: type,
+      startDay: startDay,
+      endDay: (raw['endDay'] as num?)?.toInt(),
+      severity: _eventSeverityFromKey(raw['severity']?.toString()) ??
+          cev.EventSeverity.moderate,
+      sourceTier: cst.sourceTierFromKey(raw['sourceTier']?.toString() ?? '') ??
+          cst.SourceTier.userInputEvent,
+      rrtModality: _rrtModalityFromKey(raw['rrtModality']?.toString()),
+      parameters: params,
+      explanation: raw['explanation']?.toString() ?? '',
+    );
+  }
+
+  cev.ClinicalEventType? _clinicalEventTypeFromKey(String? key) {
+    switch (key) {
+      case 'enHold':
+      case 'en_hold':
+        return cev.ClinicalEventType.enHold;
+      case 'enIntolerance':
+      case 'en_intolerance':
+        return cev.ClinicalEventType.enIntolerance;
+      case 'recurrentNpo':
+      case 'recurrent_npo':
+        return cev.ClinicalEventType.recurrentNpo;
+      case 'suspectedNomi':
+      case 'suspected_nomi':
+        return cev.ClinicalEventType.suspectedNomi;
+      case 'refeedingHypophosphatemia':
+      case 'refeeding_hypophosphatemia':
+        return cev.ClinicalEventType.refeedingHypophosphatemia;
+      case 'bunRiseAfterFeeding':
+      case 'bun_rise_after_feeding':
+        return cev.ClinicalEventType.bunRiseAfterFeeding;
+      case 'cholestasisOrLiverDysfunction':
+      case 'cholestasis_or_liver_dysfunction':
+        return cev.ClinicalEventType.cholestasisOrLiverDysfunction;
+      case 'fluidOverload':
+      case 'fluid_overload':
+        return cev.ClinicalEventType.fluidOverload;
+      case 'rrtStart':
+      case 'rrt_start':
+        return cev.ClinicalEventType.rrtStart;
+      case 'rrtStop':
+      case 'rrt_stop':
+        return cev.ClinicalEventType.rrtStop;
+      default:
+        return null;
+    }
+  }
+
+  cev.EventSeverity? _eventSeverityFromKey(String? key) {
+    switch (key) {
+      case 'mild':
+        return cev.EventSeverity.mild;
+      case 'moderate':
+        return cev.EventSeverity.moderate;
+      case 'severe':
+        return cev.EventSeverity.severe;
+      default:
+        return null;
+    }
+  }
+
+  cev.RrtModality? _rrtModalityFromKey(String? key) {
+    switch (key?.toUpperCase()) {
+      case 'IRRT':
+        return cev.RrtModality.irrt;
+      case 'SLED':
+        return cev.RrtModality.sled;
+      case 'CRRT':
+        return cev.RrtModality.crrt;
+      default:
+        return null;
+    }
   }
 
   List<Product> _adopted(String cat) => widget.state.catalog
@@ -266,7 +470,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
 
   ae.EvalContext _evalDayPlan(PlanState p) => computeEvalContext(
         p,
-        weightKg: widget.current.weightKg,
+        weightKg: NutritionCalculator.referenceWeightKg(widget.current),
         conditionTags: widget.current.conditionTags.toSet(),
         targetKcal: NutritionCalculator.targetEnergy(widget.current),
         proteinGoalPerKg: widget.current.proteinGoalPerKg,
@@ -357,89 +561,509 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       ..sort((a, b) => a.severity.index.compareTo(b.severity.index));
   }
 
-  /// その日の処方をアラートエンジンで評価（read-only・トレンドのバッジ用）。
-  ({int err, int warn}) _engineDayAlertCounts(DesignPlan plan) {
+  Map<int, List<cad.StructuredNutritionAlert>> _structuredAlertsByDay(
+      cad.AutoDesignResult result) {
+    final out = <int, List<cad.StructuredNutritionAlert>>{};
+    for (final alert in result.alerts) {
+      (out[alert.day - 1] ??= <cad.StructuredNutritionAlert>[]).add(alert);
+    }
+    for (final alerts in out.values) {
+      alerts.sort((a, b) {
+        final s = a.severity.index.compareTo(b.severity.index);
+        if (s != 0) return s;
+        return a.ruleId.compareTo(b.ruleId);
+      });
+    }
+    return out;
+  }
+
+  List<cad.StructuredNutritionAlert> _structuredDayAlerts(int dayIndex) {
+    final result = _engineReadModel;
+    return _structuredAlertsByDay(result)[dayIndex] ?? const [];
+  }
+
+  /// その日の処方をアラートエンジンで評価し、engine structured alert と合算する。
+  ({int err, int warn, int info}) _engineDayAlertCounts(DesignPlan plan,
+      [List<cad.StructuredNutritionAlert> structuredAlerts = const []]) {
     final alerts = _engineDayAlerts(plan);
-    return (
-      err: alerts.where((a) => a.severity == ae.AlertSeverity.error).length,
-      warn: alerts.where((a) => a.severity == ae.AlertSeverity.warning).length,
+    var err = alerts.where((a) => a.severity == ae.AlertSeverity.error).length;
+    var warn =
+        alerts.where((a) => a.severity == ae.AlertSeverity.warning).length;
+    var info = alerts.where((a) => a.severity == ae.AlertSeverity.info).length;
+    for (final alert in structuredAlerts) {
+      switch (alert.severity) {
+        case cad.RuleSeverity.hard:
+          err++;
+          break;
+        case cad.RuleSeverity.major:
+        case cad.RuleSeverity.soft:
+          warn++;
+          break;
+        case cad.RuleSeverity.info:
+          info++;
+          break;
+      }
+    }
+    return (err: err, warn: warn, info: info);
+  }
+
+  Color _sevColor(ae.AlertSeverity s) => s == ae.AlertSeverity.error
+      ? Colors.red.shade700
+      : s == ae.AlertSeverity.warning
+          ? Colors.orange.shade800
+          : Colors.blueGrey;
+  IconData _sevIcon(ae.AlertSeverity s) => s == ae.AlertSeverity.error
+      ? Icons.error_outline
+      : s == ae.AlertSeverity.warning
+          ? Icons.warning_amber_rounded
+          : Icons.info_outline;
+  String _sevLabel(ae.AlertSeverity s) => s == ae.AlertSeverity.error
+      ? '禁忌'
+      : s == ae.AlertSeverity.warning
+          ? '警告'
+          : '情報';
+
+  Color _ruleColor(cad.RuleSeverity s) => switch (s) {
+        cad.RuleSeverity.hard => Colors.red.shade700,
+        cad.RuleSeverity.major => Colors.orange.shade800,
+        cad.RuleSeverity.soft => Colors.amber.shade800,
+        cad.RuleSeverity.info => Colors.blueGrey.shade700,
+      };
+
+  IconData _ruleIcon(cad.RuleSeverity s) => switch (s) {
+        cad.RuleSeverity.hard => Icons.error_outline,
+        cad.RuleSeverity.major => Icons.warning_amber_rounded,
+        cad.RuleSeverity.soft => Icons.info_outline,
+        cad.RuleSeverity.info => Icons.info_outline,
+      };
+
+  String _ruleLabel(cad.RuleSeverity s) => switch (s) {
+        cad.RuleSeverity.hard => '禁忌',
+        cad.RuleSeverity.major => '警告',
+        cad.RuleSeverity.soft => '注意',
+        cad.RuleSeverity.info => '情報',
+      };
+
+  Color _bandColor(cad.BandLevel level) => switch (level) {
+        cad.BandLevel.green => Colors.green.shade600,
+        cad.BandLevel.amber => Colors.amber.shade800,
+        cad.BandLevel.red => Colors.deepOrange.shade700,
+        cad.BandLevel.hardViolation => Colors.red.shade700,
+      };
+
+  String _bandLabel(cad.BandLevel level) => switch (level) {
+        cad.BandLevel.green => 'green',
+        cad.BandLevel.amber => 'amber',
+        cad.BandLevel.red => 'red',
+        cad.BandLevel.hardViolation => 'hard',
+      };
+
+  List<Widget> _engineBandDots(
+    int dayIndex,
+    DesignPlan plan,
+    double referenceWeight,
+    cad.AutoDesignResult result,
+  ) {
+    Widget dot(cad.BandLevel level, String message) => Tooltip(
+          message: message,
+          child: Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _bandColor(level),
+              border: Border.all(
+                  color: level == cad.BandLevel.hardViolation
+                      ? Colors.black54
+                      : Colors.white,
+                  width: 0.8),
+            ),
+          ),
+        );
+
+    final out = <Widget>[];
+    if (dayIndex < result.energyTargets.length) {
+      final target = result.energyTargets[dayIndex];
+      final level = target.classify(plan.totalKcal);
+      out.add(dot(
+        level,
+        'Energy ${_bandLabel(level)}: ${plan.totalKcal.round()}kcal / '
+        'green ${target.greenMinKcal.round()}–${target.greenMaxKcal.round()}kcal',
+      ));
+    }
+    if (referenceWeight > 0 && dayIndex < result.proteinTargets.length) {
+      final target = result.proteinTargets[dayIndex];
+      final actual = plan.totalProteinG / referenceWeight;
+      final level = target.classify(actual);
+      out.add(dot(
+        level,
+        'Protein ${_bandLabel(level)}: ${actual.toStringAsFixed(2)}g/kg / '
+        'band ${target.minGPerKg.toStringAsFixed(1)}–${target.maxGPerKg.toStringAsFixed(1)}g/kg',
+      ));
+    }
+    return out;
+  }
+
+  Widget _engineSourceBadgeLegend(cad.AutoDesignResult result) {
+    if (result.sourceBadges.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(Icons.fact_check_outlined,
+              size: 14, color: Colors.blueGrey.shade600),
+          for (final badge in result.sourceBadges)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+                border:
+                    Border.all(color: Colors.blueGrey.withValues(alpha: 0.28)),
+              ),
+              child: Text(badge,
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.blueGrey.shade700,
+                      fontWeight: FontWeight.bold)),
+            ),
+        ],
+      ),
     );
   }
 
-  /// ポップアップ固定時、アラートバッジのタップで開く「その日のアラート詳細」。
-  void _showDayAlertDetail(int idx, DesignPlan plan, DateTime date) {
-    final alerts = _engineDayAlerts(plan);
-    Color colOf(ae.AlertSeverity s) => s == ae.AlertSeverity.error
-        ? Colors.red.shade700
-        : s == ae.AlertSeverity.warning
-            ? Colors.orange.shade800
-            : Colors.blueGrey;
-    IconData icoOf(ae.AlertSeverity s) => s == ae.AlertSeverity.error
-        ? Icons.error_outline
-        : s == ae.AlertSeverity.warning
-            ? Icons.warning_amber_rounded
-            : Icons.info_outline;
-    String sevLabel(ae.AlertSeverity s) => s == ae.AlertSeverity.error
-        ? '禁忌'
-        : s == ae.AlertSeverity.warning
-            ? '警告'
-            : '情報';
+  Color? _overlayTintColor(cov.DayOverlay overlay) {
+    if (overlay.activeEvents.isEmpty && overlay.activeRrtModality == null) {
+      return null;
+    }
+    if (overlay.activeRrtModality != null) {
+      return overlay.activeRrtModality == cev.RrtModality.crrt
+          ? Colors.teal.shade700
+          : Colors.purple.shade700;
+    }
+    if (overlay.route != cev.RouteEffect.none || overlay.enteralBlocked) {
+      return overlay.enteralBlocked ||
+              overlay.route == cev.RouteEffect.npo ||
+              overlay.route == cev.RouteEffect.pnOnly
+          ? Colors.red.shade700
+          : Colors.amber.shade800;
+    }
+    if (overlay.energy != cev.EnergyEffect.none ||
+        overlay.protein != cev.ProteinEffect.none ||
+        overlay.electrolyte != cev.ElectrolyteEffect.none ||
+        overlay.micronutrient.isNotEmpty) {
+      return Colors.deepOrange.shade700;
+    }
+    if (overlay.fluid != cev.FluidEffect.none) {
+      return Colors.blue.shade700;
+    }
+    if (overlay.productFilters.isNotEmpty) {
+      return Colors.deepOrange.shade700;
+    }
+    return Colors.blueGrey.shade600;
+  }
+
+  Color _clinicalEventMarkerColor(cev.ClinicalEvent event) {
+    if (event.type == cev.ClinicalEventType.rrtStart ||
+        event.type == cev.ClinicalEventType.rrtStop) {
+      return event.rrtModality == cev.RrtModality.crrt
+          ? Colors.teal.shade700
+          : Colors.purple.shade700;
+    }
+    final effect = event.effectProfile;
+    if (effect.route != cev.RouteEffect.none ||
+        effect.productFilter.contains(cev.ProductFilterEffect.excludeEnteral)) {
+      return effect.route == cev.RouteEffect.npo ||
+              effect.route == cev.RouteEffect.pnOnly
+          ? Colors.red.shade700
+          : Colors.amber.shade800;
+    }
+    if (effect.fluid != cev.FluidEffect.none) return Colors.blue.shade700;
+    if (effect.energy != cev.EnergyEffect.none ||
+        effect.protein != cev.ProteinEffect.none ||
+        effect.electrolyte != cev.ElectrolyteEffect.none ||
+        effect.micronutrient.isNotEmpty) {
+      return Colors.deepOrange.shade700;
+    }
+    if (effect.productFilter.isNotEmpty) return Colors.deepOrange.shade700;
+    return Colors.blueGrey.shade600;
+  }
+
+  /// 処方カード下「アラート」リンクから開く、その日のアラート＋手動修正シート。
+  /// 残存アラートごとにリペア候補(repair.dart)を提示し、[採用]でワンタップ適用。
+  /// 採用結果は _manualDayOverride[feedingIdx] に保持し、カード/グラフへ即反映。
+  void _showDayRepairSheet(int feedingIdx, DesignPlan dayPlan,
+      {List<cad.StructuredNutritionAlert> structuredAlerts = const []}) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${date.month}/${date.day} のアラート詳細',
-            style: const TextStyle(fontSize: 16)),
-        content: SizedBox(
-          width: 360,
-          child: alerts.isEmpty
-              ? const Text('この日のアラートはありません。')
-              : SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final a in alerts)
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: colOf(a.severity).withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                                color: colOf(a.severity)
-                                    .withValues(alpha: 0.5)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(children: [
-                                Icon(icoOf(a.severity),
-                                    size: 16, color: colOf(a.severity)),
-                                const SizedBox(width: 6),
-                                Text('【${sevLabel(a.severity)}】${a.code}',
+      builder: (ctx) {
+        // ダイアログ内で採用→再評価を反映するため working を保持。
+        DesignPlan working = _manualDayOverride[feedingIdx] ?? dayPlan;
+
+        // 1つのリペアアクションを採用してプランへ反映。
+        void adopt(RepairAction act, ae.NutritionAlert alert,
+            void Function(void Function()) dlgSet) {
+          final before = _planStateFromDayPlan(working);
+          final res = act.apply(before, _evalDayPlan(before), alert);
+          if (!res.changed) return;
+          final newPlan = _applyRepairToDayPlan(working, before, res.plan);
+          setState(() {
+            _manualDayOverride[feedingIdx] = newPlan;
+            (_manualDayChanges[feedingIdx] ??= <RepairChange>[])
+                .addAll(res.changes.map((c) => RepairChange(
+                      code: c.code,
+                      label: c.label,
+                      reason: c.reason,
+                      beforeText: c.beforeText,
+                      afterText: c.afterText,
+                      kind: c.kind,
+                      autoApplied: false,
+                    )));
+          });
+          dlgSet(() => working = newPlan);
+          widget.onSettingsChanged?.call();
+        }
+
+        void resetManual(void Function(void Function()) dlgSet) {
+          setState(() {
+            _manualDayOverride.remove(feedingIdx);
+            _manualDayChanges.remove(feedingIdx);
+          });
+          widget.onSettingsChanged?.call();
+          Navigator.of(ctx).pop(); // 再生成された素のプランで開き直せるよう閉じる
+        }
+
+        return StatefulBuilder(builder: (ctx, dlgSet) {
+          final alerts = _engineDayAlerts(working);
+          final structured = structuredAlerts.isNotEmpty
+              ? structuredAlerts
+              : _structuredDayAlerts(feedingIdx);
+          final registry = _repairRegistry();
+          final before = _planStateFromDayPlan(working);
+          final ctxEval = _evalDayPlan(before);
+          final manual =
+              _manualDayChanges[feedingIdx] ?? const <RepairChange>[];
+
+          Widget alertCard(ae.NutritionAlert a) {
+            final col = _sevColor(a.severity);
+            // このアラートに適用できるリペア候補をドライランで取得(状態は変えない)。
+            final candidates = <(RepairAction, RepairChange)>[];
+            for (final act in (registry[a.code] ?? const <RepairAction>[])) {
+              if (!act.canApply(before, ctxEval, a)) continue;
+              final res = act.apply(before, ctxEval, a);
+              if (res.changed && res.changes.isNotEmpty) {
+                candidates.add((act, res.changes.first));
+              }
+            }
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: col.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: col.withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(_sevIcon(a.severity), size: 16, color: col),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('【${_sevLabel(a.severity)}】${a.code}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: col)),
+                    ),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text(a.message,
+                      style: const TextStyle(fontSize: 12, height: 1.4)),
+                  if (candidates.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text('→ 自動修正候補なし（手動で製剤調整が必要）',
+                          style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    )
+                  else
+                    for (final c in candidates)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 6),
+                        padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.indigo.shade200),
+                        ),
+                        child: Row(children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(c.$2.reason,
+                                    style: const TextStyle(
+                                        fontSize: 11.5, height: 1.3)),
+                                Text('${c.$2.beforeText} → ${c.$2.afterText}',
                                     style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: colOf(a.severity))),
-                              ]),
-                              const SizedBox(height: 4),
-                              Text(a.message,
-                                  style: const TextStyle(
-                                      fontSize: 12, height: 1.4)),
-                            ],
+                                        fontSize: 10.5,
+                                        color: Colors.indigo.shade700)),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 6),
+                          FilledButton(
+                            onPressed: () => adopt(c.$1, a, dlgSet),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text('採用',
+                                style: TextStyle(fontSize: 12)),
+                          ),
+                        ]),
+                      ),
+                ],
+              ),
+            );
+          }
+
+          Widget structuredAlertCard(cad.StructuredNutritionAlert alert) {
+            final col = _ruleColor(alert.severity);
+            final source = cst.SourceTierMeta(alert.sourceTier).badgeLabel;
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: col.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: col.withValues(alpha: 0.45)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(_ruleIcon(alert.severity), size: 16, color: col),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '【${_ruleLabel(alert.severity)}】${alert.ruleId}',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: col),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text(alert.explanation,
+                      style: const TextStyle(fontSize: 12, height: 1.4)),
+                  const SizedBox(height: 4),
+                  Text('metric: ${alert.metric} / source: $source',
+                      style:
+                          const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                  if (alert.suggestedRepair != null) ...[
+                    const SizedBox(height: 6),
+                    Text('→ ${alert.suggestedRepair}',
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            color: col,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ],
+              ),
+            );
+          }
+
+          return AlertDialog(
+            title: Text(
+                '${_dateOf(feedingIdx)} (Day${feedingIdx + 1}) のアラートと手動修正',
+                style: const TextStyle(fontSize: 15)),
+            content: SizedBox(
+              width: 380,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (alerts.isEmpty && structured.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: const Text('この日の残存アラートはありません。',
+                            style: TextStyle(fontSize: 12)),
+                      )
+                    else ...[
+                      if (alerts.isNotEmpty) ...[
+                        const Text('残存アラート（採用で当日の処方を修正）',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black54)),
+                        const SizedBox(height: 6),
+                        for (final a in alerts) alertCard(a),
+                      ],
+                      if (structured.isNotEmpty) ...[
+                        if (alerts.isNotEmpty) const SizedBox(height: 6),
+                        const Text('engine表示メタデータ',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black54)),
+                        const SizedBox(height: 6),
+                        for (final a in structured) structuredAlertCard(a),
+                      ],
+                    ],
+                    if (manual.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Icon(Icons.back_hand_outlined,
+                            size: 14, color: Colors.indigo.shade600),
+                        const SizedBox(width: 4),
+                        Text('手動で採用した修正 ${manual.length}件',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.indigo.shade700)),
+                      ]),
+                      for (final c in manual)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3, left: 18),
+                          child: Text('・${c.reason}（${c.afterText}）',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.indigo.shade400)),
                         ),
                     ],
-                  ),
+                  ],
                 ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('閉じる')),
-        ],
-      ),
+              ),
+            ),
+            actions: [
+              if (manual.isNotEmpty)
+                TextButton(
+                    onPressed: () => resetManual(dlgSet),
+                    child: const Text('手動修正を取り消し',
+                        style: TextStyle(color: Colors.red))),
+              TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('閉じる')),
+            ],
+          );
+        });
+      },
     );
   }
 
@@ -468,7 +1092,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
 
   List<TableRow> _kcalStepTableRows() {
     final enabled = !_kcalStepAuto;
-    TableRow dayRow(String label, Color color, int value, ValueChanged<int> onCh) {
+    TableRow dayRow(
+        String label, Color color, int value, ValueChanged<int> onCh) {
       return TableRow(children: [
         _settingLabelCell(
             Icons.trending_up, label, enabled ? color : Colors.grey),
@@ -513,8 +1138,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return [
       // 見出し + 自動連動チェックボックス
       TableRow(children: [
-        _settingLabelCell(null, '栄養係数上限:', Colors.green.shade800,
-            bold: true),
+        _settingLabelCell(null, '栄養係数上限:', Colors.green.shade800, bold: true),
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -611,6 +1235,230 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     }
   }
 
+  cov.DayOverlay _overlayForDay(int i) =>
+      cov.resolveDayOverlay(_clinicalEvents, i + 1);
+
+  String _templateRouteSummaryForDay(int i) {
+    final parts = <String>[_dayModes[i]];
+    if (_dayEnDose[i] != '0') parts.add(_doseLabel(_dayEnDose[i]));
+    if (_dayMealSlots[i] > 0 && _dayMealPac[i] > 0) {
+      parts.add('食事 ${_dayMealSlots[i]}枠 x ${_dayMealPac[i]}pac');
+    }
+    return parts.join(' / ');
+  }
+
+  String _derivedRouteSummaryForDay(int i) {
+    final parts = <String>[_derivedModeForDay(i)];
+    final dose = _derivedEnDoseForDay(i);
+    if (dose != '0') parts.add(_doseLabel(dose));
+    final mealSlots = _derivedMealSlotsForDay(i);
+    final mealPac = _derivedMealPacForDay(i);
+    if (mealSlots > 0 && mealPac > 0) {
+      parts.add('食事 $mealSlots枠 x ${mealPac}pac');
+    }
+    return parts.join(' / ');
+  }
+
+  bool _hasTemplateDerivedRouteDelta(int i) =>
+      _templateRouteSummaryForDay(i) != _derivedRouteSummaryForDay(i);
+
+  String _derivedModeForDay(int i) {
+    final overlay = _overlayForDay(i);
+    if (overlay.enteralBlocked) return 'TPN';
+    if (overlay.route == cev.RouteEffect.holdEn ||
+        overlay.route == cev.RouteEffect.reduceEn) {
+      return 'TPN+EN';
+    }
+    return _dayModes[i];
+  }
+
+  String _derivedEnDoseForDay(int i) {
+    final overlay = _overlayForDay(i);
+    if (overlay.enteralBlocked) return '0';
+    if (overlay.route == cev.RouteEffect.holdEn) {
+      final hold = overlay.activeEvents
+          .where((e) => e.type == cev.ClinicalEventType.enHold)
+          .firstOrNull;
+      final rate =
+          (hold?.parameters['hold_rate_ml_h'] as num?)?.toDouble() ?? 20;
+      return 'r${rate.round()}';
+    }
+    if (overlay.route == cev.RouteEffect.reduceEn) {
+      final currentRate = _rateOf(_dayEnDose[i]);
+      final rate = currentRate > 0 ? (currentRate < 20 ? currentRate : 20) : 20;
+      return 'r${rate.round()}';
+    }
+    return _dayEnDose[i];
+  }
+
+  int _derivedMealPacForDay(int i) =>
+      _overlayForDay(i).route == cev.RouteEffect.none ? _dayMealPac[i] : 0;
+
+  int _derivedMealSlotsForDay(int i) =>
+      _overlayForDay(i).route == cev.RouteEffect.none ? _dayMealSlots[i] : 0;
+
+  double _derivedProteinTarget(int i, double templateProteinTarget) {
+    final rrt = _overlayForDay(i).activeRrtModality;
+    if (rrt == null) return templateProteinTarget;
+    final band = rrt.proteinBand;
+    return ((band.min + band.max) / 2) * widget.current.weightKg;
+  }
+
+  double? _eventHardKcalCap(int i, double templateTargetKcal) {
+    final overlay = _overlayForDay(i);
+    double? cap;
+    if (overlay.energy == cev.EnergyEffect.restrictFor48h) {
+      cap = widget.current.weightKg * 10;
+    }
+    for (final e in overlay.activeEvents) {
+      final v = e.parameters['cap_kcal_day'];
+      if (v is num)
+        cap = cap == null ? v.toDouble() : (cap < v ? cap : v.toDouble());
+    }
+    if (cap == null) return null;
+    return cap < templateTargetKcal ? cap : templateTargetKcal;
+  }
+
+  bool _hasEventEnergyCap(int i) {
+    final overlay = _overlayForDay(i);
+    return overlay.energy == cev.EnergyEffect.restrictFor48h ||
+        overlay.activeEvents.any((e) => e.parameters['cap_kcal_day'] is num);
+  }
+
+  double _derivedKcalTarget(int i, double templateTargetKcal) =>
+      _eventHardKcalCap(i, templateTargetKcal) ?? templateTargetKcal;
+
+  double? _hardKcalCapForDay(int i, double derivedTargetKcal) =>
+      (_refeedingTier != cr.RefeedingTier.none || _hasEventEnergyCap(i))
+          ? derivedTargetKcal
+          : null;
+
+  /// 臨床イベントの表示色（種別/RRTモダリティで決定）。
+  Color _eventSpanColor(cev.ClinicalEvent e) {
+    switch (e.type) {
+      case cev.ClinicalEventType.suspectedNomi:
+      case cev.ClinicalEventType.recurrentNpo:
+        return Colors.red.shade600;
+      case cev.ClinicalEventType.enHold:
+      case cev.ClinicalEventType.enIntolerance:
+        return Colors.amber.shade800;
+      case cev.ClinicalEventType.refeedingHypophosphatemia:
+        return Colors.deepOrange.shade700;
+      case cev.ClinicalEventType.cholestasisOrLiverDysfunction:
+        return Colors.brown.shade600;
+      case cev.ClinicalEventType.fluidOverload:
+        return Colors.blue.shade700;
+      case cev.ClinicalEventType.bunRiseAfterFeeding:
+        return Colors.blueGrey.shade600;
+      case cev.ClinicalEventType.rrtStart:
+        return e.rrtModality == cev.RrtModality.crrt
+            ? Colors.purple.shade600
+            : Colors.teal.shade700;
+      case cev.ClinicalEventType.rrtStop:
+        return Colors.blueGrey.shade400;
+    }
+  }
+
+  /// 日付軸の下に、臨床イベントの有効期間を ┝────┤ の帯で表示（§23.3）。
+  /// チャートの棒/線座標は触らず、日付列に揃えた帯を別Rowで重ねる。
+  /// RRT開始は次のRRTイベント直前まで（無ければ終端まで）。停止は帯にしない。
+  Widget _eventSpanBars(int n, int preDays) {
+    if (_clinicalEvents.isEmpty || n <= 0 || _cachedChartW <= 0) {
+      return const SizedBox.shrink();
+    }
+    // 各RRT/停止イベントの startDay 昇順（RRT区間の終端算出用）。
+    final rrtDays = _clinicalEvents
+        .where((e) =>
+            e.type == cev.ClinicalEventType.rrtStart ||
+            e.type == cev.ClinicalEventType.rrtStop)
+        .map((e) => e.startDay)
+        .toList()
+      ..sort();
+
+    final spans = <(int, int, String, Color)>[]; // start,end(chart idx),label,color
+    for (final e in _clinicalEvents) {
+      if (e.type == cev.ClinicalEventType.rrtStop) continue; // 停止は帯にしない
+      final startIdx = (preDays + e.startDay - 1).clamp(0, n - 1);
+      if (preDays + e.startDay - 1 > n - 1) continue; // タイムライン外
+      int endIdx;
+      if (e.type == cev.ClinicalEventType.rrtStart) {
+        final next = rrtDays.where((d) => d > e.startDay).fold<int?>(
+            null, (m, d) => m == null || d < m ? d : m);
+        endIdx = next != null
+            ? (preDays + next - 1 - 1).clamp(startIdx, n - 1)
+            : n - 1; // open-ended は終端まで
+      } else {
+        endIdx = e.endDay != null
+            ? (preDays + e.endDay! - 1).clamp(startIdx, n - 1)
+            : n - 1; // 終了日未入力は継続中とみなし終端まで
+      }
+      final label = e.type == cev.ClinicalEventType.rrtStart
+          ? (e.rrtModality?.key ?? 'RRT')
+          : _clinicalEventShortLabel(e.type);
+      spans.add((startIdx, endIdx, label, _eventSpanColor(e)));
+    }
+    if (spans.isEmpty) return const SizedBox.shrink();
+    // 優先度の高い(=制限的)順に上へ。重なっても行を分けて全て見せる。
+    spans.sort((a, b) => a.$1.compareTo(b.$1));
+    final rows = spans.take(6).toList();
+    final cellW = _cachedChartW / n;
+    const rowH = 17.0;
+
+    Widget barFor((int, int, String, Color) s, int r) {
+      final left = s.$1 * cellW;
+      final width = (s.$2 - s.$1 + 1) * cellW;
+      final color = s.$4;
+      return Positioned(
+        left: left,
+        width: width,
+        top: r * rowH,
+        height: rowH,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 3),
+              child: Text(s.$3,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  softWrap: false,
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      height: 1.0,
+                      color: color,
+                      fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 1),
+            // ┝────┤ 風: 両端に縦キャップ＋中央の横バー
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Row(children: [
+                Container(width: 1.5, height: 7, color: color),
+                Expanded(child: Container(height: 2.5, color: color)),
+                Container(width: 1.5, height: 7, color: color),
+              ]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: SizedBox(
+        width: _cachedChartW,
+        height: rows.length * rowH + 2,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (var r = 0; r < rows.length; r++) barFor(rows[r], r),
+          ],
+        ),
+      ),
+    );
+  }
+
   // 栄養開始日からの mm/dd
   String _dateOf(int i) {
     final d = _startDate.add(Duration(days: i));
@@ -664,6 +1512,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   }
 
   void _rebuildDays() {
+    _invalidateEngineResult();
+    // 日構成・設定が変わるとプランが作り直されるので手動修正は破棄(整合性優先)。
+    _manualDayOverride.clear();
+    _manualDayChanges.clear();
     if (_enStartDay < 1) _enStartDay = 1;
     if (_kcalStepAuto) _applyAutoKcalSteps();
     final enEnd = _enStartDay + _enRampDays - 1;
@@ -674,6 +1526,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     // 実到達日(係数上限・refeeding capでfullが遅れうる)まで表示期間を拡張し、full到達を含める。
     final effFull = _effectiveFullDay();
     if (effFull > _totalDays) _totalDays = effFull;
+    for (final e in _clinicalEvents) {
+      final eventEnd = e.endDay ?? e.startDay;
+      if (eventEnd > _totalDays) _totalDays = eventEnd;
+    }
     // 設定変更を親(チャートパネル)に通知
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onSettingsChanged?.call();
@@ -721,7 +1577,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   @override
   Widget build(BuildContext context) {
     final targetKcal = NutritionCalculator.targetEnergy(widget.current);
-    final targetProt = NutritionCalculator.targetProtein(widget.current);
+    final referenceWeight =
+        NutritionCalculator.referenceWeightKg(widget.current);
+    final engineResult = _engineReadModel;
+    final structuredAlertsByDay = _structuredAlertsByDay(engineResult);
     final pcts = _dayPercents;
     // お気に入り製剤(手動★＋病態タグ由来)を先頭に並べて優先選択させる
     List<Product> sortFav(List<Product> list) {
@@ -733,6 +1592,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           .toList();
       return [...fav, ...rest];
     }
+
     final enList = sortFav(_adopted('EN'));
     final tpnAll = sortFav(_adopted('TPN'));
     final tpnList = tpnAll;
@@ -748,14 +1608,18 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     _dayRepairChanges.clear();
     for (int i = 0; i < pcts.length; i++) {
       final phase = _acutePhaseTarget(i);
+      final mode = _derivedModeForDay(i);
+      final enDose = _derivedEnDoseForDay(i);
+      final dayTargetKcal = _derivedKcalTarget(i, phase.kcal);
+      final dayTargetProt = _derivedProteinTarget(i, phase.prot);
       var plan = NutritionCalculator.designDay(
-        mode: _dayModes[i],
-        dayTargetKcal: phase.kcal,
-        dayTargetProt: phase.prot,
-        weightKg: widget.current.weightKg,
+        mode: mode,
+        dayTargetKcal: dayTargetKcal,
+        dayTargetProt: dayTargetProt,
+        weightKg: referenceWeight,
         enProducts: enList,
-        enRateMlH: _rateOf(_dayEnDose[i]),
-        enPac: _pacOf(_dayEnDose[i]),
+        enRateMlH: _rateOf(enDose),
+        enPac: _pacOf(enDose),
         pnProduct: _pnProduct,
         tpnProducts: tpnList,
         ppnProducts: ppnList,
@@ -764,16 +1628,14 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         lipidProduct: widget.state.adoptedLipidForZero(),
         minEnKcal: prevEnKcal,
         mealProducts: mealList,
-        mealPac: _dayMealPac[i],
-        mealSlots: _dayMealSlots[i],
+        mealPac: _derivedMealPacForDay(i),
+        mealSlots: _derivedMealSlotsForDay(i),
         girLimitMgKgMin: _girLimit,
         maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
         // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
-        allowZeroMenu: _dayModes[i] == 'TPN' && i >= 6,
-        // refeeding時はAA補充込みの総kcalがその日のcapを超えないようにする(安全優先)。
-        hardKcalCap: _refeedingTier != cr.RefeedingTier.none
-            ? _refeedCappedKcal(i, 1e9)
-            : null,
+        allowZeroMenu: mode == 'TPN' && i >= 6,
+        // refeeding/event時はAA補充込みの総kcalがその日のcapを超えないようにする(安全優先)。
+        hardKcalCap: _hardKcalCapForDay(i, dayTargetKcal),
         aaSupplementBelowFrac: 0.90, // 目標90%未満(=10%以上へこむ)時だけAA補充
         aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
         conditionTags: widget.current.conditionTags, // ゼロmenuのNPC/N・脂質を病態連動
@@ -781,9 +1643,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       // B1自動加注 + repair(Mn-free置換/Na減/Zn・Se補充/タンパク調整)を適用
       final changes = <RepairChange>[];
       plan = _b1AndRepair(plan, i, out: changes);
+      // 手動修正(アラートリンクからワンタップ採用)があれば上書き
+      if (_manualDayOverride.containsKey(i)) plan = _manualDayOverride[i]!;
       _dayRepairChanges.add(changes);
       dayPlans.add(plan);
-      if (plan.enKcal > 0 && _dayModes[i] != '食事') prevEnKcal = plan.enKcal;
+      if (plan.enKcal > 0 && mode != '食事') prevEnKcal = plan.enKcal;
     }
 
     final screenH = MediaQuery.of(context).size.height;
@@ -798,361 +1662,417 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           child: ListView(
             padding: EdgeInsets.zero, // 外側ListView(all:16)が既にパディングを持つ
             children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 設定: 絶食〜経口リハ(左) + 栄養係数上限(右)
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                  Table(
-                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                    columnWidths: const {
-                      0: IntrinsicColumnWidth(), // ラベル列（最長に合わせる）
-                      1: IntrinsicColumnWidth(), // 値列
-                    },
-                    children: [
-                      // 行0: 絶食日（常時表示・タップで設定）
-                      TableRow(children: [
-                        _settingLabelCell(
-                            Icons.no_meals, '絶食日:', Colors.red.shade400),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: const Size(0, 0),
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    foregroundColor: Colors.red.shade400),
-                                onPressed: () async {
-                                  final fd = widget.current.fastingDate;
-                                  final initial = fd != null
-                                      ? (DateTime.tryParse(fd) ?? _startDate)
-                                      : _startDate;
-                                  final picked = await _quickPickDate(context, initial);
-                                  if (picked != null) {
-                                    setState(() {
-                                      widget.current.fastingDate =
-                                          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                                    });
-                                    widget.state.persist();
-                                    widget.onSettingsChanged?.call();
-                                  }
-                                },
-                                child: Builder(builder: (_) {
-                                  final fd = widget.current.fastingDate;
-                                  final p = fd != null ? DateTime.tryParse(fd) : null;
-                                  final label = p != null
-                                      ? '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}'
-                                      : '未設定';
-                                  return Text(label,
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          color: p != null
-                                              ? Colors.red.shade400
-                                              : Colors.grey));
-                                }),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ]),
-                      // 行1: 栄養開始日
-                      TableRow(children: [
-                        _settingLabelCell(
-                            Icons.water_drop, '栄養開始日:', Colors.blue.shade600),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                            style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                minimumSize: const Size(0, 0),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                foregroundColor: Colors.blue.shade600),
-                            onPressed: () async {
-                              final picked = await _quickPickDate(context, _startDate);
-                              if (picked != null) {
-                                setState(() => _startDate = picked);
-                                _saveConfig();
-                                widget.onSettingsChanged?.call();
-                              }
-                            },
-                            child: Text(
-                                '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
-                                style: TextStyle(fontSize: 13, color: Colors.blue.shade600)),
-                          )),
-                        ),
-                      ]),
-                      // 行2: full nutrition達成
-                      TableRow(children: [
-                        _settingLabelCell(
-                            Icons.flag, 'full達成:', Colors.green.shade800),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('Day ', style: TextStyle(fontSize: 13)),
-                              SizedBox(
-                                width: _dayDropW,
-                                child: DropdownButton<int>(
-                                  value: _rampDays.clamp(2, 12),
-                                  isDense: true,
-                                  isExpanded: true,
-                                  items: List.generate(11, (i) => i + 2)
-                                      .map((d) => DropdownMenuItem(
-                                          value: d, child: Text('$d')))
-                                      .toList(),
-                                  // 自動時も編集可能(傾きの終点)。実到達日は別途並記。
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _rampDays = v ?? _rampDays;
-                                      _rebuildDays();
-                                    });
-                                    _saveConfig();
-                                    widget.onSettingsChanged?.call();
-                                  },
-                                ),
-                              ),
-                              // 実到達日(係数上限で設定値と乖離しうるため並記)
-                              Builder(builder: (_) {
-                                final effFull = _effectiveFullDay();
-                                return Padding(
-                                  padding: const EdgeInsets.only(left: 6),
-                                  child: Text('実到達 Day$effFull',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: effFull == _rampDays
-                                              ? Colors.grey
-                                              : Colors.deepOrange.shade400)),
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ]),
-                      // 行3: EN導入 (色はグラフのEN(アンバー)と統一)
-                      TableRow(children: [
-                        _settingLabelCell(
-                            Icons.lunch_dining, 'EN導入:', Colors.amber.shade700),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('Day ', style: TextStyle(fontSize: 13)),
-                              SizedBox(
-                                width: _dayDropW,
-                                child: DropdownButton<int>(
-                                  value: _enStartDay.clamp(1, 21),
-                                  isDense: true,
-                                  isExpanded: true,
-                                  items: List.generate(21, (i) => i + 1)
-                                      .map((d) => DropdownMenuItem(
-                                          value: d, child: Text('$d')))
-                                      .toList(),
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _enStartDay = v ?? _enStartDay;
-                                      _rebuildDays();
-                                    });
-                                    _saveConfig();
-                                    widget.onSettingsChanged?.call();
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ]),
-                      // 行4: 経口リハ導入 (EN導入行と同一レイアウト)
-                      TableRow(children: [
-                        _settingLabelCell(
-                            Icons.restaurant, '経口リハ導入:', Colors.red.shade400),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('Day ', style: TextStyle(fontSize: 13)),
-                              SizedBox(
-                                width: _dayDropW,
-                                child: DropdownButton<int?>(
-                                  value: _oralRehabStartDay,
-                                  isDense: true,
-                                  isExpanded: true,
-                                  hint: const Text('—',
-                                      style: TextStyle(fontSize: 13)),
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                        value: null, child: Text('—')),
-                                    ...List.generate(28, (i) => i + 1).map((d) =>
-                                        DropdownMenuItem<int?>(
-                                            value: d, child: Text('$d'))),
-                                  ],
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _oralRehabStartDay = v;
-                                      _rebuildDays(); // 食事フェーズを再生成
-                                    });
-                                    _saveConfig();
-                                    widget.onSettingsChanged?.call();
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ]),
-                    ],
-                  ),
-                      const SizedBox(width: 16),
-                      // 栄養係数上限(絶食〜経口リハの右側)
-                      Table(
-                        defaultVerticalAlignment:
-                            TableCellVerticalAlignment.middle,
-                        columnWidths: const {
-                          0: IntrinsicColumnWidth(),
-                          1: IntrinsicColumnWidth(),
-                        },
-                        children: _kcalStepTableRows(),
-                      ),
-                    ],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text('★ 病態別製剤やお気に入り製剤を優先して設計します',
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: (listH - 240).clamp(220.0, 460.0),
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-          ...List.generate(pcts.length, (i) {
-            final phase = _acutePhaseTarget(i);
-            final dayKcal = phase.kcal;
-            final dayProt = phase.prot;
-            final pctOfFull =
-                targetKcal > 0 ? dayKcal / targetKcal * 100 : 0.0;
-            final mode = _dayModes[i];
-            final showEn = mode == 'EN' || mode == 'TPN+EN';
-            final showPn = mode == 'TPN' || mode == 'TPN+EN';
-            // 逐次生成済みのプランを使用（minEnKcal単調増加制約適用済み）
-            final plan = dayPlans[i];
-            return SizedBox(
-              width: 264,
-              child: Card(
-              margin: const EdgeInsets.only(right: 10),
-              child: InkWell(
-                onTap: () => _showDayDetail(i, plan, dayKcal, dayProt),
-                borderRadius: BorderRadius.circular(8),
+              Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(children: [
-                        Text(_dateOf(i),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 6),
-                        Text('(Day${i + 1})',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey)),
-                      ]),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          // 目標% or "full nutrition"（常にgreen）
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade100,
-                              borderRadius: BorderRadius.circular(4),
+                      // 設定: 絶食〜経口リハ(左) + 栄養係数上限(右)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Table(
+                              defaultVerticalAlignment:
+                                  TableCellVerticalAlignment.middle,
+                              columnWidths: const {
+                                0: IntrinsicColumnWidth(), // ラベル列（最長に合わせる）
+                                1: IntrinsicColumnWidth(), // 値列
+                              },
+                              children: [
+                                // 行0: 絶食日（常時表示・タップで設定）
+                                TableRow(children: [
+                                  _settingLabelCell(Icons.no_meals, '絶食日:',
+                                      Colors.red.shade400),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        TextButton(
+                                          style: TextButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              minimumSize: const Size(0, 0),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              foregroundColor:
+                                                  Colors.red.shade400),
+                                          onPressed: () async {
+                                            final fd =
+                                                widget.current.fastingDate;
+                                            final initial = fd != null
+                                                ? (DateTime.tryParse(fd) ??
+                                                    _startDate)
+                                                : _startDate;
+                                            final picked = await _quickPickDate(
+                                                context, initial);
+                                            if (picked != null) {
+                                              setState(() {
+                                                widget.current.fastingDate =
+                                                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                                              });
+                                              widget.state.persist();
+                                              widget.onSettingsChanged?.call();
+                                            }
+                                          },
+                                          child: Builder(builder: (_) {
+                                            final fd =
+                                                widget.current.fastingDate;
+                                            final p = fd != null
+                                                ? DateTime.tryParse(fd)
+                                                : null;
+                                            final label = p != null
+                                                ? '${p.year}/${p.month.toString().padLeft(2, '0')}/${p.day.toString().padLeft(2, '0')}'
+                                                : '未設定';
+                                            return Text(label,
+                                                style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: p != null
+                                                        ? Colors.red.shade400
+                                                        : Colors.grey));
+                                          }),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ]),
+                                // 行1: 栄養開始日
+                                TableRow(children: [
+                                  _settingLabelCell(Icons.water_drop, '栄養開始日:',
+                                      Colors.blue.shade600),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: TextButton(
+                                          style: TextButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              minimumSize: const Size(0, 0),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              foregroundColor:
+                                                  Colors.blue.shade600),
+                                          onPressed: () async {
+                                            final picked = await _quickPickDate(
+                                                context, _startDate);
+                                            if (picked != null) {
+                                              setState(
+                                                  () => _startDate = picked);
+                                              _saveConfig();
+                                              widget.onSettingsChanged?.call();
+                                            }
+                                          },
+                                          child: Text(
+                                              '${_startDate.year}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.day.toString().padLeft(2, '0')}',
+                                              style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.blue.shade600)),
+                                        )),
+                                  ),
+                                ]),
+                                // 行2: full nutrition達成
+                                TableRow(children: [
+                                  _settingLabelCell(Icons.flag, 'full達成:',
+                                      Colors.green.shade800),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('Day ',
+                                            style: TextStyle(fontSize: 13)),
+                                        SizedBox(
+                                          width: _dayDropW,
+                                          child: DropdownButton<int>(
+                                            value: _rampDays.clamp(2, 12),
+                                            isDense: true,
+                                            isExpanded: true,
+                                            items:
+                                                List.generate(11, (i) => i + 2)
+                                                    .map((d) =>
+                                                        DropdownMenuItem(
+                                                            value: d,
+                                                            child: Text('$d')))
+                                                    .toList(),
+                                            // 自動時も編集可能(傾きの終点)。実到達日は別途並記。
+                                            onChanged: (v) {
+                                              setState(() {
+                                                _rampDays = v ?? _rampDays;
+                                                _rebuildDays();
+                                              });
+                                              _saveConfig();
+                                              widget.onSettingsChanged?.call();
+                                            },
+                                          ),
+                                        ),
+                                        // 実到達日(係数上限で設定値と乖離しうるため並記)
+                                        Builder(builder: (_) {
+                                          final effFull = _effectiveFullDay();
+                                          return Padding(
+                                            padding:
+                                                const EdgeInsets.only(left: 6),
+                                            child: Text('実到達 Day$effFull',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: effFull == _rampDays
+                                                        ? Colors.grey
+                                                        : Colors.deepOrange
+                                                            .shade400)),
+                                          );
+                                        }),
+                                      ],
+                                    ),
+                                  ),
+                                ]),
+                                // 行3: EN導入 (色はグラフのEN(アンバー)と統一)
+                                TableRow(children: [
+                                  _settingLabelCell(Icons.lunch_dining, 'EN導入:',
+                                      Colors.amber.shade700),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('Day ',
+                                            style: TextStyle(fontSize: 13)),
+                                        SizedBox(
+                                          width: _dayDropW,
+                                          child: DropdownButton<int>(
+                                            value: _enStartDay.clamp(1, 21),
+                                            isDense: true,
+                                            isExpanded: true,
+                                            items:
+                                                List.generate(21, (i) => i + 1)
+                                                    .map((d) =>
+                                                        DropdownMenuItem(
+                                                            value: d,
+                                                            child: Text('$d')))
+                                                    .toList(),
+                                            onChanged: (v) {
+                                              setState(() {
+                                                _enStartDay = v ?? _enStartDay;
+                                                _rebuildDays();
+                                              });
+                                              _saveConfig();
+                                              widget.onSettingsChanged?.call();
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ]),
+                                // 行4: 経口リハ導入 (EN導入行と同一レイアウト)
+                                TableRow(children: [
+                                  _settingLabelCell(Icons.restaurant, '経口リハ導入:',
+                                      Colors.red.shade400),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('Day ',
+                                            style: TextStyle(fontSize: 13)),
+                                        SizedBox(
+                                          width: _dayDropW,
+                                          child: DropdownButton<int?>(
+                                            value: _oralRehabStartDay,
+                                            isDense: true,
+                                            isExpanded: true,
+                                            hint: const Text('—',
+                                                style: TextStyle(fontSize: 13)),
+                                            items: [
+                                              const DropdownMenuItem<int?>(
+                                                  value: null,
+                                                  child: Text('—')),
+                                              ...List.generate(28, (i) => i + 1)
+                                                  .map((d) =>
+                                                      DropdownMenuItem<int?>(
+                                                          value: d,
+                                                          child: Text('$d'))),
+                                            ],
+                                            onChanged: (v) {
+                                              setState(() {
+                                                _oralRehabStartDay = v;
+                                                _rebuildDays(); // 食事フェーズを再生成
+                                              });
+                                              _saveConfig();
+                                              widget.onSettingsChanged?.call();
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ]),
+                              ],
                             ),
-                            child: Text(
-                              pctOfFull >= 99
-                                  ? 'full nutrition'
-                                  : '目標 ${pctOfFull.round()}%',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green.shade800),
-                            ),
-                          ),
-                          if (showEn) ...[
-                            const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.shade200,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: Colors.amber.shade600, width: 0.8),
-                              ),
-                              child: Text(_doseLabel(_dayEnDose[i]),
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.brown.shade700)),
+                            const SizedBox(width: 16),
+                            // 栄養係数上限(絶食〜経口リハの右側)
+                            Table(
+                              defaultVerticalAlignment:
+                                  TableCellVerticalAlignment.middle,
+                              columnWidths: const {
+                                0: IntrinsicColumnWidth(),
+                                1: IntrinsicColumnWidth(),
+                              },
+                              children: _kcalStepTableRows(),
                             ),
                           ],
-                          if (mode == '食事') ...[
-                            const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade100,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: Colors.deepOrange.shade400, width: 0.8),
-                              ),
-                              child: Text('朝昼夕 ${_dayMealPac[i]}pac',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.orange.shade800)),
-                            ),
-                          ],
-                          _modeBadges(plan),
-                        ],
-                      ),
-                      const Divider(height: 16),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: _planBody(plan, dayKcal, dayProt, mode),
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      const Text('★ 病態別製剤やお気に入り製剤を優先して設計します',
+                          style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      _engineSourceBadgeLegend(engineResult),
+                      const SizedBox(height: 8),
+                      _clinicalEventPanel(),
                     ],
                   ),
                 ),
               ),
-            ));
-          }),
-              ],
-            ),
-          ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: (listH - 240).clamp(220.0, 460.0),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    ...List.generate(pcts.length, (i) {
+                      final phase = _acutePhaseTarget(i);
+                      final dayKcal = _derivedKcalTarget(i, phase.kcal);
+                      final dayProt = _derivedProteinTarget(i, phase.prot);
+                      final pctOfFull =
+                          targetKcal > 0 ? dayKcal / targetKcal * 100 : 0.0;
+                      final mode = _derivedModeForDay(i);
+                      final dose = _derivedEnDoseForDay(i);
+                      final showEn = mode == 'EN' || mode == 'TPN+EN';
+                      // 逐次生成済みのプランを使用（minEnKcal単調増加制約適用済み）
+                      final plan = dayPlans[i];
+                      final structuredAlerts =
+                          structuredAlertsByDay[i] ?? const [];
+                      return SizedBox(
+                          width: 264,
+                          child: Card(
+                            margin: const EdgeInsets.only(right: 10),
+                            child: InkWell(
+                              onTap: () =>
+                                  _showDayDetail(i, plan, dayKcal, dayProt),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Text(_dateOf(i),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold)),
+                                      const SizedBox(width: 6),
+                                      Text('(Day${i + 1})',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey)),
+                                    ]),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        // 目標% or "full nutrition"（常にgreen）
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade100,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            pctOfFull >= 99
+                                                ? 'full nutrition'
+                                                : '目標 ${pctOfFull.round()}%',
+                                            style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.green.shade800),
+                                          ),
+                                        ),
+                                        if (showEn) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.amber.shade200,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                  color: Colors.amber.shade600,
+                                                  width: 0.8),
+                                            ),
+                                            child: Text(_doseLabel(dose),
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        Colors.brown.shade700)),
+                                          ),
+                                        ],
+                                        if (mode == '食事') ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                  color: Colors
+                                                      .deepOrange.shade400,
+                                                  width: 0.8),
+                                            ),
+                                            child: Text(
+                                                '朝昼夕 ${_derivedMealPacForDay(i)}pac',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors
+                                                        .orange.shade800)),
+                                          ),
+                                        ],
+                                        ..._eventBadgesForDay(i),
+                                        ..._engineBandDots(i, plan,
+                                            referenceWeight, engineResult),
+                                        _modeBadges(plan),
+                                      ],
+                                    ),
+                                    const Divider(height: 16),
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        child: _planBody(
+                                            plan, dayKcal, dayProt, mode),
+                                      ),
+                                    ),
+                                    // 処方カード下のアラートリンク → 当日のアラート/手動修正シート
+                                    if (plan.items.isNotEmpty)
+                                      _dayAlertLink(i, plan,
+                                          structuredAlerts: structuredAlerts),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ));
+                    }),
+                  ],
+                ),
+              ),
             ],
           ),
-        ),   // SizedBox(listH)
+        ), // SizedBox(listH)
       ],
     );
   }
@@ -1174,6 +2094,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           .toList();
       return [...fav, ...rest];
     }
+
     return _buildBarCharts(
         targetKcal, pcts, sortFav('EN'), sortFav('TPN'), sortFav('PPN'));
   }
@@ -1184,7 +2105,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     for (final it in plan.items) {
       final p = widget.state.catalog.byName(it.name);
       // 食事(濃厚流動食/栄養サポート)はEN扱いしない。EN本体/補助のみ集計
-      if (p != null && !p.isFood &&
+      if (p != null &&
+          !p.isFood &&
           (p.category == 'EN' || p.category == 'EN_AUX')) {
         s += it.kcal;
       }
@@ -1348,53 +2270,61 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return all.isNotEmpty ? all.first : null;
   }
 
-  Widget _buildBarCharts(double targetKcal, List<double> pcts,
-      List<Product> en, List<Product> tpn, List<Product> ppn) {
-    final targetProt = NutritionCalculator.targetProtein(widget.current);
+  Widget _buildBarCharts(double targetKcal, List<double> pcts, List<Product> en,
+      List<Product> tpn, List<Product> ppn) {
+    final referenceWeight =
+        NutritionCalculator.referenceWeightKg(widget.current);
+    final engineResult = _engineReadModel;
+    final structuredAlertsByDay = _structuredAlertsByDay(engineResult);
     // 逐次生成して minEnKcal 単調増加制約を適用
     double prevEnKcalChart = 0;
     final designPlans = <DesignPlan>[];
     for (int i = 0; i < pcts.length; i++) {
       final phase = _acutePhaseTarget(i);
+      final mode = _derivedModeForDay(i);
+      final enDose = _derivedEnDoseForDay(i);
+      final dayTargetKcal = _derivedKcalTarget(i, phase.kcal);
+      final dayTargetProt = _derivedProteinTarget(i, phase.prot);
       var p = NutritionCalculator.designDay(
-              mode: _dayModes[i],
-              dayTargetKcal: phase.kcal,
-              dayTargetProt: phase.prot,
-              weightKg: widget.current.weightKg,
-              enProducts: en,
-              enRateMlH: _rateOf(_dayEnDose[i]),
-              enPac: _pacOf(_dayEnDose[i]),
-              pnProduct: _pnProduct,
-              tpnProducts: tpn,
-              ppnProducts: ppn,
-              glucoseProduct: widget.state.adoptedByBase('70% グルコース'),
-              aminoProduct: widget.state.adoptedAminoForZero(),
-              lipidProduct: widget.state.adoptedLipidForZero(),
-              minEnKcal: prevEnKcalChart,
-              mealProducts: _adoptedMeals(),
-              mealPac: _dayMealPac[i],
-              mealSlots: _dayMealSlots[i],
-              girLimitMgKgMin: _girLimit,
-              maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
-              // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
-              allowZeroMenu: _dayModes[i] == 'TPN' && i >= 6,
-              // refeeding時はAA補充込みの総kcalがその日のcapを超えないようにする(安全優先)。
-              hardKcalCap: _refeedingTier != cr.RefeedingTier.none
-                  ? _refeedCappedKcal(i, 1e9)
-                  : null,
-              aaSupplementBelowFrac: 0.90, // 目標90%未満時だけAA補充
-              aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
-              conditionTags: widget.current.conditionTags, // ゼロmenuのNPC/N・脂質を病態連動
-            );
+        mode: mode,
+        dayTargetKcal: dayTargetKcal,
+        dayTargetProt: dayTargetProt,
+        weightKg: referenceWeight,
+        enProducts: en,
+        enRateMlH: _rateOf(enDose),
+        enPac: _pacOf(enDose),
+        pnProduct: _pnProduct,
+        tpnProducts: tpn,
+        ppnProducts: ppn,
+        glucoseProduct: widget.state.adoptedByBase('70% グルコース'),
+        aminoProduct: widget.state.adoptedAminoForZero(),
+        lipidProduct: widget.state.adoptedLipidForZero(),
+        minEnKcal: prevEnKcalChart,
+        mealProducts: _adoptedMeals(),
+        mealPac: _derivedMealPacForDay(i),
+        mealSlots: _derivedMealSlotsForDay(i),
+        girLimitMgKgMin: _girLimit,
+        maxLipidGramPerKgDay: ck.ClinicalConst.lipidDayLimitGKgD,
+        // ゼロmenuはPN専用が6日続いた翌日(7日目, i>=6)以降のPN専用日のみ許可
+        allowZeroMenu: mode == 'TPN' && i >= 6,
+        // refeeding/event時はAA補充込みの総kcalがその日のcapを超えないようにする(安全優先)。
+        hardKcalCap: _hardKcalCapForDay(i, dayTargetKcal),
+        aaSupplementBelowFrac: 0.90, // 目標90%未満時だけAA補充
+        aaSupplementMaxMl: 500, // アミパレン補充は合計500ml/day上限
+        conditionTags: widget.current.conditionTags, // ゼロmenuのNPC/N・脂質を病態連動
+      );
       p = _b1AndRepair(p, i);
-      if (p.enKcal > 0 && _dayModes[i] != '食事') prevEnKcalChart = p.enKcal;
+      // 手動修正(アラートリンクからワンタップ採用)があれば上書き(カードとグラフを一致させる)
+      if (_manualDayOverride.containsKey(i)) p = _manualDayOverride[i]!;
+      if (p.enKcal > 0 && mode != '食事') prevEnKcalChart = p.enKcal;
       designPlans.add(p);
     }
 
     // 絶食日が設定されていればそこから起算、なければ今日から
     final today = DateTime.now();
     final todayNorm = DateTime(today.year, today.month, today.day);
-    final startNorm = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final startNorm =
+        DateTime(_startDate.year, _startDate.month, _startDate.day);
     final fastingRaw = widget.current.fastingDate != null
         ? DateTime.tryParse(widget.current.fastingDate!)
         : null;
@@ -1428,10 +2358,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       }
       return f;
     }
+
     // day14まで到達し、その間の累積脂質がほぼ0なら欠乏リスク
     final efadRisk = n >= 14 &&
         List.generate(14, (i) => fatOfPlan(plans[i]))
-            .fold<double>(0.0, (s, v) => s + v) < 1.0;
+                .fold<double>(0.0, (s, v) => s + v) <
+            1.0;
 
     // ビタミンB1(チアミン)アラート: リフィーディング症候群/Wernicke脳症予防
     //   公開情報: B1体内貯蔵は約30mg=2〜3週で枯渇。糖質(ブドウ糖)負荷でB1消費が
@@ -1449,6 +2381,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       }
       return c;
     }
+
     final thiamineRisk =
         preDays >= 5 && designPlans.any((p) => carbOfPlan(p) > 0);
 
@@ -1476,7 +2409,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         cen.enTimingRecommendation(widget.current.enTimingFlags.toSet());
     final enTimingShow = widget.current.enTimingFlags.isNotEmpty;
     // CKRT稼働（採血提案のトリガー）。
-    final ckrtActive = cc.CkrtObligation.appliesTo(widget.current.conditionTags);
+    final ckrtActive =
+        cc.CkrtObligation.appliesTo(widget.current.conditionTags);
     // 採血提案カード: refeeding/CKRT/長期PN いずれかで監視が必要なとき表示。
     final labShow = refeedRisk || ckrtActive || pnMonitorRisk;
     // 電解質・微量元素・ビタミンのUL超過: 日毎に集計し栄養素ごとに最高レベル/最早日を採用。
@@ -1514,10 +2448,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       }
       return '${dates[i].day}';
     }
+
     // 後方互換
     String mmdd(int i) => dateLabel(i);
     final maxKcal =
-        plans.map((p) => p.totalKcal).fold<double>(1, (a, b) => a > b ? a : b) * 1.1;
+        plans.map((p) => p.totalKcal).fold<double>(1, (a, b) => a > b ? a : b) *
+            1.1;
     final maxIn = ins.fold<double>(1, (a, b) => a > b ? a : b) * 1.1;
     // IN(水分量)のピーク値とそのDay（ピーク注記線・ラベル用）
     double inPeakVal = 0;
@@ -1531,10 +2467,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final maxAA = prots.fold<double>(1, (a, b) => a > b ? a : b) * 1.15;
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
     // 特別日インデックス
-    final fastingIdx   = (widget.current.fastingDate != null) ? 0 : -1;
-    final admissionEntry = widget.current.bedHistory
-        .where((b) => b.fromBed == null)
-        .firstOrNull;
+    final fastingIdx = (widget.current.fastingDate != null) ? 0 : -1;
+    final admissionEntry =
+        widget.current.bedHistory.where((b) => b.fromBed == null).firstOrNull;
     final admissionRaw = admissionEntry != null
         ? DateTime.tryParse(admissionEntry.changedAt)
         : null;
@@ -1548,12 +2483,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     final nutritionIdx = preDays;
     // full nutrition実到達日(refeeding cap込み。設定上のfull達成=傾き終点とは別)。
     final _fullDay = _effectiveFullDay();
-    final fullIdx      = (preDays + _fullDay - 1).clamp(0, n - 1);
-    final enIdx        = (preDays + _enStartDay - 1).clamp(0, n - 1);
-    final oralIdx      = (_oralRehabStartDay != null &&
-            preDays + _oralRehabStartDay! - 1 < n)
-        ? preDays + _oralRehabStartDay! - 1
-        : -1;
+    final fullIdx = (preDays + _fullDay - 1).clamp(0, n - 1);
+    final enIdx = (preDays + _enStartDay - 1).clamp(0, n - 1);
+    final oralIdx =
+        (_oralRehabStartDay != null && preDays + _oralRehabStartDay! - 1 < n)
+            ? preDays + _oralRehabStartDay! - 1
+            : -1;
 
     // 日付＋イベントアイコンのセル（グラフ下の独立Rowで使用）
     Widget dateCell(int i) {
@@ -1569,8 +2504,19 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         i == fullIdx && i >= preDays,
         i == oralIdx && oralIdx >= 0,
       ];
-      final bool hasEvent = flags.any((f) => f);
-      final int evCount = flags.where((f) => f).length;
+      final dayIdx = i - preDays;
+      final activeClinicalEvents = dayIdx >= 0 && dayIdx < _dayModes.length
+          ? _overlayForDay(dayIdx).activeEvents
+          : const <cev.ClinicalEvent>[];
+      const maxClinicalMarkers = 2;
+      final visibleClinicalMarkerCount =
+          activeClinicalEvents.length > maxClinicalMarkers
+              ? maxClinicalMarkers + 1
+              : activeClinicalEvents.length;
+      final bool hasEvent =
+          flags.any((f) => f) || activeClinicalEvents.isNotEmpty;
+      final int evCount =
+          flags.where((f) => f).length + visibleClinicalMarkerCount;
       final double fs = evCount >= 2 ? 12.0 : 15.0; // boxラベル文字/アイコンサイズ
 
       // 入室からの経過日数(入室=0)。5の倍数(day5/10/15…)を丸囲み対象にする
@@ -1624,16 +2570,24 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             child: Icon(icon, size: fs, color: c),
           ));
 
-      final evWidgets = [
-        if (flags[0]) mkIconBox(Icons.no_meals,   Colors.red.shade400),
-        if (flags[1]) mkIconBox(Icons.bed,         Colors.blueGrey.shade400),
+      final fixedEventWidgets = [
+        if (flags[0]) mkIconBox(Icons.no_meals, Colors.red.shade400),
+        if (flags[1]) mkIconBox(Icons.bed, Colors.blueGrey.shade400),
         // 栄養開始(=PN/輸液開始)は点滴(water_drop)アイコン。
-        if (flags[2]) mkIconBox(Icons.water_drop,  Colors.blue.shade600),
-        if (flags[3]) mkBox('EN',   Colors.amber.shade500),
+        if (flags[2]) mkIconBox(Icons.water_drop, Colors.blue.shade600),
+        if (flags[3]) mkBox('EN', Colors.amber.shade500),
         if (flags[4]) mkBox('full', Colors.green.shade700),
         // 経口リハ開始(濃厚流動食・栄サポ食品・一般食)はフォーク&ナイフアイコン。
-        if (flags[5]) mkIconBox(Icons.restaurant,  Colors.deepOrange.shade400),
+        if (flags[5]) mkIconBox(Icons.restaurant, Colors.deepOrange.shade400),
       ];
+      final clinicalEventWidgets = [
+        for (final e in activeClinicalEvents.take(maxClinicalMarkers))
+          mkBox(_clinicalEventShortLabel(e.type), _clinicalEventMarkerColor(e)),
+        if (activeClinicalEvents.length > maxClinicalMarkers)
+          mkBox('+${activeClinicalEvents.length - maxClinicalMarkers}',
+              Colors.blueGrey.shade600),
+      ];
+      final evWidgets = [...fixedEventWidgets, ...clinicalEventWidgets];
 
       Widget? icon;
       if (evWidgets.length == 1) {
@@ -1684,9 +2638,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                           maxLines: 1,
                           overflow: TextOverflow.visible,
                           style: const TextStyle(
-                              fontSize: 14,
-                              letterSpacing: -0.5,
-                              height: 1.0))),
+                              fontSize: 14, letterSpacing: -0.5, height: 1.0))),
             ),
           ),
           const SizedBox(height: 8), // 日付とスタンプの間隔
@@ -1709,8 +2661,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               barWidth: 2.5,
               dotData: FlDotData(
                 show: true,
-                getDotPainter: (s, p, b, idx) => FlDotCirclePainter(
-                    radius: 3, color: color, strokeWidth: 0),
+                getDotPainter: (s, p, b, idx) =>
+                    FlDotCirclePainter(radius: 3, color: color, strokeWidth: 0),
               ),
             ),
           ],
@@ -1726,6 +2678,42 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           lineTouchData: const LineTouchData(enabled: false),
         ));
 
+    Widget eventShadeLayer() => Positioned.fill(
+          child: IgnorePointer(
+            child: Row(
+              children: [
+                for (int idx = 0; idx < n; idx++)
+                  Expanded(
+                    child: Builder(builder: (_) {
+                      final dayIdx = idx - preDays;
+                      if (dayIdx < 0 || dayIdx >= _dayModes.length) {
+                        return const SizedBox.expand();
+                      }
+                      final overlay = _overlayForDay(dayIdx);
+                      final color = _overlayTintColor(overlay);
+                      if (color == null) {
+                        return const SizedBox.expand();
+                      }
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.055),
+                          border: Border(
+                            left: BorderSide(
+                                color: color.withValues(alpha: 0.16),
+                                width: 0.6),
+                            right: BorderSide(
+                                color: color.withValues(alpha: 0.08),
+                                width: 0.4),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+              ],
+            ),
+          ),
+        );
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -1733,8 +2721,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              const Text('トレンド',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('トレンド', style: TextStyle(fontWeight: FontWeight.bold)),
               const Spacer(),
               IconButton(
                 icon: Icon(
@@ -1748,120 +2735,69 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             ]),
             if (!_trendCollapsed) const SizedBox(height: 8),
             if (!_trendCollapsed)
-            TapRegion(
-              // チャート外タップでフローターを消去
-              onTapOutside: (_) {
-                if (_selectedBarIdx >= 0) {
-                  setState(() { _selectedBarIdx = -1; _hoveredBarIdx = -1; });
-                  widget.onSettingsChanged?.call();
-                }
-              },
-              child: SizedBox(
-              height: 250,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) {
-                  if (n == 0) return;
-                  final barWidth = _cachedChartW / n;
-                  final idx = (details.localPosition.dx / barWidth)
-                      .floor()
-                      .clamp(0, n - 1);
-                  setState(() { _selectedBarIdx = idx; });
-                  widget.onSettingsChanged?.call();
-                },
+              // グラフはhoverツールチップ専用(クリック起動は中段の処方カードへ移動)。
+              SizedBox(
+                height: 250,
                 child: MouseRegion(
-                onHover: (e) {
-                  if (n == 0) return;
-                  final barWidth = _cachedChartW / n;
-                  final idx = (e.localPosition.dx / barWidth)
-                      .floor()
-                      .clamp(0, n - 1);
-                  if (idx != _hoveredBarIdx) {
-                    setState(() => _hoveredBarIdx = idx);
+                  onHover: (e) {
+                    if (n == 0) return;
+                    final barWidth = _cachedChartW / n;
+                    final idx =
+                        (e.localPosition.dx / barWidth).floor().clamp(0, n - 1);
+                    if (idx != _hoveredBarIdx) {
+                      setState(() => _hoveredBarIdx = idx);
+                      widget.onSettingsChanged?.call();
+                    }
+                  },
+                  onExit: (_) {
+                    setState(() => _hoveredBarIdx = -1);
                     widget.onSettingsChanged?.call();
-                  }
-                },
-                onExit: (_) {
-                  setState(() => _hoveredBarIdx = -1);
-                  widget.onSettingsChanged?.call();
-                },
-                child: LayoutBuilder(builder: (_, _lbc) {
-                  _cachedChartW = _lbc.maxWidth;
-                  const plotH = 184.0; // プロット領域(棒・線)の高さ
-                  const axisH = 66.0;  // 日付＋アイコン軸の高さ
-                  return Column(
-                    children: [
-                      // === プロット領域: 棒グラフ・線グラフを同一184px領域に重ねる ===
-                      // 棒も線も同じ高さの箱に置くので、ゼロ基線(=底辺)が物理的に完全一致する
-                      SizedBox(
-                        height: plotH,
-                        child: ClipRect(
-                          child: Stack(
-                            children: [
-                              // ① 積み上げ棒: カロリー内訳 (下→上: PN→EN→食事)
-                              BarChart(BarChartData(
-                                alignment: BarChartAlignment.spaceAround,
-                                minY: 0,
-                                maxY: maxKcal,
-                                barTouchData: BarTouchData(enabled: false),
-                                barGroups: List.generate(n, (i) {
-                                  final enK = enKcals[i];
-                                  final mealK = mealKcals[i];
-                                  final total = plans[i].totalKcal;
-                                  return BarChartGroupData(x: i, barRods: [
-                                    BarChartRodData(
-                                      toY: total,
-                                      width: 16,
-                                      borderRadius: BorderRadius.circular(2),
-                                      rodStackItems: [
-                                        // 下: 食事(橙) — 淡め
-                                        BarChartRodStackItem(0, mealK,
-                                            Colors.deepOrange.shade200),
-                                        // 中: EN(黄) — 暗めのアンバー(白背景との視認性確保)
-                                        BarChartRodStackItem(mealK, mealK + enK,
-                                            Colors.amber.shade500),
-                                        // 上: PN(緑) — 淡め
-                                        BarChartRodStackItem(mealK + enK, total,
-                                            Colors.green.shade200),
-                                      ],
-                                    ),
-                                  ]);
-                                }),
-                                titlesData: const FlTitlesData(
-                                  bottomTitles: hidden,
-                                  leftTitles: hidden,
-                                  topTitles: hidden,
-                                  rightTitles: hidden,
-                                ),
-                                gridData: const FlGridData(show: false),
-                                borderData: FlBorderData(show: false),
-                              )),
-                              // ② 合計IN ③ AA — 棒と同じ箱に重ねる
-                              lineLayer(ins, maxIn, Colors.blue.shade600),
-                              // IN最高点の注記: ±1日分の淡い水平線 + _ml ラベル
-                              if (inPeakVal > 0) ...[
-                                LineChart(LineChartData(
-                                  minX: -0.5,
-                                  maxX: n - 0.5,
+                  },
+                  child: LayoutBuilder(builder: (_, _lbc) {
+                    _cachedChartW = _lbc.maxWidth;
+                    const plotH = 184.0; // プロット領域(棒・線)の高さ
+                    const axisH = 66.0; // 日付＋アイコン軸の高さ
+                    return Column(
+                      children: [
+                        // === プロット領域: 棒グラフ・線グラフを同一184px領域に重ねる ===
+                        // 棒も線も同じ高さの箱に置くので、ゼロ基線(=底辺)が物理的に完全一致する
+                        SizedBox(
+                          height: plotH,
+                          child: ClipRect(
+                            child: Stack(
+                              children: [
+                                eventShadeLayer(),
+                                // ① 積み上げ棒: カロリー内訳 (下→上: PN→EN→食事)
+                                BarChart(BarChartData(
+                                  alignment: BarChartAlignment.spaceAround,
                                   minY: 0,
-                                  maxY: maxIn,
-                                  lineBarsData: [
-                                    LineChartBarData(
-                                      spots: [
-                                        FlSpot((inPeakIdx - 1).toDouble(), inPeakVal),
-                                        FlSpot(inPeakIdx.toDouble(), inPeakVal),
-                                        FlSpot((inPeakIdx + 1).toDouble(), inPeakVal),
-                                      ],
-                                      gradient: LinearGradient(colors: [
-                                        Colors.blueGrey.shade700.withValues(alpha: 0.0),
-                                        Colors.blueGrey.shade700.withValues(alpha: 0.9),
-                                        Colors.blueGrey.shade700.withValues(alpha: 0.9),
-                                        Colors.blueGrey.shade700.withValues(alpha: 0.0),
-                                      ], stops: const [0.0, 0.35, 0.65, 1.0]),
-                                      barWidth: 2,
-                                      dotData: const FlDotData(show: false),
-                                    ),
-                                  ],
+                                  maxY: maxKcal,
+                                  barTouchData: BarTouchData(enabled: false),
+                                  barGroups: List.generate(n, (i) {
+                                    final enK = enKcals[i];
+                                    final mealK = mealKcals[i];
+                                    final total = plans[i].totalKcal;
+                                    return BarChartGroupData(x: i, barRods: [
+                                      BarChartRodData(
+                                        toY: total,
+                                        width: 16,
+                                        borderRadius: BorderRadius.circular(2),
+                                        rodStackItems: [
+                                          // 下: 食事(橙) — 淡め
+                                          BarChartRodStackItem(0, mealK,
+                                              Colors.deepOrange.shade200),
+                                          // 中: EN(黄) — 暗めのアンバー(白背景との視認性確保)
+                                          BarChartRodStackItem(
+                                              mealK,
+                                              mealK + enK,
+                                              Colors.amber.shade500),
+                                          // 上: PN(緑) — 淡め
+                                          BarChartRodStackItem(mealK + enK,
+                                              total, Colors.green.shade200),
+                                        ],
+                                      ),
+                                    ]);
+                                  }),
                                   titlesData: const FlTitlesData(
                                     bottomTitles: hidden,
                                     leftTitles: hidden,
@@ -1870,260 +2806,294 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                                   ),
                                   gridData: const FlGridData(show: false),
                                   borderData: FlBorderData(show: false),
-                                  clipData: const FlClipData.all(),
-                                  lineTouchData: const LineTouchData(enabled: false),
                                 )),
+                                // ② 合計IN ③ AA — 棒と同じ箱に重ねる
+                                lineLayer(ins, maxIn, Colors.blue.shade600),
+                                // IN最高点の注記: ±1日分の淡い水平線 + _ml ラベル
+                                if (inPeakVal > 0) ...[
+                                  LineChart(LineChartData(
+                                    minX: -0.5,
+                                    maxX: n - 0.5,
+                                    minY: 0,
+                                    maxY: maxIn,
+                                    lineBarsData: [
+                                      LineChartBarData(
+                                        spots: [
+                                          FlSpot((inPeakIdx - 1).toDouble(),
+                                              inPeakVal),
+                                          FlSpot(
+                                              inPeakIdx.toDouble(), inPeakVal),
+                                          FlSpot((inPeakIdx + 1).toDouble(),
+                                              inPeakVal),
+                                        ],
+                                        gradient: LinearGradient(colors: [
+                                          Colors.blueGrey.shade700
+                                              .withValues(alpha: 0.0),
+                                          Colors.blueGrey.shade700
+                                              .withValues(alpha: 0.9),
+                                          Colors.blueGrey.shade700
+                                              .withValues(alpha: 0.9),
+                                          Colors.blueGrey.shade700
+                                              .withValues(alpha: 0.0),
+                                        ], stops: const [
+                                          0.0,
+                                          0.35,
+                                          0.65,
+                                          1.0
+                                        ]),
+                                        barWidth: 2,
+                                        dotData: const FlDotData(show: false),
+                                      ),
+                                    ],
+                                    titlesData: const FlTitlesData(
+                                      bottomTitles: hidden,
+                                      leftTitles: hidden,
+                                      topTitles: hidden,
+                                      rightTitles: hidden,
+                                    ),
+                                    gridData: const FlGridData(show: false),
+                                    borderData: FlBorderData(show: false),
+                                    clipData: const FlClipData.all(),
+                                    lineTouchData:
+                                        const LineTouchData(enabled: false),
+                                  )),
+                                  Positioned(
+                                    left: ((_cachedChartW / n) * inPeakIdx +
+                                            (_cachedChartW / n) / 2) -
+                                        32,
+                                    // 線とテキストの間隔をグラフ↔日付と同じ8pxにする
+                                    top: (plotH * (1.0 - (inPeakVal / maxIn)) -
+                                            22)
+                                        .clamp(0.0, plotH - 16),
+                                    child: SizedBox(
+                                      width: 64,
+                                      child: Text(
+                                        '${inPeakVal.round()}ml',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontSize: 14,
+                                            height: 1.0,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blueGrey.shade700),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                lineLayer(prots, maxAA, Colors.red.shade400),
+                                // フローター: hoverツールチップ専用(読み取りのみ)
+                                Builder(builder: (ctx) {
+                                  final displayIdx = _hoveredBarIdx;
+                                  if (displayIdx < 0 || displayIdx >= n) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final idx = displayIdx;
+                                  final plan = plans[idx];
+                                  final w = widget.current.weightKg;
+                                  final barRatio = maxKcal > 0
+                                      ? (plans[idx].totalKcal / maxKcal)
+                                          .clamp(0.0, 1.0)
+                                      : 0.0;
+                                  final barTopY = plotH * (1.0 - barRatio) - 8;
+                                  final chartW = _cachedChartW;
+                                  final barW = chartW / n;
+                                  final barCenterX = barW * idx + barW / 2;
+                                  const tipW = 156.0;
+                                  final tipX = (barCenterX - tipW / 2)
+                                      .clamp(0.0, chartW - tipW);
+                                  final mmdd =
+                                      '${dates[idx].month.toString().padLeft(2, '0')}/${dates[idx].day.toString().padLeft(2, '0')}';
+                                  return Positioned(
+                                    left: tipX,
+                                    top: barTopY.clamp(0.0, plotH - 60),
+                                    child: Container(
+                                      width: tipW,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 9, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFF8E7),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                            color: Colors.brown.shade200,
+                                            width: 0.6),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                              color: Colors.black26,
+                                              blurRadius: 4,
+                                              offset: Offset(1, 2)),
+                                        ],
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(mmdd,
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold)),
+                                          if (plan.items.isEmpty)
+                                            const Text('栄養開始前',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey))
+                                          else ...[
+                                            Text(
+                                                'IN ${plan.totalVolumeMl.round()}ml, ${plan.totalKcal.round()}kcal',
+                                                style: const TextStyle(
+                                                    fontSize: 11)),
+                                            Text(
+                                                'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
+                                                '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(2)}g/kg)' : ''}',
+                                                style: const TextStyle(
+                                                    fontSize: 11)),
+                                            Builder(builder: (_) {
+                                              final dayIdx = idx - preDays;
+                                              final structured = dayIdx >= 0
+                                                  ? (structuredAlertsByDay[
+                                                          dayIdx] ??
+                                                      const <cad
+                                                          .StructuredNutritionAlert>[])
+                                                  : const <cad
+                                                      .StructuredNutritionAlert>[];
+                                              final ac = _engineDayAlertCounts(
+                                                  plan, structured);
+                                              if (ac.err == 0 &&
+                                                  ac.warn == 0 &&
+                                                  ac.info == 0) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              final alertColor = ac.err > 0
+                                                  ? Colors.red.shade700
+                                                  : ac.warn > 0
+                                                      ? Colors.orange.shade800
+                                                      : Colors
+                                                          .blueGrey.shade700;
+                                              // 読み取りのみ。修正は処方カード下の「アラート」リンクから。
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    top: 2),
+                                                child: Row(children: [
+                                                  Icon(Icons.health_and_safety,
+                                                      size: 11,
+                                                      color: alertColor),
+                                                  const SizedBox(width: 3),
+                                                  Text(
+                                                      '${ac.err > 0 ? '禁忌${ac.err} ' : ''}${ac.warn > 0 ? '警告${ac.warn} ' : ''}${ac.info > 0 ? '情報${ac.info}' : ''}',
+                                                      style: TextStyle(
+                                                          fontSize: 10.5,
+                                                          color: alertColor)),
+                                                ]),
+                                              );
+                                            }),
+                                            Builder(builder: (_) {
+                                              final di = idx - preDays;
+                                              if (di < 0 ||
+                                                  di >=
+                                                      _dayRepairChanges
+                                                          .length) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              final ch = _dayRepairChanges[di];
+                                              if (ch.isEmpty) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    top: 3),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                        '🔧 自動補正 ${ch.length}件',
+                                                        style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color: Colors.indigo
+                                                                .shade600)),
+                                                    for (final c in ch.take(3))
+                                                      Text('・${c.reason}',
+                                                          style: TextStyle(
+                                                              fontSize: 9.5,
+                                                              color: Colors
+                                                                  .indigo
+                                                                  .shade400)),
+                                                  ],
+                                                ),
+                                              );
+                                            }),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                // 凡例カード（プロット領域の上下中央・左寄せ）
                                 Positioned(
-                                  left: ((_cachedChartW / n) * inPeakIdx +
-                                          (_cachedChartW / n) / 2) -
-                                      32,
-                                  // 線とテキストの間隔をグラフ↔日付と同じ8pxにする
-                                  top: (plotH * (1.0 - (inPeakVal / maxIn)) - 22)
-                                      .clamp(0.0, plotH - 16),
-                                  child: SizedBox(
-                                    width: 64,
-                                    child: Text(
-                                      '${inPeakVal.round()}ml',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                          fontSize: 14,
-                                          height: 1.0,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.blueGrey.shade700),
+                                  left: 10,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.88),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                            color: Colors.black12, width: 0.8),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                              color: Colors.black12,
+                                              blurRadius: 4,
+                                              offset: Offset(0, 1)),
+                                        ],
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _legItem(Colors.deepOrange.shade200,
+                                              '食事 (kcal)', false),
+                                          _legItem(Colors.amber.shade500,
+                                              'EN (kcal)', false),
+                                          _legItem(Colors.green.shade200,
+                                              'PN (kcal)', false),
+                                          _legItem(Colors.blue.shade600,
+                                              'IN (ml)', true),
+                                          _legItem(Colors.red.shade400,
+                                              'AA (g)', true),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ],
-                              lineLayer(prots, maxAA, Colors.red.shade400),
-                              // フローター: タップ固定優先、次いでホバー
-                              Builder(builder: (ctx) {
-                                final displayIdx = _selectedBarIdx >= 0
-                                    ? _selectedBarIdx
-                                    : _hoveredBarIdx;
-                                if (displayIdx < 0 || displayIdx >= n) {
-                                  return const SizedBox.shrink();
-                                }
-                                final idx = displayIdx;
-                                final plan = plans[idx];
-                                final w = widget.current.weightKg;
-                                final isPinned = _selectedBarIdx >= 0;
-                                final barRatio = maxKcal > 0
-                                    ? (plans[idx].totalKcal / maxKcal)
-                                        .clamp(0.0, 1.0)
-                                    : 0.0;
-                                final barTopY = plotH * (1.0 - barRatio) - 8;
-                                final chartW = _cachedChartW;
-                                final barW = chartW / n;
-                                final barCenterX = barW * idx + barW / 2;
-                                const tipW = 156.0;
-                                final tipX = (barCenterX - tipW / 2)
-                                    .clamp(0.0, chartW - tipW);
-                                final mmdd =
-                                    '${dates[idx].month.toString().padLeft(2, '0')}/${dates[idx].day.toString().padLeft(2, '0')}';
-                                return Positioned(
-                                  left: tipX,
-                                  top: barTopY.clamp(0.0, plotH - 60),
-                                  child: Container(
-                                    width: tipW,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 9, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: isPinned
-                                          ? const Color(0xFFF0F4FF)
-                                          : const Color(0xFFFFF8E7),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                          color: isPinned
-                                              ? Colors.blue.shade200
-                                              : Colors.brown.shade200,
-                                          width: 0.6),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                            color: Colors.black26,
-                                            blurRadius: 4,
-                                            offset: Offset(1, 2)),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(mmdd,
-                                            style: const TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold)),
-                                        if (plan.items.isEmpty)
-                                          const Text('栄養開始前',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey))
-                                        else ...[
-                                          Text(
-                                              'IN ${plan.totalVolumeMl.round()}ml, ${plan.totalKcal.round()}kcal',
-                                              style: const TextStyle(
-                                                  fontSize: 11)),
-                                          Text(
-                                              'AA ${plan.totalProteinG.toStringAsFixed(1)}g'
-                                              '${w > 0 ? ' (${(plan.totalProteinG / w).toStringAsFixed(2)}g/kg)' : ''}',
-                                              style: const TextStyle(
-                                                  fontSize: 11)),
-                                          Builder(builder: (_) {
-                                            final ac =
-                                                _engineDayAlertCounts(plan);
-                                            if (ac.err == 0 && ac.warn == 0) {
-                                              return const SizedBox.shrink();
-                                            }
-                                            final red = ac.err > 0;
-                                            final badge = Padding(
-                                              padding: const EdgeInsets.only(
-                                                  top: 2),
-                                              child: Row(children: [
-                                                Icon(Icons.health_and_safety,
-                                                    size: 11,
-                                                    color: red
-                                                        ? Colors.red.shade700
-                                                        : Colors
-                                                            .orange.shade800),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                    '${ac.err > 0 ? '禁忌${ac.err} ' : ''}${ac.warn > 0 ? '警告${ac.warn}' : ''}',
-                                                    style: TextStyle(
-                                                        fontSize: 10.5,
-                                                        color: red
-                                                            ? Colors
-                                                                .red.shade700
-                                                            : Colors.orange
-                                                                .shade800)),
-                                                // 固定中はタップで詳細できることを示すヒント
-                                                if (isPinned) ...[
-                                                  const SizedBox(width: 4),
-                                                  Text('詳細▸',
-                                                      style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Colors
-                                                              .blue.shade700)),
-                                                ],
-                                              ]),
-                                            );
-                                            // 固定(ピン留め)時のみアラートをタップ→詳細ダイアログ。
-                                            if (!isPinned) return badge;
-                                            return GestureDetector(
-                                              behavior:
-                                                  HitTestBehavior.opaque,
-                                              onTap: () => _showDayAlertDetail(
-                                                  idx, plan, dates[idx]),
-                                              child: badge,
-                                            );
-                                          }),
-                                          Builder(builder: (_) {
-                                            final di = idx - preDays;
-                                            if (di < 0 ||
-                                                di >=
-                                                    _dayRepairChanges.length) {
-                                              return const SizedBox.shrink();
-                                            }
-                                            final ch = _dayRepairChanges[di];
-                                            if (ch.isEmpty) {
-                                              return const SizedBox.shrink();
-                                            }
-                                            return Padding(
-                                              padding: const EdgeInsets.only(
-                                                  top: 3),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text('🔧 自動補正 ${ch.length}件',
-                                                      style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Colors.indigo
-                                                              .shade600)),
-                                                  for (final c in ch.take(3))
-                                                    Text('・${c.reason}',
-                                                        style: TextStyle(
-                                                            fontSize: 9.5,
-                                                            color: Colors.indigo
-                                                                .shade400)),
-                                                ],
-                                              ),
-                                            );
-                                          }),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }),
-                              // 凡例カード（プロット領域の上下中央・左寄せ）
-                              Positioned(
-                                left: 10,
-                                top: 0,
-                                bottom: 0,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.88),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                          color: Colors.black12, width: 0.8),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 4,
-                                            offset: Offset(0, 1)),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        _legItem(Colors.deepOrange.shade200,
-                                            '食事 (kcal)', false),
-                                        _legItem(Colors.amber.shade500,
-                                            'EN (kcal)', false),
-                                        _legItem(Colors.green.shade200,
-                                            'PN (kcal)', false),
-                                        _legItem(Colors.blue.shade600,
-                                            'IN (ml)', true),
-                                        _legItem(Colors.red.shade400,
-                                            'AA (g)', true),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
+                            ),
+                          ),
+                        ),
+                        // === 日付＋イベントアイコン軸（棒・線と独立した別Row） ===
+                        SizedBox(
+                          height: axisH,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (var i = 0; i < n; i++)
+                                Expanded(child: dateCell(i)),
                             ],
                           ),
                         ),
-                      ),
-                      // === 日付＋イベントアイコン軸（棒・線と独立した別Row） ===
-                      SizedBox(
-                        height: axisH,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (var i = 0; i < n; i++)
-                              Expanded(child: dateCell(i)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }), // Column / LayoutBuilder
-              ), // MouseRegion
-              ), // GestureDetector
+                        // === 臨床イベントの有効期間バー（┝────┤・§23.3） ===
+                        _eventSpanBars(n, preDays),
+                      ],
+                    );
+                  }), // Column / LayoutBuilder
+                ), // MouseRegion
               ), // SizedBox
-            ), // TapRegion
             // === 栄養管理アラート（グラフの下・既定は折り畳み、タップで展開） ===
             if (hasAlerts) ...[
               const SizedBox(height: 12),
@@ -2152,11 +3122,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       decoration: BoxDecoration(
                         color: Colors.deepOrange.shade50,
                         borderRadius: BorderRadius.circular(10),
-                        border:
-                            Border.all(color: Colors.deepOrange.shade200),
+                        border: Border.all(color: Colors.deepOrange.shade200),
                       ),
-                      child: Text(
-                          '$alertCount件',
+                      child: Text('$alertCount件',
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -2164,9 +3132,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                     ),
                     const Spacer(),
                     Icon(
-                        _alertsExpanded
-                            ? Icons.expand_less
-                            : Icons.expand_more,
+                        _alertsExpanded ? Icons.expand_less : Icons.expand_more,
                         size: 20,
                         color: Colors.black45),
                   ]),
@@ -2178,8 +3144,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
               _chartAlert(
                 color: Colors.orange.shade800,
                 title: '${_alertDate(14, dates, n)}以降　必須脂肪酸欠乏のリスク',
-                body:
-                    '絶食開始からDay14まで脂質の投与がありません。長期化で必須脂肪酸が欠乏します。'
+                body: '絶食開始からDay14まで脂質の投与がありません。長期化で必須脂肪酸が欠乏します。'
                     '脂肪乳剤を開始してください。',
                 suggest: 'イントラリポス20% 100mL/日（脂質20g）を補充'
                     '（または週2回100mL）',
@@ -2189,8 +3154,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 color: Colors.red.shade700,
                 title: '${_alertDate(preDays + 1, dates, n)}以降（栄養再開・糖負荷時）'
                     '　リフィーディング/Wernicke脳症のリスク',
-                body:
-                    '絶食5日以上＋糖質投与でビタミンB1の需要が増大し欠乏しうる'
+                body: '絶食5日以上＋糖質投与でビタミンB1の需要が増大し欠乏しうる'
                     '（貯蔵は約2週間で枯渇）。糖負荷の前〜同時に補充してください。',
                 suggest: 'ビタミンB1（チアミン）100〜300mg/日を静注で補充',
               ),
@@ -2200,8 +3164,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 title:
                     '${_alertDate(pnHeavyMaxDay, dates, n)}以降（PN主体がDay$pnHeavyMaxDayまで継続）'
                     '　電解質・微量元素の過不足に注意',
-                body:
-                    'EN≤30ml/hでPN主体の状態が続きます。'
+                body: 'EN≤30ml/hでPN主体の状態が続きます。'
                     'P・K・Mg・亜鉛・ビタミンの過不足が生じやすい時期です。'
                     '採血検査を追加して確認してください。',
                 suggest: '不足時は リン酸Na/KCL/硫酸Mg補正液・微量元素製剤・'
@@ -2210,9 +3173,8 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             if (_alertsExpanded && refeedRisk)
               _chartAlert(
                 color: Colors.red.shade700,
-                title:
-                    '${_alertDate(preDays + 1, dates, n)}以降（栄養再開初期）'
-                        '　Refeeding症候群 ${refeedTier.label}（NICE）',
+                title: '${_alertDate(preDays + 1, dates, n)}以降（栄養再開初期）'
+                    '　Refeeding症候群 ${refeedTier.label}（NICE）',
                 body:
                     '絶食$preDays日・BMI ${cbw.bmiOf(widget.current.weightKg, widget.current.heightCm).toStringAsFixed(1)}'
                     '${widget.current.refeedingFlags.isNotEmpty ? '＋手動基準' : ''}。'
@@ -2258,27 +3220,27 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
 
   // Dayカードのタップで処方詳細(何を何pac)をダイアログ表示
   Widget _legItem(Color c, String lbl, bool line) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      // マーカーを固定幅スロットに収め、テキストの左位置を全項目で揃える
-      SizedBox(
-        width: 18,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            width: line ? 18 : 13,
-            height: line ? 3.5 : 13,
-            decoration: BoxDecoration(
-                color: c, borderRadius: BorderRadius.circular(2)),
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          // マーカーを固定幅スロットに収め、テキストの左位置を全項目で揃える
+          SizedBox(
+            width: 18,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                width: line ? 18 : 13,
+                height: line ? 3.5 : 13,
+                decoration: BoxDecoration(
+                    color: c, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
           ),
-        ),
-      ),
-      const SizedBox(width: 5),
-      Text(lbl,
-          style: const TextStyle(
-              fontSize: 13, color: Colors.black54, height: 1.3)),
-    ]),
-  );
+          const SizedBox(width: 5),
+          Text(lbl,
+              style: const TextStyle(
+                  fontSize: 13, color: Colors.black54, height: 1.3)),
+        ]),
+      );
 
   /// アラート用の日付文字列 (chartOrigin起算のDay番号 → ○月○日)
   String _alertDate(int dayNum, List<DateTime> dates, int n) {
@@ -2388,8 +3350,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 setState(() => _labScheduleExpanded = !_labScheduleExpanded),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Row(children: [
                 Icon(Icons.science_outlined, size: 18, color: color),
                 const SizedBox(width: 8),
@@ -2492,9 +3453,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           SizedBox(
             width: 56,
             child: Text(
-              drop != null && drop > 0
-                  ? '−${drop.toStringAsFixed(0)}%'
-                  : '—',
+              drop != null && drop > 0 ? '−${drop.toStringAsFixed(0)}%' : '—',
               textAlign: TextAlign.right,
               style: TextStyle(
                   fontSize: 12,
@@ -2524,8 +3483,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             onTap: () => setState(() => _rsExpanded = !_rsExpanded),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Row(children: [
                 Icon(Icons.monitor_heart_outlined, size: 18, color: color),
                 const SizedBox(width: 8),
@@ -2561,8 +3519,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('再栄養5日以内の血清値を入力（前値=再栄養前/現値=直近）',
-                      style: TextStyle(
-                          fontSize: 10.5, color: Colors.black54)),
+                      style: TextStyle(fontSize: 10.5, color: Colors.black54)),
                   const SizedBox(height: 6),
                   labRow('P', _rsBaseP, _rsCurP, 'P'),
                   labRow('K', _rsBaseK, _rsCurK, 'K'),
@@ -2574,10 +3531,9 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                       child: Checkbox(
                         value: _rsOrganDysfunction,
                         visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        onChanged: (v) => setState(
-                            () => _rsOrganDysfunction = v ?? false),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (v) =>
+                            setState(() => _rsOrganDysfunction = v ?? false),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -2613,14 +3569,12 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         height: 34,
         child: TextField(
           controller: c,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 12),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle:
-                const TextStyle(fontSize: 11, color: Colors.black38),
+            hintStyle: const TextStyle(fontSize: 11, color: Colors.black38),
             isDense: true,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -2630,13 +3584,508 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         ),
       );
 
+  String _clinicalEventTypeLabel(cev.ClinicalEventType type) {
+    switch (type) {
+      case cev.ClinicalEventType.enHold:
+        return 'EN hold';
+      case cev.ClinicalEventType.enIntolerance:
+        return 'EN不耐';
+      case cev.ClinicalEventType.recurrentNpo:
+        return '再NPO';
+      case cev.ClinicalEventType.suspectedNomi:
+        return 'NOMI/腸管虚血疑い';
+      case cev.ClinicalEventType.refeedingHypophosphatemia:
+        return 'Refeeding低P';
+      case cev.ClinicalEventType.bunRiseAfterFeeding:
+        return 'BUN上昇';
+      case cev.ClinicalEventType.cholestasisOrLiverDysfunction:
+        return '胆汁うっ滞/肝障害';
+      case cev.ClinicalEventType.fluidOverload:
+        return '溢水';
+      case cev.ClinicalEventType.rrtStart:
+        return 'RRT開始';
+      case cev.ClinicalEventType.rrtStop:
+        return 'RRT停止/移行';
+    }
+  }
+
+  String _clinicalEventShortLabel(cev.ClinicalEventType type) {
+    switch (type) {
+      case cev.ClinicalEventType.enHold:
+        return 'EN hold';
+      case cev.ClinicalEventType.enIntolerance:
+        return 'EN不耐';
+      case cev.ClinicalEventType.recurrentNpo:
+        return 'NPO';
+      case cev.ClinicalEventType.suspectedNomi:
+        return 'NOMI';
+      case cev.ClinicalEventType.refeedingHypophosphatemia:
+        return '低P';
+      case cev.ClinicalEventType.bunRiseAfterFeeding:
+        return 'BUN';
+      case cev.ClinicalEventType.cholestasisOrLiverDysfunction:
+        return 'Mn-free';
+      case cev.ClinicalEventType.fluidOverload:
+        return '溢水';
+      case cev.ClinicalEventType.rrtStart:
+        return 'RRT';
+      case cev.ClinicalEventType.rrtStop:
+        return 'RRT移行';
+    }
+  }
+
+  String _energyEffectLabel(cev.EnergyEffect effect) {
+    switch (effect) {
+      case cev.EnergyEffect.none:
+        return 'なし';
+      case cev.EnergyEffect.cap:
+        return 'cap';
+      case cev.EnergyEffect.reducePercent:
+        return '減量';
+      case cev.EnergyEffect.restartRefeedingRamp:
+        return 'refeeding再開';
+      case cev.EnergyEffect.restrictFor48h:
+        return '48h制限';
+    }
+  }
+
+  String _proteinEffectLabel(cev.ProteinEffect effect) {
+    switch (effect) {
+      case cev.ProteinEffect.none:
+        return 'なし';
+      case cev.ProteinEffect.renalRestrict:
+        return '腎制限';
+      case cev.ProteinEffect.krtTarget:
+        return 'IRRT目標';
+      case cev.ProteinEffect.sledTarget:
+        return 'SLED目標';
+      case cev.ProteinEffect.crrtTarget:
+        return 'CRRT目標';
+      case cev.ProteinEffect.reviewOnly:
+        return 'review';
+    }
+  }
+
+  Widget _clinicalEventPanel() {
+    Widget eventRow(int index, cev.ClinicalEvent e) {
+      final range = e.endDay == null
+          ? 'Day${e.startDay}以降'
+          : 'Day${e.startDay}–${e.endDay}';
+      final sub = <String>[
+        range,
+        if (e.rrtModality != null) e.rrtModality!.key,
+        cst.SourceTierMeta(e.sourceTier).badgeLabel,
+      ].join(' / ');
+      return Container(
+        margin: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.indigo.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.indigo.withValues(alpha: 0.20)),
+        ),
+        child: Row(children: [
+          Icon(Icons.layers, size: 15, color: Colors.indigo.shade600),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_clinicalEventTypeLabel(e.type),
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.bold)),
+                Text(sub,
+                    style:
+                        const TextStyle(fontSize: 10.5, color: Colors.black54)),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: '編集',
+            icon: const Icon(Icons.edit, size: 16),
+            onPressed: () => _showClinicalEventEditor(index: index),
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            tooltip: '削除',
+            icon: const Icon(Icons.delete_outline, size: 16),
+            color: Colors.red.shade400,
+            onPressed: () {
+              setState(() {
+                _clinicalEvents.removeAt(index);
+                _rebuildDays();
+              });
+              _saveConfig();
+              widget.onSettingsChanged?.call();
+            },
+            visualDensity: VisualDensity.compact,
+          ),
+        ]),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.16)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.timeline, size: 15, color: Colors.blueGrey.shade600),
+          const SizedBox(width: 5),
+          const Text('臨床イベント',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            ),
+            onPressed: () => _showClinicalEventEditor(),
+            icon: const Icon(Icons.add, size: 15),
+            label: const Text('追加', style: TextStyle(fontSize: 12)),
+          ),
+        ]),
+        if (_clinicalEvents.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('未設定',
+                style: TextStyle(fontSize: 11, color: Colors.black45)),
+          )
+        else
+          for (var i = 0; i < _clinicalEvents.length; i++)
+            eventRow(i, _clinicalEvents[i]),
+      ]),
+    );
+  }
+
+  Future<void> _showClinicalEventEditor({int? index}) async {
+    final existing = index != null ? _clinicalEvents[index] : null;
+    final typeOptions = [
+      cev.ClinicalEventType.enHold,
+      cev.ClinicalEventType.enIntolerance,
+      cev.ClinicalEventType.recurrentNpo,
+      cev.ClinicalEventType.suspectedNomi,
+      cev.ClinicalEventType.refeedingHypophosphatemia,
+      cev.ClinicalEventType.bunRiseAfterFeeding,
+      cev.ClinicalEventType.cholestasisOrLiverDysfunction,
+      cev.ClinicalEventType.fluidOverload,
+      cev.ClinicalEventType.rrtStart,
+      cev.ClinicalEventType.rrtStop,
+    ];
+    var type = existing?.type ?? cev.ClinicalEventType.enHold;
+    var severity = existing?.severity ?? cev.EventSeverity.moderate;
+    var rrt = existing?.rrtModality ?? cev.RrtModality.crrt;
+    var nextRrt = _rrtModalityFromKey(
+            existing?.parameters['next_modality']?.toString()) ??
+        cev.RrtModality.irrt;
+    var stopToNone = existing?.type == cev.ClinicalEventType.rrtStop &&
+        existing?.parameters['next_modality']?.toString().toUpperCase() ==
+            'NONE';
+    final startCtrl =
+        TextEditingController(text: '${existing?.startDay ?? _enStartDay}');
+    final endCtrl =
+        TextEditingController(text: existing?.endDay?.toString() ?? '');
+    final holdRateCtrl = TextEditingController(
+        text: (existing?.parameters['hold_rate_ml_h'] ?? 20).toString());
+    final fluidCapCtrl = TextEditingController(
+        text: existing?.parameters['max_fluid_ml_kg_day']?.toString() ?? '');
+    final phosphateCtrl = TextEditingController(
+        text: existing?.parameters['phosphate_value']?.toString() ?? '');
+    final kcalCapCtrl = TextEditingController(
+        text: existing?.parameters['cap_kcal_day']?.toString() ?? '');
+    final noteCtrl = TextEditingController(text: existing?.explanation ?? '');
+
+    double? parseDouble(TextEditingController c) {
+      final s = c.text.trim();
+      return s.isEmpty ? null : double.tryParse(s);
+    }
+
+    int? parseInt(TextEditingController c) {
+      final s = c.text.trim();
+      return s.isEmpty ? null : int.tryParse(s);
+    }
+
+    final saved = await showDialog<cev.ClinicalEvent>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setLocal) {
+        final showEnd = type != cev.ClinicalEventType.rrtStop;
+        return AlertDialog(
+          title: Text(index == null ? '臨床イベント追加' : '臨床イベント編集',
+              style: const TextStyle(fontSize: 16)),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 360,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                DropdownButtonFormField<cev.ClinicalEventType>(
+                  value: type,
+                  decoration: const InputDecoration(
+                      labelText: 'Event type', isDense: true),
+                  items: typeOptions
+                      .map((t) => DropdownMenuItem(
+                          value: t, child: Text(_clinicalEventTypeLabel(t))))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setLocal(() => type = v);
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: startCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: 'Start Day', isDense: true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (showEnd)
+                    Expanded(
+                      child: TextField(
+                        controller: endCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'End Day 任意', isDense: true),
+                      ),
+                    ),
+                ]),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<cev.EventSeverity>(
+                  value: severity,
+                  decoration: const InputDecoration(
+                      labelText: 'Severity', isDense: true),
+                  items: cev.EventSeverity.values
+                      .map((s) =>
+                          DropdownMenuItem(value: s, child: Text(s.name)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setLocal(() => severity = v);
+                  },
+                ),
+                if (type == cev.ClinicalEventType.enHold) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: holdRateCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'Hold rate ml/h', isDense: true),
+                  ),
+                ],
+                if (type == cev.ClinicalEventType.rrtStart) ...[
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<cev.RrtModality>(
+                    value: rrt,
+                    decoration: const InputDecoration(
+                        labelText: 'RRT modality', isDense: true),
+                    items: cev.RrtModality.values
+                        .map((m) =>
+                            DropdownMenuItem(value: m, child: Text(m.key)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setLocal(() => rrt = v);
+                    },
+                  ),
+                ],
+                if (type == cev.ClinicalEventType.rrtStop) ...[
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    value: stopToNone,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('RRT終了（移行なし）',
+                        style: TextStyle(fontSize: 12)),
+                    onChanged: (v) => setLocal(() => stopToNone = v ?? false),
+                  ),
+                  if (!stopToNone)
+                    DropdownButtonFormField<cev.RrtModality>(
+                      value: nextRrt,
+                      decoration: const InputDecoration(
+                          labelText: 'Next modality', isDense: true),
+                      items: cev.RrtModality.values
+                          .map((m) =>
+                              DropdownMenuItem(value: m, child: Text(m.key)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setLocal(() => nextRrt = v);
+                      },
+                    ),
+                ],
+                if (type ==
+                    cev.ClinicalEventType.refeedingHypophosphatemia) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: phosphateCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Phosphate value 任意', isDense: true),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: kcalCapCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Energy cap kcal/day 任意', isDense: true),
+                  ),
+                ],
+                if (type == cev.ClinicalEventType.fluidOverload) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: fluidCapCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Fluid cap ml/kg/day 任意', isDense: true),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                TextField(
+                  controller: noteCtrl,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                      labelText: 'Manual note 任意', isDense: true),
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('キャンセル')),
+            FilledButton(
+              onPressed: () {
+                final start = parseInt(startCtrl);
+                if (start == null || start < 1) return;
+                final end = showEnd ? parseInt(endCtrl) : null;
+                final params = <String, Object?>{};
+                if (type == cev.ClinicalEventType.enHold) {
+                  params['hold_rate_ml_h'] = parseDouble(holdRateCtrl) ?? 20;
+                }
+                if (type == cev.ClinicalEventType.rrtStop) {
+                  params['next_modality'] = stopToNone ? 'none' : nextRrt.key;
+                }
+                if (type == cev.ClinicalEventType.refeedingHypophosphatemia) {
+                  final p = parseDouble(phosphateCtrl);
+                  final cap = parseDouble(kcalCapCtrl);
+                  if (p != null) params['phosphate_value'] = p;
+                  if (cap != null) params['cap_kcal_day'] = cap;
+                }
+                if (type == cev.ClinicalEventType.fluidOverload) {
+                  final cap = parseDouble(fluidCapCtrl);
+                  if (cap != null) params['max_fluid_ml_kg_day'] = cap;
+                }
+                Navigator.pop(
+                  ctx,
+                  cev.ClinicalEvent(
+                    id: existing?.id ??
+                        'event_${DateTime.now().microsecondsSinceEpoch}',
+                    type: type,
+                    startDay: start,
+                    endDay: end != null && end >= start ? end : null,
+                    severity: severity,
+                    sourceTier: cst.SourceTier.userInputEvent,
+                    rrtModality:
+                        type == cev.ClinicalEventType.rrtStart ? rrt : null,
+                    parameters: params,
+                    explanation: noteCtrl.text.trim(),
+                  ),
+                );
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    for (final c in [
+      startCtrl,
+      endCtrl,
+      holdRateCtrl,
+      fluidCapCtrl,
+      phosphateCtrl,
+      kcalCapCtrl,
+      noteCtrl,
+    ]) {
+      c.dispose();
+    }
+    if (saved == null) return;
+    setState(() {
+      if (index == null) {
+        _clinicalEvents.add(saved);
+      } else {
+        _clinicalEvents[index] = saved;
+      }
+      _clinicalEvents.sort((a, b) {
+        final d = a.startDay.compareTo(b.startDay);
+        if (d != 0) return d;
+        return a.priority.compareTo(b.priority);
+      });
+      _rebuildDays();
+    });
+    _saveConfig();
+    widget.onSettingsChanged?.call();
+  }
+
+  /// 処方カード下のアラートリンク。タップで _showDayRepairSheet を開く。
+  /// カード本体のタップ(処方詳細)とは独立(InkWellのネストで内側が優先)。
+  Widget _dayAlertLink(int i, DesignPlan plan,
+      {List<cad.StructuredNutritionAlert> structuredAlerts = const []}) {
+    final ac = _engineDayAlertCounts(plan, structuredAlerts);
+    final manualCount = _manualDayChanges[i]?.length ?? 0;
+    final hasAlert = ac.err > 0 || ac.warn > 0 || ac.info > 0;
+    final col = ac.err > 0
+        ? Colors.red.shade700
+        : ac.warn > 0
+            ? Colors.orange.shade800
+            : ac.info > 0
+                ? Colors.blueGrey.shade700
+                : Colors.green.shade700;
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: () =>
+          _showDayRepairSheet(i, plan, structuredAlerts: structuredAlerts),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Icon(hasAlert ? Icons.health_and_safety : Icons.check_circle_outline,
+              size: 14, color: col),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              hasAlert
+                  ? 'アラート ${ac.err > 0 ? '禁忌${ac.err} ' : ''}${ac.warn > 0 ? '警告${ac.warn} ' : ''}${ac.info > 0 ? '情報${ac.info}' : ''}・修正'
+                  : 'アラートなし・手動修正',
+              style: TextStyle(
+                  fontSize: 11.5, color: col, fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (manualCount > 0) ...[
+            Icon(Icons.back_hand_outlined,
+                size: 12, color: Colors.indigo.shade600),
+            Text('$manualCount',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.indigo.shade600,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(width: 2),
+          ],
+          Icon(Icons.chevron_right, size: 16, color: col),
+        ]),
+      ),
+    );
+  }
+
   void _showDayDetail(int i, DesignPlan plan, double dayKcal, double dayProt) {
     final date = _dateOf(i);
-    final mode = _dayModes[i];
-    final dose = _dayEnDose[i];
-    final mealPac = _pacOf(dose) > 0 ? (_pacOf(dose) / 3).round() : 0;
-    final isZero = mode == 'ZERO' || plan.label == 'ZERO';
-    final w = widget.current.weightKg;
+    final mode = _derivedModeForDay(i);
+    final overlay = _overlayForDay(i);
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2647,6 +4096,10 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (overlay.activeEvents.isNotEmpty) ...[
+                _overlayDetailBox(i),
+                const SizedBox(height: 8),
+              ],
               _planBody(plan, dayKcal, dayProt, mode),
               const Divider(height: 16),
               const SizedBox(height: 2),
@@ -2657,11 +4110,150 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('閉じる')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
         ],
       ),
     );
+  }
+
+  Widget _overlayDetailBox(int dayIndex) {
+    final overlay = _overlayForDay(dayIndex);
+    final sourceTiers = <cst.SourceTier>{
+      for (final e in overlay.activeEvents) e.sourceTier,
+    };
+    final hasRouteDelta = _hasTemplateDerivedRouteDelta(dayIndex);
+    final lines = <String>[
+      for (final e in overlay.activeEvents)
+        '${_clinicalEventTypeLabel(e.type)}: Day${e.startDay}'
+            '${e.endDay != null ? '–${e.endDay}' : '以降'}',
+      if (overlay.activeRrtModality != null)
+        'RRT: ${overlay.activeRrtModality!.key}',
+      if (overlay.energy != cev.EnergyEffect.none)
+        'Energy: ${_energyEffectLabel(overlay.energy)}',
+      if (overlay.protein != cev.ProteinEffect.none)
+        'Protein: ${_proteinEffectLabel(overlay.protein)}',
+      ...overlay.notes,
+    ];
+    Widget pill(String text, Color color) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.09),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Text(text,
+              style: TextStyle(
+                  fontSize: 10.5, color: color, fontWeight: FontWeight.bold)),
+        );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.indigo.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.indigo.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.layers, size: 14, color: Colors.indigo.shade600),
+            const SizedBox(width: 4),
+            Text('Active overlays',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo.shade700)),
+          ]),
+          if (sourceTiers.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final tier in sourceTiers)
+                  pill(cst.SourceTierMeta(tier).badgeLabel,
+                      Colors.indigo.shade600),
+              ],
+            ),
+          ],
+          if (hasRouteDelta) ...[
+            const SizedBox(height: 7),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.70),
+                borderRadius: BorderRadius.circular(5),
+                border:
+                    Border.all(color: Colors.indigo.withValues(alpha: 0.18)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Template → Derived',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade700)),
+                  const SizedBox(height: 3),
+                  Text(_templateRouteSummaryForDay(dayIndex),
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.black54, height: 1.25)),
+                  Row(children: [
+                    Icon(Icons.arrow_downward,
+                        size: 12, color: Colors.indigo.shade400),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(_derivedRouteSummaryForDay(dayIndex),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.bold,
+                              height: 1.25)),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+          for (final line in lines)
+            Text(line,
+                style: const TextStyle(
+                    fontSize: 11.5, color: Colors.black87, height: 1.35)),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _eventBadgesForDay(int i) {
+    final overlay = _overlayForDay(i);
+    if (overlay.activeEvents.isEmpty) return const [];
+    Widget badge(String label, Color color) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+        );
+    final sourceTiers = <cst.SourceTier>{
+      for (final e in overlay.activeEvents) e.sourceTier,
+    };
+    final out = <Widget>[
+      for (final tier in sourceTiers)
+        badge(cst.SourceTierMeta(tier).badgeLabel, Colors.indigo.shade600),
+      for (final e in overlay.activeEvents.take(2))
+        badge(_clinicalEventShortLabel(e.type), Colors.indigo.shade500),
+    ];
+    if (overlay.activeRrtModality != null) {
+      out.add(badge(overlay.activeRrtModality!.key, Colors.blueGrey.shade600));
+    }
+    return out;
   }
 
   /// 日次処方カードのモードバッジ（プラン内容に応じて 食事/EN/PN を横並び表示）
@@ -2736,8 +4328,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
                 '${it.name}  朝昼夕${mealPac}pac (${it.volumeMl.round()}ml/day)'));
           } else {
             final rateMlH = it.volumeMl / 24;
-            final pacPerExchange =
-                (rateMlH * 8 / (p?.volumeMl ?? 200)).ceil();
+            final pacPerExchange = (rateMlH * 8 / (p?.volumeMl ?? 200)).ceil();
             children.add(line(
                 '${it.name}  ${rateMlH.toStringAsFixed(0)}ml/h  朝昼夕${pacPerExchange}pac'));
           }
@@ -2791,5 +4382,4 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: children);
   }
-
 }

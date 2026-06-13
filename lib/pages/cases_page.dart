@@ -10,6 +10,8 @@ Future<void> showPatientEditDialog(
   double kcalPerKgValue = current.kcalPerKgValue ?? 25;
   final reeCtrl =
       TextEditingController(text: current.measuredREE?.toStringAsFixed(0) ?? '');
+  final usualWeightCtrl = TextEditingController(
+      text: current.usualWeightKg?.toStringAsFixed(1) ?? '');
   final patientIdCtrl = TextEditingController(text: current.patientId);
   final caseCodeCtrl = TextEditingController(text: current.caseCode);
   final memoCtrl = TextEditingController(text: current.memo);
@@ -244,6 +246,7 @@ Future<void> showPatientEditDialog(
                         label: Text(c.label,
                             style: const TextStyle(fontSize: 12)),
                         selected: selectedTags.contains(c.id),
+                        showCheckmark: false, // ✓非表示(選択時の幅変動で改行が崩れるため)
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize:
                             MaterialTapTargetSize.shrinkWrap,
@@ -292,6 +295,20 @@ Future<void> showPatientEditDialog(
                   }),
                 ),
                 const SizedBox(height: 8),
+                // 平時/入院前体重(§8 参照体重)。浮腫/AKIでは実体重が過大評価になるため。
+                TextField(
+                  controller: usualWeightCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: '平時/入院前体重 (kg・任意)',
+                    isDense: true,
+                    hintText: '例: 52  — 浮腫/AKI時の参照体重に推奨',
+                    helperText: '浮腫・溢水・AKIでは実体重が過大評価。平時体重を栄養計算の参照に。',
+                    helperMaxLines: 2,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: memoCtrl,
                   decoration: const InputDecoration(
@@ -321,6 +338,7 @@ Future<void> showPatientEditDialog(
   current.energyModel = energyModel;
   current.kcalPerKgValue = kcalPerKgValue;
   current.measuredREE = double.tryParse(reeCtrl.text.trim());
+  current.usualWeightKg = double.tryParse(usualWeightCtrl.text.trim());
   current.patientId = patientIdCtrl.text.trim();
   if (caseCodeCtrl.text.trim().isNotEmpty) {
     current.caseCode = caseCodeCtrl.text.trim();
@@ -498,6 +516,7 @@ Widget _buildRefeedingSection({
                         label: Text(c.label,
                             style: const TextStyle(fontSize: 11)),
                         selected: manualFlags.contains(c.id),
+                        showCheckmark: false, // ✓非表示(選択時の幅変動で改行が崩れるため)
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize:
                             MaterialTapTargetSize.shrinkWrap,
@@ -556,6 +575,7 @@ Widget _buildEnTimingSection({
             FilterChip(
               label: Text(c.label, style: const TextStyle(fontSize: 11)),
               selected: flags.contains(c.id),
+              showCheckmark: false, // ✓非表示(選択時の幅変動で改行が崩れるため)
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               onSelected: (sel) => onToggleFlag(c.id, sel),
@@ -1118,6 +1138,7 @@ class CasesPage extends StatelessWidget {
                           label: Text(c.label,
                               style: const TextStyle(fontSize: 12)),
                           selected: selectedTags.contains(c.id),
+                          showCheckmark: false, // ✓非表示(選択時の幅変動で改行が崩れるため)
                           visualDensity: VisualDensity.compact,
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,

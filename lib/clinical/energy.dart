@@ -163,15 +163,17 @@ class EnergyResult {
   final double kcal;
   final double feedingWeightKg;
   final double idealWeightKg;
-  final double actualWeightKg;
+  final double actualWeightKg; // 真の実体重(現体重)
+  final double referenceWeightKg; // 栄養計算に用いた参照体重(浮腫/AKIで平時体重に切替)
   final String basisLabel; // 計算根拠（UI表示用）
   const EnergyResult({
     required this.kcal,
     required this.feedingWeightKg,
     required this.idealWeightKg,
     required this.actualWeightKg,
+    double? referenceWeightKg,
     required this.basisLabel,
-  });
+  }) : referenceWeightKg = referenceWeightKg ?? actualWeightKg;
 }
 
 /// 目標エネルギー（kcal/day）をモデルに応じて算出。
@@ -180,17 +182,19 @@ class EnergyResult {
 EnergyResult targetEnergy({
   required EnergyModel model,
   required bool isMale,
-  required double weightKg,
+  required double weightKg, // 栄養計算に用いる参照体重(浮腫/AKIで平時体重)
   required double heightCm,
   required int age,
   required double activityFactor,
   required double stressFactor,
   double kcalPerKgValue = 25,
   double? measuredREE,
+  double? trueActualWeightKg, // 真の実体重(現体重)。省略時は weightKg と同一。
 }) {
   final ibw = idealBodyWeight(isMale: isMale, heightCm: heightCm);
   final bmi = bmiOf(weightKg, heightCm);
   final fw = feedingWeight(actualKg: weightKg, heightCm: heightCm, isMale: isMale);
+  final actual = trueActualWeightKg ?? weightKg;
 
   switch (model) {
     case EnergyModel.harrisBenedict:
@@ -200,7 +204,8 @@ EnergyResult targetEnergy({
         kcal: bee * activityFactor * stressFactor,
         feedingWeightKg: fw,
         idealWeightKg: ibw,
-        actualWeightKg: weightKg,
+        actualWeightKg: actual,
+        referenceWeightKg: weightKg,
         basisLabel: 'H-B×AF×SF',
       );
     case EnergyModel.mifflinStJeor:
@@ -210,7 +215,8 @@ EnergyResult targetEnergy({
         kcal: ree, // Mifflin REE をそのまま目標とする(AF/SFは用いない)
         feedingWeightKg: fw,
         idealWeightKg: ibw,
-        actualWeightKg: weightKg,
+        actualWeightKg: actual,
+        referenceWeightKg: weightKg,
         basisLabel: 'Mifflin REE',
       );
     case EnergyModel.kcalPerKg:
@@ -221,7 +227,8 @@ EnergyResult targetEnergy({
           kcal: abw * 22.5,
           feedingWeightKg: abw,
           idealWeightKg: ibw,
-          actualWeightKg: weightKg,
+          actualWeightKg: actual,
+        referenceWeightKg: weightKg,
           basisLabel: '肥満 補正体重×22.5 (ESPEN)',
         );
       }
@@ -229,7 +236,8 @@ EnergyResult targetEnergy({
         kcal: fw * kcalPerKgValue,
         feedingWeightKg: fw,
         idealWeightKg: ibw,
-        actualWeightKg: weightKg,
+        actualWeightKg: actual,
+        referenceWeightKg: weightKg,
         basisLabel: '${kcalPerKgValue.toStringAsFixed(0)} kcal/kg',
       );
     case EnergyModel.indirectCalorimetry:
@@ -238,7 +246,8 @@ EnergyResult targetEnergy({
         kcal: ree, // 実測REEをそのまま目標とする(AF/SFは用いない)
         feedingWeightKg: fw,
         idealWeightKg: ibw,
-        actualWeightKg: weightKg,
+        actualWeightKg: actual,
+        referenceWeightKg: weightKg,
         basisLabel: '実測REE',
       );
   }

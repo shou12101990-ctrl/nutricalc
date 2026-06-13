@@ -25,6 +25,7 @@ class PatientCase {
     this.energyModel = 'harrisBenedict',
     this.kcalPerKgValue,
     this.measuredREE,
+    this.usualWeightKg,
     this.memo = '',
     this.patientId = '',
     List<String>? conditionTags,
@@ -59,6 +60,7 @@ class PatientCase {
   String energyModel; // 'harrisBenedict'|'mifflinStJeor'|'kcalPerKg'|'indirectCalorimetry'
   double? kcalPerKgValue; // 簡易式の kcal/kg/day
   double? measuredREE; // 間接熱量測定の実測REE (kcal/day)
+  double? usualWeightKg; // 平時/入院前体重(kg)。浮腫/AKI時の参照体重に推奨(§8)。null=未入力
 
   String get displayLabel => '$caseCode / $currentBed';
 
@@ -114,6 +116,7 @@ class PatientCase {
         'energyModel': energyModel,
         'kcalPerKgValue': kcalPerKgValue,
         'measuredREE': measuredREE,
+        'usualWeightKg': usualWeightKg,
       };
 
   factory PatientCase.fromMap(Map<String, dynamic> map) => PatientCase(
@@ -159,5 +162,6 @@ class PatientCase {
         energyModel: (map['energyModel'] as String?) ?? 'harrisBenedict',
         kcalPerKgValue: (map['kcalPerKgValue'] as num?)?.toDouble(),
         measuredREE: (map['measuredREE'] as num?)?.toDouble(),
+        usualWeightKg: (map['usualWeightKg'] as num?)?.toDouble(),
       )..fastingDate = map['fastingDate'] as String?;
 }

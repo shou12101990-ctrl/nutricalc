@@ -10,17 +10,38 @@ import 'protein.dart' as cp;
 class NutritionCalculator {
   static double bmi(PatientCase item) => item.bmi;
 
+  static const Set<String> _usualWeightReferenceTags = {
+    'aki',
+    'fluid_overload',
+    'edema',
+  };
+
+  /// 栄養計算へ渡す臨床参照体重。
+  ///
+  /// 浮腫・溢水・AKIでは現体重が水分で過大評価されうるため、平時/入院前
+  /// 体重が登録され、かつ現体重が平時体重を明らかに上回る場合だけ平時体重を使う。
+  /// 体重減少例で平時体重を無条件採用すると過大栄養に寄るため、通常は現体重を維持する。
+  static double referenceWeightKg(PatientCase item) {
+    final usual = item.usualWeightKg;
+    if (usual == null || usual <= 0) return item.weightKg;
+    final usesUsualWeight = item.conditionTags
+        .any((tag) => _usualWeightReferenceTags.contains(tag));
+    if (!usesUsualWeight) return item.weightKg;
+    return item.weightKg - usual > 1.0 ? usual : item.weightKg;
+  }
+
   /// 目標エネルギー（kcal/day）。選択モデル＋補正体重を内部適用（clinical/energy.dart に委譲）。
   static ce.EnergyResult targetEnergyResult(PatientCase item) => ce.targetEnergy(
         model: ce.energyModelFromId(item.energyModel),
         isMale: item.sex == Sex.male,
-        weightKg: item.weightKg,
+        weightKg: referenceWeightKg(item),
         heightCm: item.heightCm,
         age: item.age,
         activityFactor: item.activityFactor,
         stressFactor: item.stressFactor,
         kcalPerKgValue: item.kcalPerKgValue ?? 25,
         measuredREE: item.measuredREE,
+        trueActualWeightKg: item.weightKg, // 真の実体重（参照体重と別に保持）
       );
 
   static double targetEnergy(PatientCase item) =>
@@ -30,7 +51,7 @@ class NutritionCalculator {
   /// 目標タンパク量(g/day)。腎修飾(CKD/AKI/KRT/急性病態)があればESPEN腎GLの
   /// 代表値を、無ければ患者設定 proteinGoalPerKg を g/kg として用いる。
   static double targetProtein(PatientCase item) => cp.targetProtein(
-        actualKg: item.weightKg,
+        actualKg: referenceWeightKg(item),
         heightCm: item.heightCm,
         isMale: item.sex == Sex.male,
         gramPerKg:

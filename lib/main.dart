@@ -8,7 +8,6 @@ import 'local_store.dart';
 import 'clinical/constants.dart' as ck;
 import 'clinical/body_weight.dart' as cbw;
 import 'clinical/energy.dart' as ce;
-import 'clinical/protein.dart' as cp;
 import 'clinical/conditions.dart' as cc;
 import 'clinical/infusion.dart' as ci;
 import 'clinical/refeeding.dart' as cr;
@@ -16,6 +15,10 @@ import 'clinical/refeeding_events.dart' as crev;
 import 'clinical/lab_schedule.dart' as clab;
 import 'clinical/en_timing.dart' as cen;
 import 'clinical/micronutrients.dart' as cm;
+import 'clinical/clinical_event.dart' as cev;
+import 'clinical/event_overlay.dart' as cov;
+import 'clinical/source_tier.dart' as cst;
+import 'clinical/auto_design_engine.dart' as cad;
 
 // データモデル層（lib/models/）。importで内部使用し、exportで後方互換に再公開。
 import 'models/models.dart';
@@ -97,8 +100,7 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(icon: Icon(Icons.bed_outlined), label: 'ベッド管理'),
           NavigationDestination(
               icon: Icon(Icons.medical_information_outlined), label: '製剤マスタ'),
-          NavigationDestination(
-              icon: Icon(Icons.notes_outlined), label: 'ノート'),
+          NavigationDestination(icon: Icon(Icons.notes_outlined), label: 'ノート'),
         ],
       ),
     );

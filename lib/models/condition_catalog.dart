@@ -37,6 +37,18 @@ class ConditionCatalog {
           '急性・重症やRRTがあれば蛋白を下げず増やす(蛋白制限でRRT開始を遅らせない)。',
     ),
     ConditionDef(
+      id: 'fluid_overload',
+      label: '溢水・体液過剰',
+      suggestion: '現体重が水分で過大評価されやすい。平時/入院前体重が分かる場合は'
+          '栄養計算の参照体重として使い、IN量・Na・水分負荷も合わせて確認する。',
+    ),
+    ConditionDef(
+      id: 'edema',
+      label: '浮腫',
+      suggestion: '浮腫が強い場合は現体重だけで必要量を見積もると過大になりうる。'
+          '平時/入院前体重を参照し、過大栄養と水分負荷を避ける。',
+    ),
+    ConditionDef(
       id: 'renal_dialysis',
       label: '腎不全(間欠RRT/透析)',
       suggestion: '間欠RRT/維持透析: 1.3–1.5 g/kg/day を確保しつつ'

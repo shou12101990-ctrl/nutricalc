@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050">
+  <defs>
+    <style>
+      .bg { fill: #f7fafc; }
+      .title { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 34px; font-weight: 800; fill: #102033; }
+      .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 18px; font-weight: 500; fill: #5b6776; }
+      .section { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 19px; font-weight: 800; fill: #273545; }
+      .label { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 18px; font-weight: 800; fill: #152238; }
+      .body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; font-weight: 500; fill: #324155; }
+      .small { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 13px; font-weight: 500; fill: #516070; }
+      .badge { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 12px; font-weight: 800; fill: #ffffff; }
+      .card { fill: #ffffff; stroke: #d6dee8; stroke-width: 1.4; rx: 10; }
+      .input { fill: #edf7ff; stroke: #8ec5f4; stroke-width: 1.4; rx: 10; }
+      .template { fill: #fff7e6; stroke: #f0bf63; stroke-width: 1.4; rx: 10; }
+      .engine { fill: #eefcf4; stroke: #8bcfa9; stroke-width: 1.4; rx: 10; }
+      .safety { fill: #fff0f0; stroke: #ee9b9b; stroke-width: 1.4; rx: 10; }
+      .output { fill: #f1f0ff; stroke: #aaa4f2; stroke-width: 1.4; rx: 10; }
+      .arrow { stroke: #728197; stroke-width: 2.2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-soft { stroke: #a0adbd; stroke-width: 1.8; fill: none; marker-end: url(#arrowhead-soft); stroke-dasharray: 7 6; }
+      .lane { fill: #ffffff; stroke: #e1e7ee; stroke-width: 1.2; rx: 16; }
+      .note { fill: #fffdf7; stroke: #ead7a2; stroke-width: 1.2; rx: 8; }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#728197"/>
+    </marker>
+    <marker id="arrowhead-soft" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#a0adbd"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1050"/>
+
+  <text class="title" x="70" y="62">ICU栄養 自動処方設計の使い方</text>
+  <text class="subtitle" x="70" y="94">固定フェーズテンプレートを残しつつ、病態・安全制約・補正理由を分離して見せるワークフロー</text>
+
+  <rect class="lane" x="50" y="128" width="1500" height="230"/>
+  <text class="section" x="78" y="162">1. 入力とフェーズ設定</text>
+
+  <rect class="input" x="80" y="190" width="270" height="126"/>
+  <text class="label" x="104" y="222">患者情報</text>
+  <text class="body" x="104" y="252">年齢 / 身長 / 体重 / 性別</text>
+  <text class="body" x="104" y="276">絶食開始日・入室日</text>
+  <text class="body" x="104" y="300">病態タグ・腎/KRT状態</text>
+
+  <rect class="input" x="410" y="190" width="270" height="126"/>
+  <text class="label" x="434" y="222">栄養目標の入力</text>
+  <text class="body" x="434" y="252">簡易式 / H-B / 実測REE</text>
+  <text class="body" x="434" y="276">kcal/kg・蛋白g/kg</text>
+  <text class="body" x="434" y="300">病態で推奨範囲を変化</text>
+
+  <rect class="template" x="740" y="190" width="330" height="126"/>
+  <text class="label" x="764" y="222">フェーズテンプレート</text>
+  <text class="body" x="764" y="252">NPO → PN → EN導入 → EN full</text>
+  <text class="body" x="764" y="276">→ 経口リハ → 補助栄養</text>
+  <text class="small" x="764" y="300">開始日・EN導入日・経口開始日は編集可</text>
+
+  <rect class="note" x="1130" y="190" width="360" height="126"/>
+  <text class="label" x="1154" y="222">ここは clinical truth ではない</text>
+  <text class="body" x="1154" y="252">固定ラダーは local policy / UX preset</text>
+  <text class="body" x="1154" y="276">臨床安全ルールとは分離する</text>
+  <text class="small" x="1154" y="300">EN/経口リハの流れは可視化テンプレート</text>
+
+  <path class="arrow" d="M350 253 H410"/>
+  <path class="arrow" d="M680 253 H740"/>
+  <path class="arrow" d="M1070 253 H1130"/>
+
+  <rect class="lane" x="50" y="390" width="1500" height="290"/>
+  <text class="section" x="78" y="424">2. 決定論的エンジンで day-by-day 設計</text>
+
+  <rect class="engine" x="80" y="454" width="250" height="150"/>
+  <text class="label" x="104" y="486">PhaseTemplateEngine</text>
+  <text class="body" x="104" y="516">EN: 10→20→30→40ml/h</text>
+  <text class="body" x="104" y="540">→ 1pac TID → 2pac TID</text>
+  <text class="body" x="104" y="564">経口リハ ladder</text>
+
+  <rect class="engine" x="380" y="454" width="250" height="150"/>
+  <text class="label" x="404" y="486">Target Builders</text>
+  <text class="body" x="404" y="516">Energyはband評価</text>
+  <text class="body" x="404" y="540">Proteinは別builder</text>
+  <text class="body" x="404" y="564">腎/KRTをphaseより優先</text>
+
+  <rect class="engine" x="680" y="454" width="250" height="150"/>
+  <text class="label" x="704" y="486">Micronutrient Engines</text>
+  <text class="body" x="704" y="516">maintenance coverage</text>
+  <text class="body" x="704" y="540">additional obligation</text>
+  <text class="body" x="704" y="564">toxicity guard</text>
+
+  <rect class="safety" x="980" y="454" width="250" height="150"/>
+  <text class="label" x="1004" y="486">Constraint / Alert</text>
+  <text class="body" x="1004" y="516">hard / green / amber / red</text>
+  <text class="body" x="1004" y="540">GIR・脂質・水分・Na</text>
+  <text class="body" x="1004" y="564">refeeding bundle</text>
+
+  <rect class="output" x="1280" y="454" width="210" height="150"/>
+  <text class="label" x="1304" y="486">RepairEngine</text>
+  <text class="body" x="1304" y="516">候補生成</text>
+  <text class="body" x="1304" y="540">hard違反を作らない</text>
+  <text class="body" x="1304" y="564">最大3案 + safe failure</text>
+
+  <path class="arrow" d="M330 529 H380"/>
+  <path class="arrow" d="M630 529 H680"/>
+  <path class="arrow" d="M930 529 H980"/>
+  <path class="arrow" d="M1230 529 H1280"/>
+
+  <rect x="97" y="624" width="128" height="28" rx="14" fill="#e0a526"/>
+  <text class="badge" x="118" y="643">local policy</text>
+  <rect x="405" y="624" width="142" height="28" rx="14" fill="#2f9d64"/>
+  <text class="badge" x="427" y="643">guideline band</text>
+  <rect x="692" y="624" width="178" height="28" rx="14" fill="#27857a"/>
+  <text class="badge" x="711" y="643">guideline obligation</text>
+  <rect x="1012" y="624" width="142" height="28" rx="14" fill="#c84d4d"/>
+  <text class="badge" x="1038" y="643">guideline hard</text>
+  <rect x="1320" y="624" width="128" height="28" rx="14" fill="#6b63c7"/>
+  <text class="badge" x="1345" y="643">explainable</text>
+
+  <rect class="lane" x="50" y="712" width="1500" height="258"/>
+  <text class="section" x="78" y="746">3. 画面に出るもの</text>
+
+  <rect class="output" x="80" y="778" width="310" height="144"/>
+  <text class="label" x="104" y="810">day-by-day 処方案</text>
+  <text class="body" x="104" y="840">PN / EN / oral / 加注</text>
+  <text class="body" x="104" y="864">IN・kcal・AA・PFC</text>
+  <text class="body" x="104" y="888">固定フェーズの見通しを可視化</text>
+
+  <rect class="output" x="450" y="778" width="310" height="144"/>
+  <text class="label" x="474" y="810">グラフとDay詳細</text>
+  <text class="body" x="474" y="840">積み上げ棒: PN→EN→食事</text>
+  <text class="body" x="474" y="864">青線: IN / 赤線: AA</text>
+  <text class="body" x="474" y="888">日付・イベント・補充理由</text>
+
+  <rect class="safety" x="820" y="778" width="310" height="144"/>
+  <text class="label" x="844" y="810">アラートと補正バッジ</text>
+  <text class="body" x="844" y="840">Guideline / Local policy</text>
+  <text class="body" x="844" y="864">自動補正 / 置換 / 補充</text>
+  <text class="body" x="844" y="888">hard alertはrepair後も理由付き表示</text>
+
+  <rect class="card" x="1190" y="778" width="300" height="144"/>
+  <text class="label" x="1214" y="810">差分説明</text>
+  <text class="body" x="1214" y="840">例: GIR超過 → 糖液減量</text>
+  <text class="body" x="1214" y="864">例: refeeding → B1追加</text>
+  <text class="body" x="1214" y="888">採用 / override / rawへ戻す</text>
+
+  <path class="arrow" d="M390 850 H450"/>
+  <path class="arrow" d="M760 850 H820"/>
+  <path class="arrow" d="M1130 850 H1190"/>
+
+  <path class="arrow-soft" d="M1385 778 C1385 706 1385 690 1385 610"/>
+  <text class="small" x="1195" y="940">
+    <tspan x="1195" dy="0">補正済み案を初期表示してよい。</tspan>
+    <tspan x="1195" dy="18">ただし元入力は破壊せず、変更理由を必ず残す。</tspan>
+  </text>
+</svg>
