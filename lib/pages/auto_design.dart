@@ -1363,34 +1363,65 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
   static const double _eventSpanRowH = 17.0;
   static const int _eventSpanMaxRows = 6;
 
-  /// 各臨床イベントの帯スパン (start,end(chart idx),label,color) を算出。
-  List<(int, int, String, Color)> _eventSpans(int n, int preDays) {
+  /// 種類別レーンの並び順（小さいほど上）。RRTはモダリティ問わず1レーン。
+  int _eventLaneOrder(cev.ClinicalEventType t) => switch (t) {
+        cev.ClinicalEventType.recurrentNpo => 0,
+        cev.ClinicalEventType.refeedingHypophosphatemia => 1,
+        cev.ClinicalEventType.rrtStart => 2,
+        cev.ClinicalEventType.fluidOverload => 3,
+        cev.ClinicalEventType.cholestasisOrLiverDysfunction => 4,
+        cev.ClinicalEventType.enIntolerance => 5,
+        cev.ClinicalEventType.enHold => 6,
+        cev.ClinicalEventType.bunRiseAfterFeeding => 7,
+      };
+
+  /// 各臨床イベントの帯スパン (start,end(chart idx),label,color,lane) を算出。
+  /// 同じ種類は同じレーン、種類が違えば別レーンに縦並列（空きレーンは詰める）。
+  List<(int, int, String, Color, int)> _eventSpans(int n, int preDays) {
     if (_clinicalEvents.isEmpty || n <= 0) return const [];
-    final spans = <(int, int, String, Color)>[];
+    final raw = <(int, int, String, Color, int)>[]; // 第5要素=種類のlaneOrder
+    final presentKeys = <int>{};
     for (final e in _clinicalEvents) {
       final startIdx = (preDays + e.startDay - 1).clamp(0, n - 1);
       if (preDays + e.startDay - 1 > n - 1) continue; // タイムライン外
-      // 期間は endDay で決定。未入力は継続中とみなし終端まで。
       final endIdx = e.endDay != null
           ? (preDays + e.endDay! - 1).clamp(startIdx, n - 1)
           : n - 1;
       final label = e.type == cev.ClinicalEventType.rrtStart
           ? (e.rrtModality?.key ?? 'RRT')
           : _clinicalEventShortLabel(e.type);
-      spans.add((startIdx, endIdx, label, _eventSpanColor(e)));
+      final key = _eventLaneOrder(e.type);
+      presentKeys.add(key);
+      raw.add((startIdx, endIdx, label, _eventSpanColor(e), key));
     }
-    // 開始位置の早い順に上へ。重なっても行を分けて全て見せる。
-    spans.sort((a, b) => a.$1.compareTo(b.$1));
+    if (raw.isEmpty) return const [];
+    // 出現した種類だけで詰めたレーンindexへ（空レーンを作らない）。
+    final sortedKeys = presentKeys.toList()..sort();
+    final laneOf = {for (var i = 0; i < sortedKeys.length; i++) sortedKeys[i]: i};
+    final spans = raw
+        .map((s) => (s.$1, s.$2, s.$3, s.$4, laneOf[s.$5]!))
+        .toList()
+      ..sort((a, b) => a.$1.compareTo(b.$1)); // 同レーン内の描画順
     return spans;
+  }
+
+  /// 使用レーン数（=縦の本数。最大 _eventSpanMaxRows）。
+  int _eventLaneCount(int n, int preDays) {
+    final spans = _eventSpans(n, preDays);
+    if (spans.isEmpty) return 0;
+    var maxLane = 0;
+    for (final s in spans) {
+      if (s.$5 > maxLane) maxLane = s.$5;
+    }
+    return (maxLane + 1).clamp(1, _eventSpanMaxRows);
   }
 
   /// 期間バー領域の高さ（チャート固定高さに加算してクリップを防ぐ）。
   double _eventSpanHeight(int n, int preDays) {
-    final c = _eventSpans(n, preDays).length;
-    if (c == 0) return 0;
-    final rows = c > _eventSpanMaxRows ? _eventSpanMaxRows : c;
-    // _eventSpanBars: SizedBox(rows*rowH+2) + Padding(top2+bottom2)=+6
-    return rows * _eventSpanRowH + 6;
+    final lanes = _eventLaneCount(n, preDays);
+    if (lanes == 0) return 0;
+    // _eventSpanBars: SizedBox(lanes*rowH+2) + Padding(top2+bottom2)=+6
+    return lanes * _eventSpanRowH + 6;
   }
 
   /// ラベル幅の概算（CJKは広め）。配置判定用。
@@ -1404,11 +1435,15 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
 
   Widget _eventSpanBars(int n, int preDays) {
     if (_cachedChartW <= 0 || n <= 0) return const SizedBox.shrink();
-    final rows = _eventSpans(n, preDays).take(_eventSpanMaxRows).toList();
+    // レーンが上限を超える種類は描画しない（稀）。
+    final rows = _eventSpans(n, preDays)
+        .where((s) => s.$5 < _eventSpanMaxRows)
+        .toList();
     if (rows.isEmpty) return const SizedBox.shrink();
     final cellW = _cachedChartW / n;
     const rowH = _eventSpanRowH;
     final cardBg = Theme.of(context).cardColor;
+    final laneCount = _eventLaneCount(n, preDays);
 
     // ┝─┤ バー本体（cap＋線＋cap）。
     Widget bar(Color color) => Row(children: [
@@ -1417,16 +1452,20 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
           Container(width: 1.5, height: 8, color: color),
         ]);
 
-    Widget rowWidget((int, int, String, Color) s, int r) {
+    Widget rowWidget((int, int, String, Color, int) s) {
       final left = s.$1 * cellW;
       final width = (s.$2 - s.$1 + 1) * cellW;
       final color = s.$4;
+      final lane = s.$5; // 種類別の縦レーン
       final labelW = _estLabelWidth(s.$3);
       // 1: バーが十分長い → 中央に記載（線の上に乗せ、背景でマスク）
       final fitsCenter = labelW + 12 <= width;
-      // 3: 短く、直後に別イベントが続く（CRRT→IRRT等）→ 左端に記載
+      // 3: 短く、同レーンで直後に別バーが続く（CRRT→IRRT等）→ 左端に記載
       final hasFollower = rows.any((o) =>
-          !identical(o, s) && o.$1 >= s.$2 && o.$1 <= s.$2 + 1);
+          !identical(o, s) &&
+          o.$5 == s.$5 &&
+          o.$1 >= s.$2 &&
+          o.$1 <= s.$2 + 1);
 
       final label = Text(s.$3,
           maxLines: 1,
@@ -1478,7 +1517,7 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       return Positioned(
         left: 0,
         width: _cachedChartW,
-        top: r * rowH,
+        top: lane * rowH, // 種類別レーンの縦位置
         height: rowH,
         child: Stack(clipBehavior: Clip.none, children: children),
       );
@@ -1488,11 +1527,11 @@ class _AutoDesignPageState extends State<AutoDesignInline> {
       padding: const EdgeInsets.only(top: 2, bottom: 2),
       child: SizedBox(
         width: _cachedChartW,
-        height: rows.length * rowH + 2,
+        height: laneCount * rowH + 2,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            for (var r = 0; r < rows.length; r++) rowWidget(rows[r], r),
+            for (final s in rows) rowWidget(s),
           ],
         ),
       ),
